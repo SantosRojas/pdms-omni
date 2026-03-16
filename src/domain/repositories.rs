@@ -1,6 +1,8 @@
 //! Domain repository traits.
 //! Define the contracts for persistence that infrastructure must fulfill.
 
+#![allow(dead_code)]
+
 use super::entities::{DataAttribute, DictionaryEntry, TelemetryReading, VersionInfo};
 use thiserror::Error;
 
@@ -34,6 +36,9 @@ pub trait TelemetryRepository {
         }
         Ok(())
     }
+    
+    /// Retrieve the most recent readings from the database
+    fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.

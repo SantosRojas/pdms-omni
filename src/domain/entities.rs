@@ -2,6 +2,8 @@
 //! These structures represent the core business objects,
 //! independent of any infrastructure detail.
 
+#![allow(dead_code)]
+
 /// Represents version information returned by CMD_CODE_GET_VERSIONS.
 /// Contains system SW, DSS/CSS/PSS firmware/hardware versions and language info.
 #[derive(Debug, Clone)]

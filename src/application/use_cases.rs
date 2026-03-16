@@ -407,6 +407,28 @@ where
         Ok(version)
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  PHASE 4: QUERYING (Application read logic)
+    // ═══════════════════════════════════════════════════════════════
+    
+    /// Retrieves a specific DataAttribute by its handle from the database.
+    pub fn get_attribute_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, UseCaseError> {
+        let attr = self.attr_repo.get_by_handle(handle)?;
+        Ok(attr)
+    }
+
+    /// Retrieves the latest saved version info from the database.
+    pub fn get_latest_version_from_db(&self) -> Result<Option<VersionInfo>, UseCaseError> {
+        let version = self.version_repo.get_latest()?;
+        Ok(version)
+    }
+
+    /// Retrieves the most recent telemetry readings from the database.
+    pub fn get_recent_readings_from_db(&self, limit: u32) -> Result<Vec<TelemetryReading>, UseCaseError> {
+        let readings = self.telemetry_repo.get_recent_readings(limit)?;
+        Ok(readings)
+    }
+
     // ───────────────────────────────────────────────
     //  Helper: read a raw integer value from bytes
     // ───────────────────────────────────────────────

@@ -189,6 +189,32 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
         Ok(())
     }
+
+    fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, timestamp, handle, internal_name, raw_value, physical_value, unit 
+             FROM telemetry ORDER BY id DESC LIMIT ?1"
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let iter = stmt.query_map(params![limit], |row| {
+            Ok(TelemetryReading {
+                id: Some(row.get::<_, i64>(0)?),
+                timestamp: row.get::<_, String>(1)?,
+                handle: row.get::<_, u16>(2)?,
+                internal_name: row.get::<_, String>(3)?,
+                raw_value: row.get::<_, i64>(4)?,
+                physical_value: row.get::<_, f64>(5)?,
+                unit: row.get::<_, String>(6)?,
+            })
+        }).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let mut result = Vec::new();
+        for item in iter {
+            result.push(item.map_err(|e| RepositoryError::DatabaseError(e.to_string()))?);
+        }
+        Ok(result)
+    }
 }
 
 // ═══════════════════════════════════════════════

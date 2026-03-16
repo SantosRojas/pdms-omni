@@ -2,6 +2,8 @@
 //! All command codes, address constants and error codes from
 //! the Communication Description V1.20, Appendix A.
 
+#![allow(dead_code)]
+
 use thiserror::Error;
 
 // ───────────────────────────────────────────────
