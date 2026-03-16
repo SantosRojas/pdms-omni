@@ -1,0 +1,11 @@
+[package]
+name = "pdms-omni"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+byteorder = "1.5.0"
+dotenvy = "0.15.7"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
+serialport = "4.9.0"
+thiserror = "2.0.18"

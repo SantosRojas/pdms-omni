@@ -1,0 +1,167 @@
+   Compiling pdms-omni v0.1.0 (C:\PROJECTS\Rust\pdms-omni)
+warning: fields `id` and `timestamp` are never read
+  --> src\domain\entities.rs:91:9
+   |
+90 | pub struct TelemetryReading {
+   |            ---------------- fields in this struct
+91 |     pub id: Option<i64>,
+   |         ^^
+92 |     pub timestamp: String,
+   |         ^^^^^^^^^
+   |
+   = note: `TelemetryReading` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `get_by_handle` is never used
+  --> src\domain\repositories.rs:17:8
+   |
+14 | pub trait DataAttributeRepository {
+   |           ----------------------- method in this trait
+...
+17 |     fn get_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, RepositoryError>;
+   |        ^^^^^^^^^^^^^
+
+warning: method `get_latest` is never used
+  --> src\domain\repositories.rs:42:8
+   |
+40 | pub trait VersionRepository {
+   |           ----------------- method in this trait
+41 |     fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError>;
+42 |     fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError>;
+   |        ^^^^^^^^^^
+
+warning: constant `CSS_APP` is never used
+  --> src\domain\device.rs:11:11
+   |
+11 | pub const CSS_APP: u8          = 2;
+   |           ^^^^^^^
+
+warning: constant `PSS_APP` is never used
+  --> src\domain\device.rs:12:11
+   |
+12 | pub const PSS_APP: u8          = 3;
+   |           ^^^^^^^
+
+warning: constant `PC_APP` is never used
+  --> src\domain\device.rs:13:11
+   |
+13 | pub const PC_APP: u8           = 4;
+   |           ^^^^^^
+
+warning: constant `CSS_MON` is never used
+  --> src\domain\device.rs:14:11
+   |
+14 | pub const CSS_MON: u8          = 5;
+   |           ^^^^^^^
+
+warning: constant `PSS_MON` is never used
+  --> src\domain\device.rs:15:11
+   |
+15 | pub const PSS_MON: u8          = 6;
+   |           ^^^^^^^
+
+warning: constant `DSS_APP_LOADER` is never used
+  --> src\domain\device.rs:16:11
+   |
+16 | pub const DSS_APP_LOADER: u8   = 7;
+   |           ^^^^^^^^^^^^^^
+
+warning: constant `CSS_APP_LOADER` is never used
+  --> src\domain\device.rs:17:11
+   |
+17 | pub const CSS_APP_LOADER: u8   = 8;
+   |           ^^^^^^^^^^^^^^
+
+warning: constant `PSS_APP_LOADER` is never used
+  --> src\domain\device.rs:18:11
+   |
+18 | pub const PSS_APP_LOADER: u8   = 9;
+   |           ^^^^^^^^^^^^^^
+
+warning: constant `PC_LOADER` is never used
+  --> src\domain\device.rs:19:11
+   |
+19 | pub const PC_LOADER: u8        = 10;
+   |           ^^^^^^^^^
+
+warning: constant `CMD_CODE_GET_NEXT_PICT_BLOCK` is never used
+  --> src\domain\device.rs:29:11
+   |
+29 | pub const CMD_CODE_GET_NEXT_PICT_BLOCK: u16 = 14;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `ERR_NO` is never used
+  --> src\domain\device.rs:36:11
+   |
+36 | pub const ERR_NO: u16              = 0x0000;
+   |           ^^^^^^
+
+warning: constant `ERR_CRC` is never used
+  --> src\domain\device.rs:37:11
+   |
+37 | pub const ERR_CRC: u16            = 0x0001;
+   |           ^^^^^^^
+
+warning: constant `ERR_TIMEOUT` is never used
+  --> src\domain\device.rs:38:11
+   |
+38 | pub const ERR_TIMEOUT: u16        = 0x0002;
+   |           ^^^^^^^^^^^
+
+warning: constant `ERR_UNKNOWN_COMMAND` is never used
+  --> src\domain\device.rs:39:11
+   |
+39 | pub const ERR_UNKNOWN_COMMAND: u16 = 0x0003;
+   |           ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `ERR_UNKNOWN_ERROR` is never used
+  --> src\domain\device.rs:40:11
+   |
+40 | pub const ERR_UNKNOWN_ERROR: u16   = 0x0010;
+   |           ^^^^^^^^^^^^^^^^^
+
+warning: constant `BUTTON_STATE_MASK` is never used
+  --> src\domain\device.rs:45:11
+   |
+45 | pub const BUTTON_STATE_MASK: u16 = 0x0100;
+   |           ^^^^^^^^^^^^^^^^^
+
+warning: constant `BUTTON_STATE_ON` is never used
+  --> src\domain\device.rs:46:11
+   |
+46 | pub const BUTTON_STATE_ON: u16   = 0x0100;
+   |           ^^^^^^^^^^^^^^^
+
+warning: constant `BUTTON_STATE_OFF` is never used
+  --> src\domain\device.rs:47:11
+   |
+47 | pub const BUTTON_STATE_OFF: u16  = 0x0000;
+   |           ^^^^^^^^^^^^^^^^
+
+warning: constant `NO_ALARM_OR_WARNING_DID` is never used
+  --> src\domain\device.rs:52:11
+   |
+52 | pub const NO_ALARM_OR_WARNING_DID: u16   = 49999;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `INTERNAL_NAME_MAX_LENGTH` is never used
+  --> src\domain\device.rs:53:11
+   |
+53 | pub const INTERNAL_NAME_MAX_LENGTH: usize = 64;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MAX_LANGUAGE` is never used
+  --> src\domain\device.rs:55:11
+   |
+55 | pub const MAX_LANGUAGE: usize             = 3;
+   |           ^^^^^^^^^^^^
+
+error: linking with `link.exe` failed: exit code: 1181
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\HostX64\\x64\\link.exe" "/NOLOGO" "C:\\PROJECTS\\Rust\\pdms-omni\\target\\debug\\deps\\rustccXvVpt\\symbols.o" "<112 object files omitted>" "C:\\PROJECTS\\Rust\\pdms-omni\\target\\debug\\deps/{libdotenvy-84a3ddf8c4cdd4e3,libserialport-c47e2cf4cf0bfdb7,libwindows_sys-3710af12548aecee,libwindows_targets-a625e578596c84fc,librusqlite-f99a9206d94ee60f,libbitflags-01917a316b6c47a9,libsmallvec-c00a2b490e97c741,libhashlink-ae06f49ba439e498,libhashbrown-faad29eed624e005,libfoldhash-fe90e1fa000cb61a,liblibsqlite3_sys-52b38c8f83617ba9,libfallible_streaming_iterator-fb3a59ef7856e642,libfallible_iterator-790b55dcda4ae6d3,libbyteorder-759339f93f2720ea,libthiserror-867421823fb67044}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_targets-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "C:\\Users\\rojasape\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.52.6\\lib\\windows.0.52.0.lib" "sqlite3.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/LIBPATH:C:\\Users\\rojasape\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.52.6\\lib" "/OUT:C:\\PROJECTS\\Rust\\pdms-omni\\target\\debug\\deps\\pdms_omni.exe" "/OPT:REF,NOICF" "/DEBUG" "/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1181: no se puede abrir el archivo de entrada 'sqlite3.lib'
+          
+
+warning: `pdms-omni` (bin "pdms-omni") generated 24 warnings
+error: could not compile `pdms-omni` (bin "pdms-omni") due to 1 previous error; 24 warnings emitted
