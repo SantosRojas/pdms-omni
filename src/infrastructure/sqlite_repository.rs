@@ -190,6 +190,29 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         Ok(())
     }
 
+    fn save_batch(&self, readings: &[TelemetryReading]) -> Result<(), RepositoryError> {
+        let mut guard = lock_conn(&self.conn)?;
+        let tx = guard.transaction().map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO telemetry (handle, internal_name, raw_value, physical_value, unit)
+                 VALUES (?1, ?2, ?3, ?4, ?5)"
+            ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+            for reading in readings {
+                stmt.execute(params![
+                    reading.handle,
+                    reading.internal_name,
+                    reading.raw_value,
+                    reading.physical_value,
+                    reading.unit,
+                ]).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+            }
+        }
+        tx.commit().map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
     fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let conn = lock_conn(&self.conn)?;
         let mut stmt = conn.prepare(

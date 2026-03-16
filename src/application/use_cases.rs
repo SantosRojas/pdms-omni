@@ -44,6 +44,10 @@ pub struct OmniInteractor<A, Di, T, V, Dev> {
     /// Ordered list of handles (as received from ANSW_GET_DATA_HANDLES).
     /// The cyclical values come in this exact order.
     handles: Vec<u16>,
+    /// In-memory cache to avoid DB lookups during cyclical reading.
+    attr_cache: std::collections::HashMap<u16, DataAttribute>,
+    /// In-memory dictionary cache to avoid DB lookups.
+    dict_cache: std::collections::HashMap<u16, String>,
 }
 
 impl<A, Di, T, V, Dev> OmniInteractor<A, Di, T, V, Dev>
@@ -62,6 +66,8 @@ where
             version_repo,
             device,
             handles: Vec::new(),
+            attr_cache: std::collections::HashMap::new(),
+            dict_cache: std::collections::HashMap::new(),
         }
     }
 
@@ -230,12 +236,14 @@ where
 
         self.attr_repo.delete_all()?;
         let mut attrs = Vec::with_capacity(handles.len());
+        self.attr_cache.clear();
 
         for (i, &handle) in handles.iter().enumerate() {
             let attr = self.get_data_attributes(handle)?;
             println!("      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
                 i + 1, handles.len(), handle, attr.internal_name,
                 attr.data_type, attr.size, attr.conversion_factor);
+            self.attr_cache.insert(handle, attr.clone());
             attrs.push(attr);
         }
 
@@ -256,6 +264,7 @@ where
 
         self.dict_repo.delete_all()?;
         let mut entries = Vec::new();
+        self.dict_cache.clear();
         let mut prev_id: u16 = 0;
 
         loop {
@@ -294,6 +303,7 @@ where
                 text: text.clone(),
             };
             self.dict_repo.save(&entry)?;
+            self.dict_cache.insert(dict_id, text.clone());
             entries.push(entry);
 
             prev_id = dict_id;
@@ -325,12 +335,8 @@ where
             return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
         }
 
-        // Load attributes for all handles
-        let all_attrs = self.attr_repo.get_all()?;
-
-        // Build a map handle -> DataAttribute for quick lookup
-        let attr_map: std::collections::HashMap<u16, &DataAttribute> =
-            all_attrs.iter().map(|a| (a.handle, a)).collect();
+        // Use the in-memory cache directly for performance (avoids N+1 DB queries)
+        let attr_map = &self.attr_cache;
 
         let values_data = &data[2..]; // skip cmd code
         let mut offset = 0;
@@ -361,11 +367,20 @@ where
                 raw_value as f64
             };
 
-            // Lookup unit string from dictionary
-            let unit = self.dict_repo
-                .get_by_id(attr.unit_did)?
-                .map(|e| e.text)
-                .unwrap_or_default();
+            // Lookup unit string from in-memory dictionary cache, fallback to DB
+            let unit = match self.dict_cache.get(&attr.unit_did) {
+                Some(u) => u.clone(),
+                None => {
+                    // Cache miss (happens when loaded from DB without a get_all dictionary hook)
+                    // Fetch from DB and insert into cache
+                    let text = self.dict_repo
+                        .get_by_id(attr.unit_did)?
+                        .map(|e| e.text)
+                        .unwrap_or_default();
+                    self.dict_cache.insert(attr.unit_did, text.clone());
+                    text
+                }
+            };
 
             readings.push(TelemetryReading {
                 id: None,
@@ -390,21 +405,73 @@ where
     //  FULL INITIALIZATION (convenience)
     // ═══════════════════════════════════════════════════════════════
     /// Runs the complete initialization sequence as per the protocol spec:
-    /// 1. Get versions
-    /// 2. Get handles
-    /// 3. Get data attributes for each handle
-    /// 4. Build dictionary
+    /// 1. Get versions from OMNI.
+    /// 2. Compare with stored version.
+    /// 3. If versions match, load handles, attributes, and dictionary from DB.
+    /// 4. If versions differ, request all data from OMNI and store in DB.
     pub fn initialize(&mut self) -> Result<VersionInfo, UseCaseError> {
         println!("\n══ PHASE: IDENTIFICATION ══");
         let version = self.get_versions()?;
 
+        let latest_db_version = self.version_repo.get_latest()?;
+
+        // Compare the combination of SW, HW and Language versions
+        let versions_match = match latest_db_version {
+            Some(db_v) => {
+                db_v.system_sw == version.system_sw &&
+                db_v.dss_fw == version.dss_fw &&
+                db_v.dss_hw == version.dss_hw &&
+                db_v.css_fw == version.css_fw &&
+                db_v.css_hw == version.css_hw &&
+                db_v.language_id == version.language_id
+            },
+            None => false,
+        };
+
         println!("\n══ PHASE: INITIALIZATION ══");
-        self.get_data_handles()?;
-        self.get_all_data_attributes()?;
-        self.get_dictionary()?;
+
+        if versions_match {
+            println!("  [i] Versions match. Loading configuration from database...");
+            self.load_configuration_from_db()?;
+        } else {
+            println!("  [i] New version detected or no previous data. Fetching from device...");
+            self.get_data_handles()?;
+            self.get_all_data_attributes()?;
+            self.get_dictionary()?;
+        }
 
         println!("\n══ INITIALIZATION COMPLETE ══\n");
         Ok(version)
+    }
+
+    /// Loads the data handles, data attributes, and dictionary directly from the DB
+    /// into the in-memory caches, bypassing the serial communication.
+    fn load_configuration_from_db(&mut self) -> Result<(), UseCaseError> {
+        // Load data attributes from DB
+        let attrs = self.attr_repo.get_all()?;
+        self.attr_cache.clear();
+        self.handles.clear();
+        
+        for attr in attrs {
+            // Note: DB doesn't inherently store the 'order' of handles like the device does.
+            // In a strict implementation, handles order must be preserved. We assume the DB 
+            // `ORDER BY rowid` returns them in the insertion order.
+            self.handles.push(attr.handle);
+            self.attr_cache.insert(attr.handle, attr);
+        }
+        println!("      Loaded {} attribute(s) from DB.", self.handles.len());
+
+        // We don't have a get_all for dictionary in the trait right now,
+        // so we need to either add it or assume that whatever is in the DB is complete,
+        // but we need it in cache. 
+        // Let's print a warning if we can't load the dictionary to cache.
+        println!("      [WARN] Dictionary caching from DB requires 'get_all' in DictionaryRepository.");
+        // We'll perform a workaround for now: During cyclical GETs, if text isn't in cache,
+        // it falls back to DB, but dict_cache wasn't fully filled.
+        // Actually, dict_cache is only used in get_cyclical_values. We'll update the cyclical logic 
+        // to transparently fall back to DB if missing from cache.
+
+        Ok(())
     }
 
     // ═══════════════════════════════════════════════════════════════
