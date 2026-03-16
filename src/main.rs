@@ -50,18 +50,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let version = interactor.initialize()?;
     println!("[OK] OMNI inicializado: System SW={}", version.system_sw);
 
-    // 5.5. Consulta de prueba a la Base de Datos (Historia y Metadatos)
-    println!("\n[DB-CHECK] Verificando acceso a historial en SQLite...");
-    if let Ok(Some(v)) = interactor.get_latest_version_from_db() {
-        println!("      └─ Última versión almacenada en BD: {}", v.system_sw);
-    }
-    if let Ok(Some(attr)) = interactor.get_attribute_by_handle(1) {
-        println!("      └─ Validando Atributo (Handle 1): {}", attr.internal_name);
-    }
-    if let Ok(readings) = interactor.get_recent_readings_from_db(5) {
-        println!("      └─ Se recobraron con éxito {} lecturas previas.", readings.len());
-    }
-
     // 6. Fase cíclica: lectura de valores cada segundo
     println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
     let mut cycle: u64 = 0;
