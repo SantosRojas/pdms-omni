@@ -1,8 +1,8 @@
 //! PDMS-Omni: B.Braun OMNI-ODI Patient Data Management System client.
 //! Built with Clean Architecture — all infrastructure is swappable.
 
-mod domain;
 mod application;
+mod domain;
 mod infrastructure;
 
 use std::time::Duration;
@@ -14,14 +14,15 @@ use crate::infrastructure::serial_communicator::{SerialConfig, SerialDeviceCommu
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╔══════════════════════════════════════════════╗");
-    println!("║   PDMS-Omni · B.Braun OMNI-ODI Client       ║");
-    println!("║   Clean Architecture · RS-232 · SQLite       ║");
+    println!("║   PDMS-Omni · B.Braun OMNI-ODI Client        ║");
     println!("╚══════════════════════════════════════════════╝\n");
 
     // 1. Configuración
     let config = AppConfig::from_env();
-    println!("[Config] DB={}, Puerto={}, Baudrate={}",
-        config.db_path, config.port_name, config.baudrate);
+    println!(
+        "[Config] DB={}, Puerto={}, Baudrate={}",
+        config.db_path, config.port_name, config.baudrate
+    );
 
     // 2. Base de datos (intercambiable)
     let repos = database::initialize_sqlite(&config.db_path)?;
@@ -35,7 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dst_addr: config.dst_addr,
     };
     let device = SerialDeviceCommunicator::new(serial_config)?;
-    println!("[Serial] Puerto {} abierto (19200, 8N1)\n", config.port_name);
+    println!(
+        "[Serial] Puerto {} abierto (19200, 8N1)\n",
+        config.port_name
+    );
 
     // 4. Inyección de dependencias → Caso de uso
     let mut interactor = OmniInteractor::new(
@@ -60,7 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(readings) => {
                 println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
                 for r in &readings {
-                    println!("  {:30} = {:>10.2} {}", r.internal_name, r.physical_value, r.unit);
+                    println!(
+                        "  {:30} = {:>10.2} {}",
+                        r.internal_name, r.physical_value, r.unit
+                    );
                 }
             }
             Err(e) => {
