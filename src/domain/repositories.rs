@@ -23,6 +23,7 @@ pub trait DataAttributeRepository {
 /// Persists and retrieves dictionary entries (labels, units, etc.).
 pub trait DictionaryRepository {
     fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError>;
+    fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError>;
     fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError>;
     fn delete_all(&self) -> Result<(), RepositoryError>;
 }

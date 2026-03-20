@@ -128,8 +128,6 @@ where
             language3: read_version(base + 144),
         };
 
-        self.version_repo.save(&version)?;
-
         println!("      System SW: {}", version.system_sw);
         println!("      DSS FW:    {}", version.dss_fw);
         println!("      Language:   {} (id={})", version.language1, version.language_id);
@@ -411,9 +409,8 @@ where
     /// 4. If versions differ, request all data from OMNI and store in DB.
     pub fn initialize(&mut self) -> Result<VersionInfo, UseCaseError> {
         println!("\n══ PHASE: IDENTIFICATION ══");
-        let version = self.get_versions()?;
-
         let latest_db_version = self.version_repo.get_latest()?;
+        let version = self.get_versions()?;
 
         // Compare the combination of SW, HW and Language versions
         let versions_match = match latest_db_version {
@@ -432,7 +429,13 @@ where
 
         if versions_match {
             println!("  [i] Versions match. Loading configuration from database...");
-            self.load_configuration_from_db()?;
+            let loaded = self.load_configuration_from_db()?;
+            if !loaded {
+                println!("  [i] Database cache is empty/incomplete. Fetching from device...");
+                self.get_data_handles()?;
+                self.get_all_data_attributes()?;
+                self.get_dictionary()?;
+            }
         } else {
             println!("  [i] New version detected or no previous data. Fetching from device...");
             self.get_data_handles()?;
@@ -440,13 +443,16 @@ where
             self.get_dictionary()?;
         }
 
+        // Persist the currently detected version only after successful initialization.
+        self.version_repo.save(&version)?;
+
         println!("\n══ INITIALIZATION COMPLETE ══\n");
         Ok(version)
     }
 
     /// Loads the data handles, data attributes, and dictionary directly from the DB
     /// into the in-memory caches, bypassing the serial communication.
-    fn load_configuration_from_db(&mut self) -> Result<(), UseCaseError> {
+    fn load_configuration_from_db(&mut self) -> Result<bool, UseCaseError> {
         // Load data attributes from DB
         let attrs = self.attr_repo.get_all()?;
         self.attr_cache.clear();
@@ -460,18 +466,21 @@ where
             self.attr_cache.insert(attr.handle, attr);
         }
         println!("      Loaded {} attribute(s) from DB.", self.handles.len());
+        if self.handles.is_empty() {
+            return Ok(false);
+        }
 
-        // We don't have a get_all for dictionary in the trait right now,
-        // so we need to either add it or assume that whatever is in the DB is complete,
-        // but we need it in cache. 
-        // Let's print a warning if we can't load the dictionary to cache.
-        println!("      [WARN] Dictionary caching from DB requires 'get_all' in DictionaryRepository.");
-        // We'll perform a workaround for now: During cyclical GETs, if text isn't in cache,
-        // it falls back to DB, but dict_cache wasn't fully filled.
-        // Actually, dict_cache is only used in get_cyclical_values. We'll update the cyclical logic 
-        // to transparently fall back to DB if missing from cache.
+        let dict_entries = self.dict_repo.get_all()?;
+        self.dict_cache.clear();
+        for entry in dict_entries {
+            self.dict_cache.insert(entry.dict_id, entry.text);
+        }
+        println!("      Loaded {} dictionary entries from DB.", self.dict_cache.len());
+        if self.dict_cache.is_empty() {
+            return Ok(false);
+        }
 
-        Ok(())
+        Ok(true)
     }
 
     // ───────────────────────────────────────────────

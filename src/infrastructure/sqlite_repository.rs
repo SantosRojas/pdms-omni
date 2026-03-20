@@ -152,6 +152,26 @@ impl DictionaryRepository for SqliteDictionaryRepository {
         }
     }
 
+    fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT dict_id, text FROM dictionary ORDER BY dict_id"
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let iter = stmt.query_map([], |row| {
+            Ok(DictionaryEntry {
+                dict_id: row.get::<_, u16>(0)?,
+                text: row.get::<_, String>(1)?,
+            })
+        }).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let mut result = Vec::new();
+        for item in iter {
+            result.push(item.map_err(|e| RepositoryError::DatabaseError(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
     fn delete_all(&self) -> Result<(), RepositoryError> {
         let conn = lock_conn(&self.conn)?;
         conn.execute("DELETE FROM dictionary", [])
