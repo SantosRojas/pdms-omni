@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -24,6 +25,10 @@
                 <div class="nav-item active" id="btn-monitor">
                     <i data-lucide="layout-dashboard"></i>
                     <span>Monitor Real-Time</span>
+                </div>
+                <div class="nav-item" id="btn-charts">
+                    <i data-lucide="bar-chart-3"></i>
+                    <span>Gráficas</span>
                 </div>
                 <div class="nav-item" id="btn-history">
                     <i data-lucide="activity"></i>
@@ -69,6 +74,21 @@
                         <p>Esperando telemetría del servidor...</p>
                     </div>
                 </section>
+            </section>
+
+            <!-- SECCIÓN: GRÁFICAS -->
+            <section id="view-charts" class="dashboard-view">
+                <header class="top-header">
+                    <div class="header-info">
+                        <h2>Análisis de Tendencias</h2>
+                        <p>Progreso temporal de las variables críticas</p>
+                    </div>
+                </header>
+                <div class="charts-container">
+                    <div class="chart-card card">
+                        <canvas id="main-trend-chart"></canvas>
+                    </div>
+                </div>
             </section>
 
             <!-- SECCIÓN: HISTORIAL -->

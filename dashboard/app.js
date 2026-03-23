@@ -35,13 +35,15 @@ const MAX_HISTORY = 50;
 const views = {
     monitor: document.getElementById('view-monitor'),
     history: document.getElementById('view-history'),
-    settings: document.getElementById('view-settings')
+    settings: document.getElementById('view-settings'),
+    charts: document.getElementById('view-charts')
 };
 
 const navButtons = {
     monitor: document.getElementById('btn-monitor'),
     history: document.getElementById('btn-history'),
-    settings: document.getElementById('btn-settings')
+    settings: document.getElementById('btn-settings'),
+    charts: document.getElementById('btn-charts')
 };
 
 function switchView(viewName) {
@@ -58,6 +60,59 @@ function switchView(viewName) {
 navButtons.monitor.addEventListener('click', () => switchView('monitor'));
 navButtons.history.addEventListener('click', () => switchView('history'));
 navButtons.settings.addEventListener('click', () => switchView('settings'));
+navButtons.charts.addEventListener('click', () => switchView('charts'));
+
+// Chart.js Setup
+let mainChart = null;
+function initChart() {
+    const ctx = document.getElementById('main-trend-chart').getContext('2d');
+    mainChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'P. Arterial', borderColor: '#00d4ff', data: [], tension: 0.4, borderWidth: 2, pointRadius: 0 },
+                { label: 'P. Venosa', borderColor: '#ff4d4d', data: [], tension: 0.4, borderWidth: 2, pointRadius: 0 },
+                { label: 'P. Filtro', borderColor: '#ffb400', data: [], tension: 0.4, borderWidth: 2, pointRadius: 0 },
+                { label: 'P. TMP', borderColor: '#00ffca', data: [], tension: 0.4, borderWidth: 2, pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a0a0b0' } },
+                x: { grid: { display: false }, ticks: { color: '#a0a0b0' } }
+            },
+            plugins: {
+                legend: { labels: { color: '#ffffff', font: { size: 12 } } }
+            }
+        }
+    });
+}
+
+function updateChart(payload) {
+    if (!mainChart) return;
+
+    // Max data points on chart
+    if (mainChart.data.labels.length > 30) {
+        mainChart.data.labels.shift();
+        mainChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+
+    mainChart.data.labels.push(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    
+    // Map pressures
+    const readings = payload.readings;
+    const findVal = (name) => readings.find(r => r.internal_name === name)?.physical_value || 0;
+
+    mainChart.data.datasets[0].data.push(findVal('c_press_ap_act'));
+    mainChart.data.datasets[1].data.push(findVal('c_press_vp_act'));
+    mainChart.data.datasets[2].data.push(findVal('c_press_fp_act'));
+    mainChart.data.datasets[3].data.push(findVal('c_press_tmp_act'));
+
+    mainChart.update('none'); // Update without animation for performance
+}
 
 function connect() {
     console.log('[WS] Connecting to:', WS_URL);
@@ -83,6 +138,7 @@ function connect() {
             const data = JSON.parse(event.data);
             if (data.type === 'telemetry') {
                 updateDashboard(data);
+                updateChart(data);
                 addToHistory(data);
             }
         } catch (e) {
@@ -193,3 +249,4 @@ setInterval(() => {
 // Initialize connection
 connect();
 lucide.createIcons();
+initChart();

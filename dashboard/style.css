@@ -354,7 +354,21 @@ tr:hover td {
     background: rgba(255, 255, 255, 0.02);
 }
 
-/* Settings */
+/* Charts */
+.charts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 30px;
+    height: 500px;
+    width: 100%;
+}
 .settings-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
