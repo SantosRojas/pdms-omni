@@ -32,8 +32,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Configuración
     let config = AppConfig::from_env();
     println!(
-        "[Config] DB={}, Puerto={}, Baudrate={}, WS=ws://{}:{}/ws",
-        config.db_path, config.port_name, config.baudrate, config.ws_host, config.ws_port
+        "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, WS=ws://{}:{}/ws",
+        config.db_path,
+        config.port_name,
+        config.baudrate,
+        config.serial_timeout_secs,
+        config.ws_host,
+        config.ws_port
     );
     match config.capture_mode {
         CaptureMode::All => println!("[Config] Captura de parametros: ALL"),
@@ -62,6 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let serial_config = SerialConfig {
         port_name: config.port_name.clone(),
         baudrate: config.baudrate,
+        timeout_secs: config.serial_timeout_secs,
         src_addr: config.src_addr,
         dst_addr: config.dst_addr,
     };
@@ -127,6 +133,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[ERROR] Ciclo {}: {}", cycle, e);
             }
         }
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(config.cycle_interval_secs));
     }
 }

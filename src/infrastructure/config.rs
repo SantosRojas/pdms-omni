@@ -11,11 +11,13 @@ pub enum CaptureMode {
 pub struct AppConfig {
     pub port_name: String,
     pub baudrate: u32,
+    pub serial_timeout_secs: u64,
     pub db_path: String,
     pub src_addr: u8,
     pub dst_addr: u8,
     pub ws_host: String,
     pub ws_port: u16,
+    pub cycle_interval_secs: u64,
     pub capture_mode: CaptureMode,
     pub capture_handles: HashSet<u16>,
     pub capture_names: HashSet<String>,
@@ -40,6 +42,10 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(19200),
+            serial_timeout_secs: env::var("SERIAL_TIMEOUT")
+                .unwrap_or_default()
+                .parse()
+                .unwrap_or(2),
             db_path: env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string()),
             src_addr: env::var("SRC_ADDR")
                 .unwrap_or_default()
@@ -54,6 +60,10 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(9001),
+            cycle_interval_secs: env::var("CYCLE_INTERVAL")
+                .unwrap_or_default()
+                .parse()
+                .unwrap_or(1),
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),

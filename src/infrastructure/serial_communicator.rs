@@ -16,6 +16,7 @@ use std::time::Duration;
 pub struct SerialConfig {
     pub port_name: String,
     pub baudrate: u32,
+    pub timeout_secs: u64,
     pub src_addr: u8,
     pub dst_addr: u8,
 }
@@ -25,6 +26,7 @@ impl Default for SerialConfig {
         Self {
             port_name: "COM6".to_string(),
             baudrate: 19200,
+            timeout_secs: 2,
             src_addr: PC_TREND_VIEWER,
             dst_addr: DSS_APP,
         }
@@ -39,7 +41,7 @@ pub struct SerialDeviceCommunicator {
 impl SerialDeviceCommunicator {
     pub fn new(config: SerialConfig) -> Result<Self, String> {
         let port = serialport::new(&config.port_name, config.baudrate)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(config.timeout_secs))
             .data_bits(serialport::DataBits::Eight)
             .stop_bits(serialport::StopBits::One)
             .parity(serialport::Parity::None)

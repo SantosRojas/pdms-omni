@@ -260,10 +260,12 @@ where
     pub fn get_dictionary(&mut self) -> Result<Vec<DictionaryEntry>, UseCaseError> {
         println!("  [4] CMD_GET_NEXT_DICT_STR (building dictionary)...");
 
+        const MAX_DICT_ENTRIES: usize = 20_000;
         self.dict_repo.delete_all()?;
         let mut entries = Vec::new();
         self.dict_cache.clear();
         let mut prev_id: u16 = 0;
+        let mut seen_ids = std::collections::HashSet::new();
 
         loop {
             let mut id_bytes = [0u8; 2];
@@ -288,6 +290,14 @@ where
                 break;
             }
 
+            if !seen_ids.insert(dict_id) {
+                return Err(UseCaseError::Protocol(format!(
+                    "Dictionary loop detected: repeated dict_id={} after {} entries",
+                    dict_id,
+                    entries.len()
+                )));
+            }
+
             // String starts at offset 4, null-terminated UTF-8
             let str_bytes = &data[4..];
             let text = if let Some(null_pos) = str_bytes.iter().position(|&b| b == 0) {
@@ -303,6 +313,21 @@ where
             self.dict_repo.save(&entry)?;
             self.dict_cache.insert(dict_id, text.clone());
             entries.push(entry);
+
+            if entries.len() % 200 == 0 {
+                println!(
+                    "      ... dictionary progress: {} entries (last dict_id={})",
+                    entries.len(),
+                    dict_id
+                );
+            }
+
+            if entries.len() >= MAX_DICT_ENTRIES {
+                return Err(UseCaseError::Protocol(format!(
+                    "Dictionary exceeded safety limit ({} entries)",
+                    MAX_DICT_ENTRIES
+                )));
+            }
 
             prev_id = dict_id;
         }
