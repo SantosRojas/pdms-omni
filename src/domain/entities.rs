@@ -4,6 +4,8 @@
 
 #![allow(dead_code)]
 
+use serde::Serialize;
+
 /// Represents version information returned by CMD_CODE_GET_VERSIONS.
 /// Contains system SW, DSS/CSS/PSS firmware/hardware versions and language info.
 #[derive(Debug, Clone)]
@@ -88,7 +90,7 @@ pub struct DictionaryEntry {
 }
 
 /// A single telemetry reading extracted from the cyclical data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TelemetryReading {
     pub id: Option<i64>,
     pub timestamp: String,

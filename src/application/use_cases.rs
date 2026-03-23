@@ -321,6 +321,15 @@ where
     /// We use the 'size' attribute of each handle to split the byte stream.
     /// Values are divided by 'conversion_factor' to get the physical value.
     pub fn get_cyclical_values(&mut self) -> Result<Vec<TelemetryReading>, UseCaseError> {
+        self.get_cyclical_values_filtered(|_| true)
+    }
+
+    /// Same as `get_cyclical_values`, but allowing runtime filtering.
+    /// Return and persistence include only readings where `include_reading` is true.
+    pub fn get_cyclical_values_filtered<F>(&mut self, include_reading: F) -> Result<Vec<TelemetryReading>, UseCaseError>
+    where
+        F: Fn(&DataAttribute) -> bool,
+    {
         let data = self.device.request(CMD_CODE_GET_CYCLICAL_VALUES, &[])?;
 
         if data.len() < 2 {
@@ -380,15 +389,17 @@ where
                 }
             };
 
-            readings.push(TelemetryReading {
-                id: None,
-                timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
-                handle,
-                internal_name: attr.internal_name.clone(),
-                raw_value,
-                physical_value,
-                unit,
-            });
+            if include_reading(attr) {
+                readings.push(TelemetryReading {
+                    id: None,
+                    timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
+                    handle,
+                    internal_name: attr.internal_name.clone(),
+                    raw_value,
+                    physical_value,
+                    unit,
+                });
+            }
 
             offset += size;
         }
