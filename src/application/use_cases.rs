@@ -107,10 +107,13 @@ where
         let language_id = LittleEndian::read_u16(&data[2..4]);
 
         let read_version = |offset: usize| -> String {
-            String::from_utf8_lossy(&data[offset..offset + VERSION_STRING_LENGTH])
-                .trim_matches('\0')
-                .trim()
-                .to_string()
+            let slice = &data[offset..offset + VERSION_STRING_LENGTH];
+            let text = if let Some(null_pos) = slice.iter().position(|&b| b == 0) {
+                String::from_utf8_lossy(&slice[..null_pos])
+            } else {
+                String::from_utf8_lossy(slice)
+            };
+            text.trim().to_string()
         };
 
         let base = 4; // after cmd(2) + lang_id(2)
@@ -395,12 +398,13 @@ where
 
             let physical_value = match attr.data_type {
                 DataType::DiaString | DataType::VersionString => {
-                    // Read the whole string
-                    let text = String::from_utf8_lossy(slice)
-                        .trim_matches('\0')
-                        .trim()
-                        .to_string();
-                    TelemetryValue::String(text)
+                    // Read string until null terminator
+                    let text = if let Some(null_pos) = slice.iter().position(|&b| b == 0) {
+                        String::from_utf8_lossy(&slice[..null_pos])
+                    } else {
+                        String::from_utf8_lossy(slice)
+                    };
+                    TelemetryValue::String(text.trim().to_string())
                 }
                 _ => {
                     if attr.conversion_factor > 0 {
