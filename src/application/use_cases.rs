@@ -12,7 +12,7 @@ use crate::domain::device::{
     VERSION_STRING_LENGTH,
 };
 use crate::domain::entities::{
-    DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
+    DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
 };
 use crate::domain::repositories::{
     DataAttributeRepository, DictionaryRepository, TelemetryRepository, VersionRepository,
@@ -393,10 +393,22 @@ where
             let slice = &values_data[offset..offset + size];
             let raw_value = Self::read_raw_value(slice, size, attr.data_type);
 
-            let physical_value = if attr.conversion_factor > 0 {
-                raw_value as f64 / attr.conversion_factor as f64
-            } else {
-                raw_value as f64
+            let physical_value = match attr.data_type {
+                DataType::DiaString | DataType::VersionString => {
+                    // Read the whole string
+                    let text = String::from_utf8_lossy(slice)
+                        .trim_matches('\0')
+                        .trim()
+                        .to_string();
+                    TelemetryValue::String(text)
+                }
+                _ => {
+                    if attr.conversion_factor > 0 {
+                        TelemetryValue::Number(raw_value as f64 / attr.conversion_factor as f64)
+                    } else {
+                        TelemetryValue::Number(raw_value as f64)
+                    }
+                }
             };
 
             // Lookup unit string from in-memory dictionary cache, fallback to DB

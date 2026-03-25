@@ -6,7 +6,7 @@ use rusqlite::{Connection, params};
 use std::sync::{Arc, Mutex};
 
 use crate::domain::entities::{
-    DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
+    DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
 };
 use crate::domain::repositories::{
     DataAttributeRepository, DictionaryRepository, RepositoryError,
@@ -196,6 +196,10 @@ impl SqliteTelemetryRepository {
 impl TelemetryRepository for SqliteTelemetryRepository {
     fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError> {
         let conn = lock_conn(&self.conn)?;
+        let p_val: rusqlite::types::Value = match &reading.physical_value {
+            TelemetryValue::Number(n) => rusqlite::types::Value::Real(*n),
+            TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
+        };
         conn.execute(
             "INSERT INTO telemetry (handle, internal_name, raw_value, physical_value, unit)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -203,7 +207,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
                 reading.handle,
                 reading.internal_name,
                 reading.raw_value,
-                reading.physical_value,
+                p_val,
                 reading.unit,
             ],
         ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
@@ -220,11 +224,15 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
             for reading in readings {
+                let p_val: rusqlite::types::Value = match &reading.physical_value {
+                    TelemetryValue::Number(n) => rusqlite::types::Value::Real(*n),
+                    TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
+                };
                 stmt.execute(params![
                     reading.handle,
                     reading.internal_name,
                     reading.raw_value,
-                    reading.physical_value,
+                    p_val,
                     reading.unit,
                 ]).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
             }
@@ -241,13 +249,20 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
         let iter = stmt.query_map(params![limit], |row| {
+            let val: rusqlite::types::Value = row.get(5)?;
+            let physical_value = match val {
+                rusqlite::types::Value::Real(n) => TelemetryValue::Number(n),
+                rusqlite::types::Value::Integer(i) => TelemetryValue::Number(i as f64),
+                rusqlite::types::Value::Text(s) => TelemetryValue::String(s),
+                _ => TelemetryValue::Number(0.0),
+            };
             Ok(TelemetryReading {
                 id: Some(row.get::<_, i64>(0)?),
                 timestamp: row.get::<_, String>(1)?,
                 handle: row.get::<_, u16>(2)?,
                 internal_name: row.get::<_, String>(3)?,
                 raw_value: row.get::<_, i64>(4)?,
-                physical_value: row.get::<_, f64>(5)?,
+                physical_value,
                 unit: row.get::<_, String>(6)?,
             })
         }).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;

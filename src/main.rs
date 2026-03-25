@@ -114,10 +114,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(readings) => {
                 println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
                 for r in &readings {
-                    println!(
-                        "  {:30} = {:>10.2} {}",
-                        r.internal_name, r.physical_value, r.unit
-                    );
+                    use crate::domain::entities::TelemetryValue;
+                    match &r.physical_value {
+                        TelemetryValue::Number(n) => {
+                            println!(
+                                "  {:30} = {:>10.2} {}",
+                                r.internal_name, n, r.unit
+                            );
+                        }
+                        TelemetryValue::String(s) => {
+                            println!(
+                                "  {:30} = {:>10} {}",
+                                r.internal_name, s, r.unit
+                            );
+                        }
+                    }
                 }
 
                 let event = TelemetryEvent {

@@ -89,6 +89,26 @@ pub struct DictionaryEntry {
     pub text: String,
 }
 
+/// A flexible value type that can be either a number or a string.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum TelemetryValue {
+    Number(f64),
+    String(String),
+}
+
+impl From<f64> for TelemetryValue {
+    fn from(v: f64) -> Self {
+        TelemetryValue::Number(v)
+    }
+}
+
+impl From<String> for TelemetryValue {
+    fn from(v: String) -> Self {
+        TelemetryValue::String(v)
+    }
+}
+
 /// A single telemetry reading extracted from the cyclical data.
 #[derive(Debug, Clone, Serialize)]
 pub struct TelemetryReading {
@@ -97,6 +117,6 @@ pub struct TelemetryReading {
     pub handle: u16,
     pub internal_name: String,
     pub raw_value: i64,
-    pub physical_value: f64,
+    pub physical_value: TelemetryValue,
     pub unit: String,
 }

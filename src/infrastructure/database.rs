@@ -52,7 +52,7 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             handle INTEGER,
             internal_name TEXT,
             raw_value INTEGER,
-            physical_value REAL,
+            physical_value NUMERIC,
             unit TEXT
         );
     ")?;
