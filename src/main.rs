@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         repos.dict_repo,
         repos.telemetry_repo,
         repos.version_repo,
+        repos.equiv_repo,
         device,
     );
 
@@ -117,10 +118,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     use crate::domain::entities::TelemetryValue;
                     match &r.physical_value {
                         TelemetryValue::Number(n) => {
-                            println!(
-                                "  {:30} = {:>10.2} {}",
-                                r.internal_name, n, r.unit
-                            );
+                            if let Some(display) = &r.display_value {
+                                println!(
+                                    "  {:30} = {:>10.2} {} ({})",
+                                    r.internal_name, n, r.unit, display
+                                );
+                            } else {
+                                println!(
+                                    "  {:30} = {:>10.2} {}",
+                                    r.internal_name, n, r.unit
+                                );
+                            }
                         }
                         TelemetryValue::String(s) => {
                             println!(

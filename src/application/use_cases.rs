@@ -15,7 +15,7 @@ use crate::domain::entities::{
     DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
 };
 use crate::domain::repositories::{
-    DataAttributeRepository, DictionaryRepository, TelemetryRepository, VersionRepository,
+    AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository, TelemetryRepository, VersionRepository,
 };
 
 #[derive(Debug, Error)]
@@ -35,11 +35,12 @@ pub enum UseCaseError {
 /// - `T`: TelemetryRepository
 /// - `V`: VersionRepository
 /// - `Dev`: DeviceCommunicator
-pub struct OmniInteractor<A, Di, T, V, Dev> {
+pub struct OmniInteractor<A, Di, T, V, E, Dev> {
     attr_repo: A,
     dict_repo: Di,
     telemetry_repo: T,
     version_repo: V,
+    equiv_repo: E,
     device: Dev,
     /// Ordered list of handles (as received from ANSW_GET_DATA_HANDLES).
     /// The cyclical values come in this exact order.
@@ -48,26 +49,31 @@ pub struct OmniInteractor<A, Di, T, V, Dev> {
     attr_cache: std::collections::HashMap<u16, DataAttribute>,
     /// In-memory dictionary cache to avoid DB lookups.
     dict_cache: std::collections::HashMap<u16, String>,
+    /// In-memory equivalence cache: internal_name -> numeric_value (as ordered bits) -> display_name.
+    equiv_cache: std::collections::HashMap<String, std::collections::HashMap<u64, String>>,
 }
 
-impl<A, Di, T, V, Dev> OmniInteractor<A, Di, T, V, Dev>
+impl<A, Di, T, V, E, Dev> OmniInteractor<A, Di, T, V, E, Dev>
 where
     A: DataAttributeRepository,
     Di: DictionaryRepository,
     T: TelemetryRepository,
     V: VersionRepository,
+    E: AttributeEquivalenceRepository,
     Dev: DeviceCommunicator,
 {
-    pub fn new(attr_repo: A, dict_repo: Di, telemetry_repo: T, version_repo: V, device: Dev) -> Self {
+    pub fn new(attr_repo: A, dict_repo: Di, telemetry_repo: T, version_repo: V, equiv_repo: E, device: Dev) -> Self {
         Self {
             attr_repo,
             dict_repo,
             telemetry_repo,
             version_repo,
+            equiv_repo,
             device,
             handles: Vec::new(),
             attr_cache: std::collections::HashMap::new(),
             dict_cache: std::collections::HashMap::new(),
+            equiv_cache: std::collections::HashMap::new(),
         }
     }
 
@@ -216,17 +222,25 @@ where
             String::from_utf8_lossy(name_bytes).trim().to_string()
         };
 
-        let attr = DataAttribute {
+        let mut attr = DataAttribute {
             handle,
             data_type,
             size,
             conversion_factor: factor,
             label_did,
             unit_did,
+            signal_id: 0, // Will be populated by the DB
             internal_name,
         };
 
         self.attr_repo.save(&attr)?;
+        
+        // Reload from DB to get the generated signal_id
+        if let Some(saved_attr) = self.attr_repo.get_by_handle(handle)? {
+            attr = saved_attr;
+        }
+
+        self.attr_cache.insert(handle, attr.clone());
         Ok(attr)
     }
 
@@ -430,15 +444,27 @@ where
                 }
             };
 
+            // Lookup display equivalence using physical_value
+            let display_value = if let TelemetryValue::Number(n) = &physical_value {
+                let key = n.to_bits();
+                self.equiv_cache
+                    .get(&attr.internal_name)
+                    .and_then(|m| m.get(&key))
+                    .cloned()
+            } else {
+                None
+            };
+
             if include_reading(attr) {
                 readings.push(TelemetryReading {
                     id: None,
                     timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
-                    handle,
+                    signal_id: attr.signal_id,
                     internal_name: attr.internal_name.clone(),
                     raw_value,
                     physical_value,
                     unit,
+                    display_value,
                 });
             }
 
@@ -498,6 +524,13 @@ where
         // Persist the currently detected version only after successful initialization.
         self.version_repo.save(&version)?;
 
+        // Always load the equivalence cache from DB after initialization,
+        // regardless of whether we fetched from device or loaded from local cache.
+        // Equivalences are pre-populated via the Python loader and are independent
+        // of OMNI firmware versions.
+        println!("  [eq] Loading value equivalences from database...");
+        self.load_equiv_cache()?;
+
         println!("\n══ INITIALIZATION COMPLETE ══\n");
         Ok(version)
     }
@@ -533,6 +566,24 @@ where
         }
 
         Ok(true)
+    }
+
+    /// Loads value equivalences from the DB into the in-memory cache.
+    /// Called unconditionally after initialization so both code paths
+    /// (fresh device fetch and DB cache load) benefit from it.
+    fn load_equiv_cache(&mut self) -> Result<(), UseCaseError> {
+        let equivs = self.equiv_repo.get_all()?;
+        self.equiv_cache.clear();
+        for eq in equivs {
+            self.equiv_cache
+                .entry(eq.internal_name)
+                .or_insert_with(std::collections::HashMap::new)
+                .insert(eq.numeric_value.to_bits(), eq.display_name);
+        }
+        println!("      {} equivalence value(s) loaded across {} signal(s).",
+            self.equiv_cache.values().map(|m| m.len()).sum::<usize>(),
+            self.equiv_cache.len());
+        Ok(())
     }
 
     // ───────────────────────────────────────────────

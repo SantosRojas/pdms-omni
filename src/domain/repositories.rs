@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use super::entities::{DataAttribute, DictionaryEntry, TelemetryReading, VersionInfo};
+use super::entities::{AttributeEquivalence, DataAttribute, DictionaryEntry, TelemetryReading, VersionInfo};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -46,4 +46,13 @@ pub trait TelemetryRepository {
 pub trait VersionRepository {
     fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError>;
     fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError>;
+}
+
+/// CRUD for value equivalences (e.g., 0.0 = Preparation).
+/// numeric_value is the physical/final value after applying the conversion factor.
+pub trait AttributeEquivalenceRepository {
+    fn save(&self, equiv: &AttributeEquivalence) -> Result<(), RepositoryError>;
+    fn save_batch(&self, equivs: &[AttributeEquivalence]) -> Result<(), RepositoryError>;
+    fn get_by_internal_name(&self, name: &str) -> Result<Vec<AttributeEquivalence>, RepositoryError>;
+    fn get_all(&self) -> Result<Vec<AttributeEquivalence>, RepositoryError>;
 }

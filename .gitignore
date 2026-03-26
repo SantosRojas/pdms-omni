@@ -2,3 +2,9 @@
 .env
 *.pdf
 *.doc
+*.xlsx
+*.db
+*.db-shm
+
+/Back
+

@@ -1,4 +1,4 @@
-use dotenvy::dotenv;
+use dotenvy;
 use std::env;
 use std::collections::HashSet;
 
@@ -25,7 +25,11 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
-        dotenv().ok(); // Carga el archivo .env
+        // Find and load .env; remember its directory to resolve relative paths
+        let env_dir = dotenvy::dotenv()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
         let capture_mode = match env::var("CAPTURE_MODE")
             .unwrap_or_else(|_| "all".to_string())
@@ -34,6 +38,14 @@ impl AppConfig {
         {
             "selected" => CaptureMode::Selected,
             _ => CaptureMode::All,
+        };
+
+        // Resolve DB path relative to the .env directory
+        let db_raw = env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string());
+        let db_path = if std::path::Path::new(&db_raw).is_absolute() {
+            db_raw
+        } else {
+            env_dir.join(&db_raw).to_string_lossy().to_string()
         };
 
         Self {
@@ -46,7 +58,7 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(2),
-            db_path: env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string()),
+            db_path,
             src_addr: env::var("SRC_ADDR")
                 .unwrap_or_default()
                 .parse()

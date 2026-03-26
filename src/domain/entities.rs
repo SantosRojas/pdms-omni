@@ -79,6 +79,7 @@ pub struct DataAttribute {
     pub conversion_factor: u16,
     pub label_did: u16,
     pub unit_did: u16,
+    pub signal_id: i64,
     pub internal_name: String,
 }
 
@@ -109,14 +110,24 @@ impl From<String> for TelemetryValue {
     }
 }
 
+/// Mapping between a numeric value and a human-readable name for a specific attribute.
+/// `numeric_value` is the PHYSICAL (final) value, e.g. after dividing by conversion_factor.
+#[derive(Debug, Clone, Serialize)]
+pub struct AttributeEquivalence {
+    pub internal_name: String,
+    pub numeric_value: f64,
+    pub display_name: String,
+}
+
 /// A single telemetry reading extracted from the cyclical data.
 #[derive(Debug, Clone, Serialize)]
 pub struct TelemetryReading {
     pub id: Option<i64>,
     pub timestamp: String,
-    pub handle: u16,
-    pub internal_name: String,
+    pub signal_id: i64,
+    pub internal_name: String, // Will be retrieved via JOIN in repository
     pub raw_value: i64,
     pub physical_value: TelemetryValue,
     pub unit: String,
+    pub display_value: Option<String>,
 }
