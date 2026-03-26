@@ -144,7 +144,20 @@ export const AdminPage = ({ currentUser, onBack }) => {
                   onMouseOver={e => e.currentTarget.style.background = 'rgba(0,210,255,0.04)'}
                   onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{u.id}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 500 }}>{u.username}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {u.username}
+                      {isEditing && (
+                        <input 
+                          type="password" 
+                          placeholder="New password (optional)" 
+                          value={editData.password || ''} 
+                          onChange={e => setEditData({ ...editData, password: e.target.value })} 
+                          style={{ ...inputStyle, width: '100%', padding: '4px 8px', fontSize: '0.8rem' }} 
+                        />
+                      )}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     {isEditing ? (
                       <select value={editData.role || u.role} onChange={e => setEditData({ ...editData, role: e.target.value })} style={{ ...inputStyle, width: '120px' }}>

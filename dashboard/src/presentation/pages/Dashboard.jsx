@@ -3,9 +3,9 @@ import { useTelemetry } from '../../application/useTelemetry';
 import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings } from 'lucide-react';
 
-export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onLogout }) => {
+export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
   const [patients, setPatients] = useState([]);
   const [patientId, setPatientId] = useState('');
 
@@ -62,9 +62,15 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
           {/* User info + logout */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--text-main)' }}>{user.username}</strong>
+              <strong style={{ color: 'var(--text-main)' }}>{user.full_name || user.username}</strong>
               <span style={{ marginLeft: '4px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', background: 'rgba(255,255,255,0.06)' }}>{user.role}</span>
             </span>
+            <button onClick={onNavigateProfile} title="Profile Settings" style={{
+              background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-main)',
+              padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',
+            }}>
+              <Settings size={16} />
+            </button>
             <button onClick={onLogout} title="Logout" style={{
               background: 'rgba(239,68,68,0.1)', border: 'none', color: '#fca5a5',
               padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',

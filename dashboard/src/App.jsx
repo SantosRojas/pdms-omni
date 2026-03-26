@@ -4,6 +4,7 @@ import { Dashboard } from './presentation/pages/Dashboard';
 import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
 import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
+import { ProfilePage } from './presentation/pages/ProfilePage';
 import { apiService } from './infrastructure/api';
 import './index.css';
 
@@ -55,6 +56,15 @@ function App() {
         />
       );
 
+    case 'profile':
+      return (
+        <ProfilePage
+          currentUser={user}
+          onBack={() => setView('dashboard')}
+          onUpdateUser={setUser}
+        />
+      );
+
     default:
       return (
         <Dashboard
@@ -65,6 +75,7 @@ function App() {
           }}
           onNavigateAdmin={() => setView('admin')}
           onNavigateEquivalences={() => setView('equivalences')}
+          onNavigateProfile={() => setView('profile')}
           onLogout={handleLogout}
         />
       );

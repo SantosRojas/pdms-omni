@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 pub struct Session {
     pub user_id: i64,
     pub username: String,
+    pub full_name: String,
+    pub email: String,
     pub role: String,
 }
 
@@ -74,6 +76,8 @@ pub struct LoginResponse {
 pub struct UserDto {
     pub id: i64,
     pub username: String,
+    pub full_name: String,
+    pub email: String,
     pub role: String,
     pub active: bool,
     pub created_at: String,
@@ -90,22 +94,24 @@ pub async fn login(
     };
 
     let result = conn.query_row(
-        "SELECT id, username, password, role, active, created_at FROM users WHERE username = ?1",
+        "SELECT id, username, password, full_name, email, role, active, created_at FROM users WHERE username = ?1",
         rusqlite::params![body.username],
         |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, bool>(4)?,
-                row.get::<_, String>(5)?,
+                row.get::<_, String>(3)?, // full_name
+                row.get::<_, String>(4)?, // email
+                row.get::<_, String>(5)?, // role
+                row.get::<_, bool>(6)?,   // active
+                row.get::<_, String>(7)?, // created_at
             ))
         },
     );
 
     match result {
-        Ok((id, username, password, role, active, created_at)) => {
+        Ok((id, username, password, full_name, email, role, active, created_at)) => {
             if !active {
                 return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Account disabled"}))).into_response();
             }
@@ -114,8 +120,8 @@ pub async fn login(
             }
 
             let token = generate_token();
-            let user = UserDto { id, username: username.clone(), role: role.clone(), active, created_at };
-            let session = Session { user_id: id, username, role };
+            let user = UserDto { id, username: username.clone(), full_name: full_name.clone(), email: email.clone(), role: role.clone(), active, created_at };
+            let session = Session { user_id: id, username, full_name, email, role };
 
             drop(conn); // release DB lock before locking sessions
             if let Ok(mut sessions) = state.sessions.lock() {
@@ -154,6 +160,8 @@ pub async fn get_me(
         Some(session) => Json(serde_json::json!({
             "user_id": session.user_id,
             "username": session.username,
+            "full_name": session.full_name,
+            "email": session.email,
             "role": session.role,
         })).into_response(),
         None => unauthorized().into_response(),
@@ -182,7 +190,7 @@ pub async fn list_users(
         Err(_) => return db_err("db lock".into()).into_response(),
     };
 
-    let mut stmt = match conn.prepare("SELECT id, username, role, active, created_at FROM users ORDER BY id") {
+    let mut stmt = match conn.prepare("SELECT id, username, full_name, email, role, active, created_at FROM users ORDER BY id") {
         Ok(s) => s,
         Err(e) => return db_err(e.to_string()).into_response(),
     };
@@ -191,9 +199,11 @@ pub async fn list_users(
         Ok(UserDto {
             id: row.get(0)?,
             username: row.get(1)?,
-            role: row.get(2)?,
-            active: row.get(3)?,
-            created_at: row.get(4)?,
+            full_name: row.get(2)?,
+            email: row.get(3)?,
+            role: row.get(4)?,
+            active: row.get(5)?,
+            created_at: row.get(6)?,
         })
     }).unwrap().filter_map(|r| r.ok()).collect();
 
@@ -204,6 +214,8 @@ pub async fn list_users(
 pub struct CreateUserRequest {
     pub username: String,
     pub password: String,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
     pub role: String,
 }
 
@@ -230,9 +242,12 @@ pub async fn create_user(
         Err(_) => return db_err("db lock".into()).into_response(),
     };
 
+    let full_name = body.full_name.unwrap_or_default();
+    let email = body.email.unwrap_or_default();
+
     match conn.execute(
-        "INSERT INTO users (username, password, role) VALUES (?1, ?2, ?3)",
-        rusqlite::params![body.username, body.password, body.role],
+        "INSERT INTO users (username, password, full_name, email, role) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![body.username, body.password, full_name, email, body.role],
     ) {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
@@ -242,6 +257,8 @@ pub async fn create_user(
 #[derive(Deserialize)]
 pub struct UpdateUserRequest {
     pub password: Option<String>,
+    pub full_name: Option<String>,
+    pub email: Option<String>,
     pub role: Option<String>,
     pub active: Option<bool>,
 }
@@ -257,14 +274,25 @@ pub async fn update_user(
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
-    if session.role != "admin" {
+
+    let is_admin = session.role == "admin";
+    let is_self = session.user_id == user_id;
+
+    if !is_admin && !is_self {
         return forbidden().into_response();
     }
 
     if let Some(ref role) = body.role {
+        if !is_admin {
+            return forbidden().into_response(); // only admin can change roles
+        }
         if !["admin", "operator", "viewer"].contains(&role.as_str()) {
             return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid role"}))).into_response();
         }
+    }
+
+    if body.active.is_some() && !is_admin {
+        return forbidden().into_response(); // only admin can disable/enable accounts
     }
 
     let conn = match state.db.lock() {
@@ -274,6 +302,12 @@ pub async fn update_user(
 
     if let Some(ref pw) = body.password {
         let _ = conn.execute("UPDATE users SET password = ?1 WHERE id = ?2", rusqlite::params![pw, user_id]);
+    }
+    if let Some(ref fn_) = body.full_name {
+        let _ = conn.execute("UPDATE users SET full_name = ?1 WHERE id = ?2", rusqlite::params![fn_, user_id]);
+    }
+    if let Some(ref e) = body.email {
+        let _ = conn.execute("UPDATE users SET email = ?1 WHERE id = ?2", rusqlite::params![e, user_id]);
     }
     if let Some(ref role) = body.role {
         let _ = conn.execute("UPDATE users SET role = ?1 WHERE id = ?2", rusqlite::params![role, user_id]);

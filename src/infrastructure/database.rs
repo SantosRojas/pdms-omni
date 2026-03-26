@@ -87,17 +87,23 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
+            full_name TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
             role TEXT NOT NULL DEFAULT 'viewer',
             active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     ")?;
 
+    // Safe migrations for existing DB
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''", []);
+
     // Seed default admin user if no users exist
     let user_count: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap_or(0);
     if user_count == 0 {
         conn.execute(
-            "INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')",
+            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')",
             [],
         )?;
         println!("  [DB] Default admin user created (username: admin, password: admin123)");
