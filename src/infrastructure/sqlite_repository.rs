@@ -218,9 +218,10 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
         };
         conn.execute(
-            "INSERT INTO telemetry (signal_id, raw_value, physical_value, unit)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
+                reading.patient_id,
                 reading.signal_id,
                 reading.raw_value,
                 p_val,
@@ -235,8 +236,8 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         let tx = guard.transaction().map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO telemetry (signal_id, raw_value, physical_value, unit)
-                 VALUES (?1, ?2, ?3, ?4)"
+                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+                 VALUES (?1, ?2, ?3, ?4, ?5)"
             ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
             for reading in readings {
@@ -245,6 +246,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
                     TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
                 };
                 stmt.execute(params![
+                    reading.patient_id,
                     reading.signal_id,
                     reading.raw_value,
                     p_val,
@@ -259,7 +261,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let conn = lock_conn(&self.conn)?;
         let mut stmt = conn.prepare(
-            "SELECT t.id, t.timestamp, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
+            "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
              FROM telemetry t
              JOIN signals s ON t.signal_id = s.id
              LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
@@ -267,7 +269,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
         let iter = stmt.query_map(params![limit], |row| {
-            let val: rusqlite::types::Value = row.get(5)?;
+            let val: rusqlite::types::Value = row.get(6)?;
             let physical_value = match val {
                 rusqlite::types::Value::Real(n) => TelemetryValue::Number(n),
                 rusqlite::types::Value::Integer(i) => TelemetryValue::Number(i as f64),
@@ -277,12 +279,69 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             Ok(TelemetryReading {
                 id: Some(row.get::<_, i64>(0)?),
                 timestamp: row.get::<_, String>(1)?,
-                signal_id: row.get::<_, i64>(2)?,
-                internal_name: row.get::<_, String>(3)?,
-                raw_value: row.get::<_, i64>(4)?,
+                patient_id: row.get::<_, Option<i64>>(2)?,
+                signal_id: row.get::<_, i64>(3)?,
+                internal_name: row.get::<_, String>(4)?,
+                raw_value: row.get::<_, i64>(5)?,
                 physical_value,
-                unit: row.get::<_, String>(6)?,
-                display_value: row.get::<_, Option<String>>(7)?,
+                unit: row.get::<_, String>(7)?,
+                display_value: row.get::<_, Option<String>>(8)?,
+            })
+        }).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let mut result = Vec::new();
+        for item in iter {
+            result.push(item.map_err(|e| RepositoryError::DatabaseError(e.to_string()))?);
+        }
+        Ok(result)
+    }
+
+    fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO patients (patient_id_str) VALUES (?1)",
+            params![patient_id_str],
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let id_val: i64 = conn.query_row(
+            "SELECT id FROM patients WHERE patient_id_str = ?1",
+            params![patient_id_str],
+            |r| r.get(0),
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        Ok(id_val)
+    }
+
+    fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
+             FROM telemetry t
+             JOIN patients p ON t.patient_id = p.id
+             JOIN signals s ON t.signal_id = s.id
+             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
+             WHERE p.patient_id_str = ?1
+             ORDER BY t.timestamp DESC LIMIT ?2"
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let iter = stmt.query_map(params![patient_id_str, limit], |row| {
+            let val: rusqlite::types::Value = row.get(6)?;
+            let physical_value = match val {
+                rusqlite::types::Value::Real(n) => TelemetryValue::Number(n),
+                rusqlite::types::Value::Integer(i) => TelemetryValue::Number(i as f64),
+                rusqlite::types::Value::Text(s) => TelemetryValue::String(s),
+                _ => TelemetryValue::Number(0.0),
+            };
+            Ok(TelemetryReading {
+                id: Some(row.get::<_, i64>(0)?),
+                timestamp: row.get::<_, String>(1)?,
+                patient_id: row.get::<_, Option<i64>>(2)?,
+                signal_id: row.get::<_, i64>(3)?,
+                internal_name: row.get::<_, String>(4)?,
+                raw_value: row.get::<_, i64>(5)?,
+                physical_value,
+                unit: row.get::<_, String>(7)?,
+                display_value: row.get::<_, Option<String>>(8)?,
             })
         }).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 

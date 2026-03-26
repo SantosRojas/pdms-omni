@@ -124,6 +124,7 @@ pub struct AttributeEquivalence {
 pub struct TelemetryReading {
     pub id: Option<i64>,
     pub timestamp: String,
+    pub patient_id: Option<i64>,
     pub signal_id: i64,
     pub internal_name: String, // Will be retrieved via JOIN in repository
     pub raw_value: i64,

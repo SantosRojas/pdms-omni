@@ -17,6 +17,8 @@ pub struct Repositories {
     pub telemetry_repo: SqliteTelemetryRepository,
     pub version_repo: SqliteVersionRepository,
     pub equiv_repo: SqliteAttributeEquivalenceRepository,
+    /// Shared DB connection for the HTTP API layer
+    pub db: Arc<Mutex<Connection>>,
 }
 
 /// Initializes the SQLite database: opens connection, creates schema,
@@ -53,14 +55,22 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             dict_id INTEGER PRIMARY KEY,
             text TEXT
         );
+        -- Patient tracking table
+        CREATE TABLE IF NOT EXISTS patients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id_str TEXT UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         -- Normalizing telemetry: storing signal_id for permanent historical decoupling
         CREATE TABLE IF NOT EXISTS telemetry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            patient_id INTEGER,
             signal_id INTEGER,
             raw_value INTEGER,
             physical_value NUMERIC,
             unit TEXT,
+            FOREIGN KEY(patient_id) REFERENCES patients(id),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
         -- New table for equivalences, using signal_id
@@ -72,7 +82,26 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             PRIMARY KEY (signal_id, numeric_value),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
+        -- User management
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'viewer',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     ")?;
+
+    // Seed default admin user if no users exist
+    let user_count: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap_or(0);
+    if user_count == 0 {
+        conn.execute(
+            "INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')",
+            [],
+        )?;
+        println!("  [DB] Default admin user created (username: admin, password: admin123)");
+    }
 
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM attribute_equivalences", [], |r| r.get(0)).unwrap_or(0);
     if count == 0 {
@@ -105,5 +134,6 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
         telemetry_repo: SqliteTelemetryRepository::new(Arc::clone(&db)),
         version_repo:   SqliteVersionRepository::new(Arc::clone(&db)),
         equiv_repo:     SqliteAttributeEquivalenceRepository::new(Arc::clone(&db)),
+        db,
     })
 }

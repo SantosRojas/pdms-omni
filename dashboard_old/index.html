@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDMS Omni - Dashboard de Telemetría</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="pulse-indicator" id="status-pulse"></div>
+                <h1>PDMS <span>Omni</span></h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <div class="nav-item active" id="btn-monitor">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Monitor Real-Time</span>
+                </div>
+                <div class="nav-item" id="btn-charts">
+                    <i data-lucide="bar-chart-3"></i>
+                    <span>Gráficas</span>
+                </div>
+                <div class="nav-item" id="btn-history">
+                    <i data-lucide="activity"></i>
+                    <span>Historial</span>
+                </div>
+                <div class="nav-item" id="btn-settings">
+                    <i data-lucide="settings"></i>
+                    <span>Ajustes</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-card">
+                    <p class="status-label">Servidor WebSocket</p>
+                    <p class="status-value" id="ws-status">Desconectado</p>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <!-- SECCIÓN: MONITOR (EXISTE) -->
+            <section id="view-monitor" class="dashboard-view active">
+                <header class="top-header">
+                    <div class="header-info">
+                        <h2 id="machine-id">B. Braun OMNI</h2>
+                        <p id="current-time">Iniciando monitorización...</p>
+                    </div>
+                    <div class="header-stats">
+                        <div class="stat">
+                            <span class="stat-label">Ciclos</span>
+                            <span class="stat-value" id="cycle-count">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Latencia</span>
+                            <span class="stat-value" id="latency">-- ms</span>
+                        </div>
+                    </div>
+                </header>
+
+                <section class="dashboard-grid" id="sensor-grid">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Esperando telemetría del servidor...</p>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SECCIÓN: GRÁFICAS -->
+            <section id="view-charts" class="dashboard-view">
+                <header class="top-header">
+                    <div class="header-info">
+                        <h2>Análisis de Tendencias</h2>
+                        <p>Progreso temporal de las variables críticas</p>
+                    </div>
+                </header>
+                <div class="charts-container">
+                    <div class="chart-card card">
+                        <canvas id="main-trend-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓN: HISTORIAL -->
+            <section id="view-history" class="dashboard-view">
+                <header class="top-header">
+                    <div class="header-info">
+                        <h2>Historial Reciente</h2>
+                        <p>Últimos 50 ciclos registrados en esta sesión</p>
+                    </div>
+                </header>
+                <div class="history-table-container">
+                    <table id="history-table">
+                        <thead>
+                            <tr>
+                                <th>Ciclo</th>
+                                <th>ID Sensor</th>
+                                <th>Nombre Interno</th>
+                                <th>Valor</th>
+                                <th>Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body">
+                            <!-- Datos dinámicos -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- SECCIÓN: AJUSTES -->
+            <section id="view-settings" class="dashboard-view">
+                <header class="top-header">
+                    <div class="header-info">
+                        <h2>Ajustes</h2>
+                        <p>Configuración del monitor local</p>
+                    </div>
+                </header>
+                <div class="settings-card card">
+                    <div class="setting-item">
+                        <label>WebSocket URL</label>
+                        <input type="text" value="ws://localhost:9001/ws" disabled>
+                        <small>Definido en el backend (.env)</small>
+                    </div>
+                    <div class="setting-item">
+                        <label>Modo de Visualización</label>
+                        <select>
+                            <option>Oscuro (Predeterminado)</option>
+                            <option disabled>Claro (Próximamente)</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

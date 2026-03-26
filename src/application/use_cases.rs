@@ -390,6 +390,7 @@ where
         let values_data = &data[2..]; // skip cmd code
         let mut offset = 0;
         let mut readings = Vec::new();
+        let mut patient_id_text: Option<String> = None;
 
         for &handle in &self.handles {
             let attr = match attr_map.get(&handle) {
@@ -455,10 +456,18 @@ where
                 None
             };
 
+            // Always extract patient ID regardless of whether it's included in the filtered readings
+            if attr.internal_name == "g_patient_id_str" {
+                if let TelemetryValue::String(ref s) = physical_value {
+                    patient_id_text = Some(s.clone());
+                }
+            }
+
             if include_reading(attr) {
                 readings.push(TelemetryReading {
                     id: None,
                     timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
+                    patient_id: None,         // populated below
                     signal_id: attr.signal_id,
                     internal_name: attr.internal_name.clone(),
                     raw_value,
@@ -469,6 +478,17 @@ where
             }
 
             offset += size;
+        }
+
+        // 2. Resolve patient ID
+        let patient_str = patient_id_text
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "UNKNOWN".to_string());
+            
+        let db_patient_id = self.telemetry_repo.get_or_create_patient(&patient_str)?;
+
+        for reading in &mut readings {
+            reading.patient_id = Some(db_patient_id);
         }
 
         // Persist batch

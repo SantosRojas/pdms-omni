@@ -57,11 +57,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let ws_addr = format!("{}:{}", config.ws_host, config.ws_port).parse()?;
-    let ws_hub = WebSocketHub::start(ws_addr)?;
 
     // 2. Base de datos (intercambiable)
     let repos = database::initialize_sqlite(&config.db_path)?;
     println!("[DB] Conectada: {}", config.db_path);
+
+    // 3. WebSocket + HTTP API server (shares DB connection)
+    let ws_hub = WebSocketHub::start(ws_addr, repos.db.clone())?;
 
     // 3. Dispositivo serial (intercambiable)
     let serial_config = SerialConfig {

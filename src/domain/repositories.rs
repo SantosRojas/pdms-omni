@@ -37,9 +37,14 @@ pub trait TelemetryRepository {
         }
         Ok(())
     }
-    
     /// Retrieve the most recent readings from the database
     fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
+    
+    /// Maps a patient string ID to an auto-incrementing integer primary key
+    fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError>;
+    
+    /// Retrieves historical telemetry for a specific patient
+    fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.
