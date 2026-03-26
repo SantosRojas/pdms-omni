@@ -62,7 +62,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
 
   const inputStyle = {
     padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)',
-    background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.875rem',
+    background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.875rem',
     fontFamily: 'var(--font-family)', outline: 'none', boxSizing: 'border-box',
   };
 
@@ -72,7 +72,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={onBack} style={{
-            background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+            background: 'var(--btn-bg)', border: '1px solid var(--border)',
             color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
             fontSize: '0.9rem', fontFamily: 'var(--font-family)',
@@ -104,7 +104,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5', fontSize: '0.875rem' }}>
+        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.875rem' }}>
           ❌ {error}
         </div>
       )}
@@ -142,7 +142,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', flex: 1 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
           <thead>
-            <tr style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--border)' }}>
+            <tr style={{ backgroundColor: 'var(--input-bg)', borderBottom: '1px solid var(--border)' }}>
               {['Parameter', 'Numeric Value', 'Display Name', ...(canDelete ? ['Actions'] : [])].map(h => (
                 <th key={h} style={{ padding: '14px 16px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
               ))}
@@ -151,8 +151,8 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
           <tbody>
             {[...groups.entries()].map(([name, items]) => (
               items.map((r, i) => (
-                <tr key={`${r.signal_id}-${r.numeric_value}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
-                  onMouseOver={e => e.currentTarget.style.background = 'rgba(168,85,247,0.04)'}
+                <tr key={`${r.signal_id}-${r.numeric_value}`} style={{ borderBottom: '1px solid var(--border)' }}
+                  onMouseOver={e => e.currentTarget.style.background = 'var(--primary-glow)'}
                   onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '10px 16px', fontWeight: i === 0 ? 600 : 400, color: i === 0 ? 'var(--text-main)' : 'var(--text-muted)' }}>
                     {i === 0 ? name : ''}
@@ -161,14 +161,14 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
                     {r.numeric_value}
                   </td>
                   <td style={{ padding: '10px 16px' }}>
-                    <span style={{ background: 'rgba(168,85,247,0.15)', color: '#c4b5fd', padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem' }}>
+                    <span style={{ background: 'var(--btn-nav-equiv)', color: 'var(--btn-nav-equiv-text)', padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem' }}>
                       {r.display_name}
                     </span>
                   </td>
                   {canDelete && (
                     <td style={{ padding: '10px 16px' }}>
                       <button onClick={() => handleDelete(r.signal_id, r.numeric_value)}
-                        style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#fca5a5', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
+                        style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: 'var(--danger)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
                         <Trash2 size={12} /> Delete
                       </button>
                     </td>
@@ -186,11 +186,11 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
           <span>{filtered.length} records</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: '8px', color: page === 0 ? '#333' : 'var(--text-main)', padding: '6px 10px', cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'var(--font-family)' }}>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ background: 'var(--btn-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: page === 0 ? '#333' : 'var(--text-main)', padding: '6px 10px', cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'var(--font-family)' }}>
               <ChevronLeft size={16} />
             </button>
             <span>Page {page + 1} / {totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: '8px', color: page >= totalPages - 1 ? '#333' : 'var(--text-main)', padding: '6px 10px', cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'var(--font-family)' }}>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ background: 'var(--btn-bg)', border: '1px solid var(--border)', borderRadius: '8px', color: page >= totalPages - 1 ? '#333' : 'var(--text-main)', padding: '6px 10px', cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'var(--font-family)' }}>
               <ChevronRight size={16} />
             </button>
           </div>

@@ -3,6 +3,7 @@ import { useTelemetry } from '../../application/useTelemetry';
 import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings } from 'lucide-react';
 
 export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
@@ -47,14 +48,14 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
           </select>
 
           {/* Nav buttons */}
-          <button onClick={() => onNavigateHistory(patientId)} style={navBtnStyle('rgba(59,130,246,0.12)', '#93c5fd')}>
+          <button onClick={() => onNavigateHistory(patientId)} style={navBtnStyle('var(--btn-nav-history)', 'var(--btn-nav-history-text)')}>
             <Database size={14} /> History
           </button>
-          <button onClick={onNavigateEquivalences} style={navBtnStyle('rgba(168,85,247,0.12)', '#c4b5fd')}>
+          <button onClick={onNavigateEquivalences} style={navBtnStyle('var(--btn-nav-equiv)', 'var(--btn-nav-equiv-text)')}>
             <Layers size={14} /> Equivalences
           </button>
           {user.role === 'admin' && (
-            <button onClick={onNavigateAdmin} style={navBtnStyle('rgba(245,158,11,0.12)', '#fcd34d')}>
+            <button onClick={onNavigateAdmin} style={navBtnStyle('var(--btn-nav-admin)', 'var(--btn-nav-admin-text)')}>
               <Users size={14} /> Users
             </button>
           )}
@@ -63,16 +64,17 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               <strong style={{ color: 'var(--text-main)' }}>{user.full_name || user.username}</strong>
-              <span style={{ marginLeft: '4px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', background: 'rgba(255,255,255,0.06)' }}>{user.role}</span>
+              <span style={{ marginLeft: '4px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', background: 'var(--btn-bg)' }}>{user.role}</span>
             </span>
+            <ThemeToggle />
             <button onClick={onNavigateProfile} title="Profile Settings" style={{
-              background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-main)',
+              background: 'var(--btn-bg)', border: 'none', color: 'var(--text-main)',
               padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',
             }}>
               <Settings size={16} />
             </button>
             <button onClick={onLogout} title="Logout" style={{
-              background: 'rgba(239,68,68,0.1)', border: 'none', color: '#fca5a5',
+              background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)',
               padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',
             }}>
               <LogOut size={16} />

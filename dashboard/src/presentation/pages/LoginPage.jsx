@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { LogIn, AlertCircle } from 'lucide-react';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 export const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -31,6 +32,9 @@ export const LoginPage = ({ onLogin }) => {
       background: 'var(--bg-dark)',
       backgroundImage: 'radial-gradient(circle at 30% 50%, rgba(0,210,255,0.06), transparent 40%), radial-gradient(circle at 70% 30%, rgba(59,130,246,0.06), transparent 40%)',
     }}>
+      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+        <ThemeToggle />
+      </div>
       <div className="glass-panel" style={{
         padding: '48px',
         width: '420px',
@@ -46,7 +50,7 @@ export const LoginPage = ({ onLogin }) => {
           }}>
             <LogIn size={28} color="white" />
           </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, background: 'linear-gradient(90deg, #fff, var(--primary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, background: 'linear-gradient(90deg, var(--text-main), var(--primary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
             OMNI PDMS
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>Sign in to continue</p>
@@ -57,7 +61,7 @@ export const LoginPage = ({ onLogin }) => {
             display: 'flex', alignItems: 'center', gap: '8px',
             padding: '10px 14px', borderRadius: '10px',
             background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-            color: '#fca5a5', fontSize: '0.875rem', marginBottom: '20px',
+            color: 'var(--danger)', fontSize: '0.875rem', marginBottom: '20px',
           }}>
             <AlertCircle size={16} /> {error}
           </div>
@@ -71,8 +75,8 @@ export const LoginPage = ({ onLogin }) => {
               autoFocus required
               style={{
                 width: '100%', padding: '12px 16px', borderRadius: '10px',
-                background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-                color: 'white', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
+                background: 'var(--input-bg)', border: '1px solid var(--border)',
+                color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
                 transition: 'border-color 0.2s', boxSizing: 'border-box',
               }}
               onFocus={e => e.target.style.borderColor = 'var(--primary)'}
@@ -86,8 +90,8 @@ export const LoginPage = ({ onLogin }) => {
               required
               style={{
                 width: '100%', padding: '12px 16px', borderRadius: '10px',
-                background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-                color: 'white', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
+                background: 'var(--input-bg)', border: '1px solid var(--border)',
+                color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
                 transition: 'border-color 0.2s', boxSizing: 'border-box',
               }}
               onFocus={e => e.target.style.borderColor = 'var(--primary)'}

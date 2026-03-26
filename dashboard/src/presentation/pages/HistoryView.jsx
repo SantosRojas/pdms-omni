@@ -47,7 +47,7 @@ export const HistoryView = ({ patientId, onBack }) => {
       <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={onBack} style={{
-            background: 'rgba(255,255,255,0.06)',
+            background: 'var(--btn-bg)',
             border: '1px solid var(--border)',
             color: 'var(--text-main)',
             padding: '8px 16px',
@@ -82,11 +82,11 @@ export const HistoryView = ({ patientId, onBack }) => {
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(0); }}
               style={{
-                background: 'rgba(0,0,0,0.3)',
+                background: 'var(--input-bg)',
                 border: '1px solid var(--border)',
                 borderRadius: '10px',
                 padding: '8px 12px 8px 34px',
-                color: 'white',
+                color: 'var(--text-main)',
                 fontSize: '0.9rem',
                 fontFamily: 'var(--font-family)',
                 width: '220px',
@@ -140,7 +140,7 @@ export const HistoryView = ({ patientId, onBack }) => {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                 <thead>
-                  <tr style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--border)' }}>
+                  <tr style={{ backgroundColor: 'var(--input-bg)', borderBottom: '1px solid var(--border)' }}>
                     {['Timestamp', 'Parameter', 'Value', 'Display', 'Unit'].map(h => (
                       <th key={h} style={{
                         padding: '14px 16px',
@@ -157,10 +157,10 @@ export const HistoryView = ({ patientId, onBack }) => {
                 <tbody>
                   {pageRows.map((r, i) => (
                     <tr key={r.id || i} style={{
-                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      borderBottom: '1px solid var(--border)',
                       transition: 'background 0.15s',
                     }}
-                      onMouseOver={e => e.currentTarget.style.background = 'rgba(0,210,255,0.04)'}
+                      onMouseOver={e => e.currentTarget.style.background = 'var(--primary-glow)'}
                       onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <td style={{ padding: '12px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -174,8 +174,8 @@ export const HistoryView = ({ patientId, onBack }) => {
                       <td style={{ padding: '12px 16px' }}>
                         {r.display_value ? (
                           <span style={{
-                            background: 'rgba(59, 130, 246, 0.15)',
-                            color: '#93c5fd',
+                            background: 'var(--btn-nav-history)',
+                            color: 'var(--btn-nav-history-text)',
                             padding: '2px 10px',
                             borderRadius: '6px',
                             fontSize: '0.8rem',
@@ -214,7 +214,7 @@ export const HistoryView = ({ patientId, onBack }) => {
                   disabled={page === 0}
                   onClick={() => setPage(p => p - 1)}
                   style={{
-                    background: 'rgba(255,255,255,0.05)',
+                    background: 'var(--btn-bg)',
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: page === 0 ? '#333' : 'var(--text-main)',
@@ -228,7 +228,7 @@ export const HistoryView = ({ patientId, onBack }) => {
                   disabled={page >= totalPages - 1}
                   onClick={() => setPage(p => p + 1)}
                   style={{
-                    background: 'rgba(255,255,255,0.05)',
+                    background: 'var(--btn-bg)',
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: page >= totalPages - 1 ? '#333' : 'var(--text-main)',

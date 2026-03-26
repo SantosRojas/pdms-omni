@@ -55,7 +55,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
 
   const inputStyle = {
     padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)',
-    background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.875rem',
+    background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.875rem',
     fontFamily: 'var(--font-family)', outline: 'none', boxSizing: 'border-box',
   };
 
@@ -65,7 +65,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
       <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={onBack} style={{
-            background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+            background: 'var(--btn-bg)', border: '1px solid var(--border)',
             color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
             fontSize: '0.9rem', fontFamily: 'var(--font-family)',
@@ -87,7 +87,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5', fontSize: '0.875rem' }}>
+        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.875rem' }}>
           ❌ {error}
         </div>
       )}
@@ -129,7 +129,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
           <thead>
-            <tr style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--border)' }}>
+            <tr style={{ backgroundColor: 'var(--input-bg)', borderBottom: '1px solid var(--border)' }}>
               {['ID', 'Username', 'Role', 'Status', 'Created', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '14px 16px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
               ))}
@@ -140,8 +140,8 @@ export const AdminPage = ({ currentUser, onBack }) => {
               const RoleIcon = ROLE_ICONS[u.role] || Eye;
               const isEditing = editId === u.id;
               return (
-                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
-                  onMouseOver={e => e.currentTarget.style.background = 'rgba(0,210,255,0.04)'}
+                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}
+                  onMouseOver={e => e.currentTarget.style.background = 'var(--primary-glow)'}
                   onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{u.id}</td>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>
@@ -193,11 +193,11 @@ export const AdminPage = ({ currentUser, onBack }) => {
                         </>
                       ) : (
                         <>
-                          <button onClick={() => { setEditId(u.id); setEditData({}); }} style={{ background: 'rgba(59,130,246,0.15)', border: 'none', color: '#93c5fd', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
+                          <button onClick={() => { setEditId(u.id); setEditData({}); }} style={{ background: 'var(--btn-nav-history)', border: 'none', color: 'var(--btn-nav-history-text)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
                             <Edit3 size={12} /> Edit
                           </button>
                           {u.id !== currentUser.id && (
-                            <button onClick={() => handleDelete(u.id)} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#fca5a5', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
+                            <button onClick={() => handleDelete(u.id)} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: 'var(--danger)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
                               <Trash2 size={12} /> Delete
                             </button>
                           )}

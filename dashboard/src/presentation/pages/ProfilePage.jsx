@@ -57,8 +57,8 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
 
   const inputStyle = {
     width: '100%', padding: '12px 16px', borderRadius: '10px',
-    background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-    color: 'white', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
+    background: 'var(--input-bg)', border: '1px solid var(--border)',
+    color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
     transition: 'border-color 0.2s', boxSizing: 'border-box', marginTop: '6px'
   };
 
@@ -68,7 +68,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
       <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '600px', marginTop: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={onBack} style={{
-            background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+            background: 'var(--btn-bg)', border: '1px solid var(--border)',
             color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
             fontSize: '0.9rem', fontFamily: 'var(--font-family)',
@@ -97,9 +97,9 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
         {msg.text && (
           <div style={{
             padding: '10px 14px', borderRadius: '10px', marginBottom: '20px', fontSize: '0.875rem',
-            background: msg.type === 'error' ? 'rgba(239,68,68,0.1)' : msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)',
+            background: msg.type === 'error' ? 'rgba(239,68,68,0.1)' : msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'var(--btn-bg)',
             border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.2)' : msg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'var(--border)'}`,
-            color: msg.type === 'error' ? '#fca5a5' : msg.type === 'success' ? '#6ee7b7' : 'white',
+            color: msg.type === 'error' ? 'var(--danger)' : msg.type === 'success' ? 'var(--success)' : 'var(--text-main)',
           }}>
             {msg.type === 'error' ? '❌' : msg.type === 'success' ? '✅' : 'ℹ️'} {msg.text}
           </div>

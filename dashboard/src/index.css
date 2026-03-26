@@ -1,12 +1,5 @@
 :root {
-  /* Dynamic Dark Mode Colors */
-  --bg-dark: #0f1115;
-  --bg-card: rgba(25, 28, 36, 0.7);
-  --bg-card-hover: rgba(32, 36, 46, 0.85);
-  
   --primary: #00d2ff;
-  --primary-glow: rgba(0, 210, 255, 0.3);
-  
   --secondary: #3b82f6;
   --accent: #f43f5e;
   
@@ -21,13 +14,49 @@
   --tmp-color: #10b981; /* TMP - Green */
   --fil-color: #f59e0b; /* Filter - Orange */
   
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+:root[data-theme='dark'] {
+  --bg-dark: #0f1115;
+  --bg-card: rgba(25, 28, 36, 0.7);
+  --bg-card-hover: rgba(32, 36, 46, 0.85);
+  --primary-glow: rgba(0, 210, 255, 0.3);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  
   --border: rgba(255, 255, 255, 0.08);
   --border-glow: rgba(0, 210, 255, 0.15);
   
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Input/button specifics */
+  --input-bg: rgba(0,0,0,0.3);
+  --btn-bg: rgba(255,255,255,0.05);
+  --btn-nav-history: rgba(59,130,246,0.12);
+  --btn-nav-equiv: rgba(168,85,247,0.12);
+  --btn-nav-admin: rgba(245,158,11,0.12);
+  --btn-nav-history-text: #93c5fd;
+  --btn-nav-equiv-text: #c4b5fd;
+  --btn-nav-admin-text: #fcd34d;
+}
+
+:root[data-theme='light'] {
+  --bg-dark: #f0f4f8;
+  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-card-hover: rgba(255, 255, 255, 1);
+  --primary-glow: rgba(0, 210, 255, 0.15);
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-glow: rgba(0, 210, 255, 0.3);
+  
+  /* Input/button specifics */
+  --input-bg: rgba(255, 255, 255, 0.8);
+  --btn-bg: rgba(0,0,0,0.05);
+  --btn-nav-history: rgba(59,130,246,0.12);
+  --btn-nav-equiv: rgba(168,85,247,0.12);
+  --btn-nav-admin: rgba(245,158,11,0.12);
+  --btn-nav-history-text: #2563eb;
+  --btn-nav-equiv-text: #9333ea;
+  --btn-nav-admin-text: #d97706;
 }
 
 * {
@@ -95,8 +124,9 @@ h1, h2, h3, h4, h5, h6 {
   gap: 12px;
   font-size: 1.5rem;
   font-weight: 700;
-  background: linear-gradient(90deg, #fff, var(--primary));
+  background: linear-gradient(90deg, var(--text-main), var(--primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -107,8 +137,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .patient-select {
-  background: rgba(0,0,0,0.3);
-  color: white;
+  background: var(--input-bg);
+  color: var(--text-main);
   border: 1px solid var(--border);
   padding: 10px 16px;
   border-radius: 10px;
