@@ -11,6 +11,8 @@ use axum::Json;
 use sqlx::{SqlitePool, Row};
 use serde::{Deserialize, Serialize};
 
+use crate::domain::entities::TelemetryValue;
+
 // ─── Shared State ───────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize)]
@@ -449,7 +451,7 @@ pub struct HistoryRowDto {
     pub id: i64,
     pub timestamp: String,
     pub internal_name: String,
-    pub physical_value: f64,
+    pub physical_value: TelemetryValue,
     pub display_value: Option<String>,
     pub unit: String,
 }
@@ -508,7 +510,11 @@ pub async fn patient_history(
         Ok(rows) => {
             let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
                 let phys_str: String = row.get(3);
-                let physical_value = phys_str.parse::<f64>().unwrap_or(0.0);
+                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                    TelemetryValue::Number(n)
+                } else {
+                    TelemetryValue::String(phys_str)
+                };
                 HistoryRowDto {
                     id: row.get(0),
                     timestamp: row.get(1),
