@@ -12,12 +12,18 @@ pub struct AppConfig {
     pub port_name: String,
     pub baudrate: u32,
     pub serial_timeout_secs: u64,
-    pub db_path: String,
+    pub db_connection: String,
+    pub db_host: String,
+    pub db_port: String,
+    pub db_database: String,
+    pub db_username: String,
+    pub db_password: String,
     pub src_addr: u8,
     pub dst_addr: u8,
     pub ws_host: String,
     pub ws_port: u16,
     pub cycle_interval_secs: u64,
+    pub db_save_interval_secs: u64,
     pub capture_mode: CaptureMode,
     pub capture_handles: HashSet<u16>,
     pub capture_names: HashSet<String>,
@@ -41,11 +47,22 @@ impl AppConfig {
         };
 
         // Resolve DB path relative to the .env directory
+        let db_connection = env::var("DB_CONNECTION").unwrap_or_else(|_| "sqlite".to_string());
+        let db_username = env::var("DB_USERNAME").unwrap_or_else(|_| "root".to_string());
+        let db_password = env::var("DB_PASSWORD").unwrap_or_default();
+        let db_host = env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let db_port = env::var("DB_PORT").unwrap_or_else(|_| "1433".to_string());
+        
         let db_raw = env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string());
-        let db_path = if std::path::Path::new(&db_raw).is_absolute() {
-            db_raw
+        // For sqlite, resolve relative to .env directory, else use raw name
+        let db_database = if db_connection == "sqlite" {
+            if std::path::Path::new(&db_raw).is_absolute() {
+                db_raw
+            } else {
+                env_dir.join(&db_raw).to_string_lossy().to_string()
+            }
         } else {
-            env_dir.join(&db_raw).to_string_lossy().to_string()
+            db_raw
         };
 
         Self {
@@ -58,7 +75,12 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(2),
-            db_path,
+            db_connection,
+            db_host,
+            db_port,
+            db_database,
+            db_username,
+            db_password,
             src_addr: env::var("SRC_ADDR")
                 .unwrap_or_default()
                 .parse()
@@ -76,9 +98,33 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(1),
+            db_save_interval_secs: env::var("DB_SAVE_INTERVAL")
+                .unwrap_or_default()
+                .parse()
+                .unwrap_or(60),
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),
+        }
+    }
+
+    /// Forms the proper JDBC/SQLx connection string based on the Laravel style variables.
+    pub fn get_database_url(&self) -> String {
+        match self.db_connection.as_str() {
+            "sqlite" => format!("sqlite://{}", self.db_database),
+            "mssql" | "sqlsrv" => format!(
+                "mssql://{}:{}@{}:{}/{}",
+                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+            ),
+            "postgres" | "pgsql" => format!(
+                "postgres://{}:{}@{}:{}/{}",
+                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+            ),
+            "mysql" => format!(
+                "mysql://{}:{}@{}:{}/{}",
+                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+            ),
+            _ => format!("{}://{}", self.db_connection, self.db_database), // Fallback
         }
     }
 }

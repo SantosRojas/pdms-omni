@@ -87,7 +87,7 @@ where
     ///   [system_sw: 16 bytes][dss_fw: 16][dss_hw: 16][css_fw: 16][css_hw: 16]
     ///   [pss_fw: 16][pss_hw: 16]
     ///   [lang1: 16][lang2: 16][lang3: 16]
-    pub fn get_versions(&mut self) -> Result<VersionInfo, UseCaseError> {
+    pub async fn get_versions(&mut self) -> Result<VersionInfo, UseCaseError> {
         println!("  [1] CMD_GET_VERSIONS (code={})", CMD_CODE_GET_VERSIONS);
         let data = self.device.request(CMD_CODE_GET_VERSIONS, &[])?;
 
@@ -149,7 +149,7 @@ where
     // ═══════════════════════════════════════════════════════════════
     /// Sends CMD_CODE_GET_HANDLES. Answer:
     ///   [cmd: u16][num_handles: u16][handle_1: u16][handle_2: u16]...[handle_n: u16]
-    pub fn get_data_handles(&mut self) -> Result<Vec<u16>, UseCaseError> {
+    pub async fn get_data_handles(&mut self) -> Result<Vec<u16>, UseCaseError> {
         println!("  [2] CMD_GET_HANDLES (code={})", CMD_CODE_GET_HANDLES);
         let data = self.device.request(CMD_CODE_GET_HANDLES, &[])?;
 
@@ -192,7 +192,7 @@ where
     /// Sends CMD_CODE_GET_DATA_ATTRS for a single handle. Answer:
     ///   [cmd: u16][type: u16][size: u16][factor: u16]
     ///   [label_did: u16][unit_did: u16][internal_name: null-terminated ASCII, max 64+1]
-    pub fn get_data_attributes(&mut self, handle: u16) -> Result<DataAttribute, UseCaseError> {
+    pub async fn get_data_attributes(&mut self, handle: u16) -> Result<DataAttribute, UseCaseError> {
         let mut handle_bytes = [0u8; 2];
         LittleEndian::write_u16(&mut handle_bytes, handle);
 
@@ -233,10 +233,10 @@ where
             internal_name,
         };
 
-        self.attr_repo.save(&attr)?;
+        self.attr_repo.save(&attr).await?;
         
         // Reload from DB to get the generated signal_id
-        if let Some(saved_attr) = self.attr_repo.get_by_handle(handle)? {
+        if let Some(saved_attr) = self.attr_repo.get_by_handle(handle).await? {
             attr = saved_attr;
         }
 
@@ -245,16 +245,16 @@ where
     }
 
     /// Gets attributes for ALL handles previously discovered.
-    pub fn get_all_data_attributes(&mut self) -> Result<Vec<DataAttribute>, UseCaseError> {
+    pub async fn get_all_data_attributes(&mut self) -> Result<Vec<DataAttribute>, UseCaseError> {
         let handles = self.handles.clone();
         println!("  [3] CMD_GET_DATA_ATTRS for {} handle(s)...", handles.len());
 
-        self.attr_repo.delete_all()?;
+        self.attr_repo.delete_all().await?;
         let mut attrs = Vec::with_capacity(handles.len());
         self.attr_cache.clear();
 
         for (i, &handle) in handles.iter().enumerate() {
-            let attr = self.get_data_attributes(handle)?;
+            let attr = self.get_data_attributes(handle).await?;
             println!("      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
                 i + 1, handles.len(), handle, attr.internal_name,
                 attr.data_type, attr.size, attr.conversion_factor);
@@ -274,11 +274,11 @@ where
     /// Answer:  [cmd: u16][dict_id: u16][utf8_string...\0]
     ///
     /// Start with prev_dict_id=0. When dict_id in answer == 0, dictionary is complete.
-    pub fn get_dictionary(&mut self) -> Result<Vec<DictionaryEntry>, UseCaseError> {
+    pub async fn get_dictionary(&mut self) -> Result<Vec<DictionaryEntry>, UseCaseError> {
         println!("  [4] CMD_GET_NEXT_DICT_STR (building dictionary)...");
 
         const MAX_DICT_ENTRIES: usize = 20_000;
-        self.dict_repo.delete_all()?;
+        self.dict_repo.delete_all().await?;
         let mut entries = Vec::new();
         self.dict_cache.clear();
         let mut prev_id: u16 = 0;
@@ -327,7 +327,7 @@ where
                 dict_id,
                 text: text.clone(),
             };
-            self.dict_repo.save(&entry)?;
+            self.dict_repo.save(&entry).await?;
             self.dict_cache.insert(dict_id, text.clone());
             entries.push(entry);
 
@@ -362,13 +362,13 @@ where
     /// The byte flow represents values in the SAME ORDER as the handles.
     /// We use the 'size' attribute of each handle to split the byte stream.
     /// Values are divided by 'conversion_factor' to get the physical value.
-    pub fn get_cyclical_values(&mut self) -> Result<Vec<TelemetryReading>, UseCaseError> {
-        self.get_cyclical_values_filtered(|_| true)
+    pub async fn get_cyclical_values(&mut self) -> Result<Vec<TelemetryReading>, UseCaseError> {
+        self.get_cyclical_values_filtered(|_| true).await
     }
 
     /// Same as `get_cyclical_values`, but allowing runtime filtering.
     /// Return and persistence include only readings where `include_reading` is true.
-    pub fn get_cyclical_values_filtered<F>(&mut self, include_reading: F) -> Result<Vec<TelemetryReading>, UseCaseError>
+    pub async fn get_cyclical_values_filtered<F>(&mut self, include_reading: F) -> Result<Vec<TelemetryReading>, UseCaseError>
     where
         F: Fn(&DataAttribute) -> bool,
     {
@@ -437,7 +437,7 @@ where
                     // Cache miss (happens when loaded from DB without a get_all dictionary hook)
                     // Fetch from DB and insert into cache
                     let text = self.dict_repo
-                        .get_by_id(attr.unit_did)?
+                        .get_by_id(attr.unit_did).await?
                         .map(|e| e.text)
                         .unwrap_or_default();
                     self.dict_cache.insert(attr.unit_did, text.clone());
@@ -485,16 +485,19 @@ where
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "UNKNOWN".to_string());
             
-        let db_patient_id = self.telemetry_repo.get_or_create_patient(&patient_str)?;
+        let db_patient_id = self.telemetry_repo.get_or_create_patient(&patient_str).await?;
 
         for reading in &mut readings {
             reading.patient_id = Some(db_patient_id);
         }
 
-        // Persist batch
-        self.telemetry_repo.save_batch(&readings)?;
-
         Ok(readings)
+    }
+
+    /// Explicitly save a batch of telemetry readings.
+    pub async fn save_telemetry(&self, readings: &[TelemetryReading]) -> Result<(), UseCaseError> {
+        self.telemetry_repo.save_batch(readings).await?;
+        Ok(())
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -505,10 +508,10 @@ where
     /// 2. Compare with stored version.
     /// 3. If versions match, load handles, attributes, and dictionary from DB.
     /// 4. If versions differ, request all data from OMNI and store in DB.
-    pub fn initialize(&mut self) -> Result<VersionInfo, UseCaseError> {
+    pub async fn initialize(&mut self) -> Result<VersionInfo, UseCaseError> {
         println!("\n══ PHASE: IDENTIFICATION ══");
-        let latest_db_version = self.version_repo.get_latest()?;
-        let version = self.get_versions()?;
+        let latest_db_version = self.version_repo.get_latest().await?;
+        let version = self.get_versions().await?;
 
         // Compare the combination of SW, HW and Language versions
         let versions_match = match latest_db_version {
@@ -527,29 +530,29 @@ where
 
         if versions_match {
             println!("  [i] Versions match. Loading configuration from database...");
-            let loaded = self.load_configuration_from_db()?;
+            let loaded = self.load_configuration_from_db().await?;
             if !loaded {
                 println!("  [i] Database cache is empty/incomplete. Fetching from device...");
-                self.get_data_handles()?;
-                self.get_all_data_attributes()?;
-                self.get_dictionary()?;
+                self.get_data_handles().await?;
+                self.get_all_data_attributes().await?;
+                self.get_dictionary().await?;
             }
         } else {
             println!("  [i] New version detected or no previous data. Fetching from device...");
-            self.get_data_handles()?;
-            self.get_all_data_attributes()?;
-            self.get_dictionary()?;
+            self.get_data_handles().await?;
+            self.get_all_data_attributes().await?;
+            self.get_dictionary().await?;
         }
 
         // Persist the currently detected version only after successful initialization.
-        self.version_repo.save(&version)?;
+        self.version_repo.save(&version).await?;
 
         // Always load the equivalence cache from DB after initialization,
         // regardless of whether we fetched from device or loaded from local cache.
         // Equivalences are pre-populated via the Python loader and are independent
         // of OMNI firmware versions.
         println!("  [eq] Loading value equivalences from database...");
-        self.load_equiv_cache()?;
+        self.load_equiv_cache().await?;
 
         println!("\n══ INITIALIZATION COMPLETE ══\n");
         Ok(version)
@@ -557,9 +560,9 @@ where
 
     /// Loads the data handles, data attributes, and dictionary directly from the DB
     /// into the in-memory caches, bypassing the serial communication.
-    fn load_configuration_from_db(&mut self) -> Result<bool, UseCaseError> {
+    async fn load_configuration_from_db(&mut self) -> Result<bool, UseCaseError> {
         // Load data attributes from DB
-        let attrs = self.attr_repo.get_all()?;
+        let attrs = self.attr_repo.get_all().await?;
         self.attr_cache.clear();
         self.handles.clear();
         
@@ -575,7 +578,7 @@ where
             return Ok(false);
         }
 
-        let dict_entries = self.dict_repo.get_all()?;
+        let dict_entries = self.dict_repo.get_all().await?;
         self.dict_cache.clear();
         for entry in dict_entries {
             self.dict_cache.insert(entry.dict_id, entry.text);
@@ -591,8 +594,8 @@ where
     /// Loads value equivalences from the DB into the in-memory cache.
     /// Called unconditionally after initialization so both code paths
     /// (fresh device fetch and DB cache load) benefit from it.
-    fn load_equiv_cache(&mut self) -> Result<(), UseCaseError> {
-        let equivs = self.equiv_repo.get_all()?;
+    async fn load_equiv_cache(&mut self) -> Result<(), UseCaseError> {
+        let equivs = self.equiv_repo.get_all().await?;
         self.equiv_cache.clear();
         for eq in equivs {
             self.equiv_cache

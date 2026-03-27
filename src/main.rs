@@ -24,7 +24,8 @@ struct TelemetryEvent<'a> {
     readings: &'a [TelemetryReading],
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╔══════════════════════════════════════════════╗");
     println!("║   PDMS-Omni · B.Braun OMNI-ODI Client        ║");
     println!("╚══════════════════════════════════════════════╝\n");
@@ -33,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env();
     println!(
         "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, WS=ws://{}:{}/ws",
-        config.db_path,
+        config.get_database_url(),
         config.port_name,
         config.baudrate,
         config.serial_timeout_secs,
@@ -59,8 +60,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ws_addr = format!("{}:{}", config.ws_host, config.ws_port).parse()?;
 
     // 2. Base de datos (intercambiable)
-    let repos = database::initialize_sqlite(&config.db_path)?;
-    println!("[DB] Conectada: {}", config.db_path);
+    let db_url = config.get_database_url();
+    let repos = database::initialize_db(&db_url).await?;
+    println!("[DB] Conectada: {}", db_url);
 
     // 3. WebSocket + HTTP API server (shares DB connection)
     let ws_hub = WebSocketHub::start(ws_addr, repos.db.clone())?;
@@ -90,12 +92,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 5. Inicialización del protocolo OMNI-ODI
-    let version = interactor.initialize()?;
+    let version = interactor.initialize().await?;
     println!("[OK] OMNI inicializado: System SW={}", version.system_sw);
 
     // 6. Fase cíclica: lectura de valores cada segundo
-    println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
+    // Separamos el tiempo de muestreo (WebSocket) del tiempo de guardado puntual (DB)
     let mut cycle: u64 = 0;
+    let mut last_save = tokio::time::Instant::now();
+    let save_interval = Duration::from_secs(config.db_save_interval_secs);
+    println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
 
     loop {
         cycle += 1;
@@ -103,14 +108,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             || (config.capture_handles.is_empty() && config.capture_names.is_empty());
 
         let cycle_result = if capture_all {
-            interactor.get_cyclical_values()
+            interactor.get_cyclical_values().await
         } else {
             interactor.get_cyclical_values_filtered(|attr| {
                 config.capture_handles.contains(&attr.handle)
                     || config
                         .capture_names
                         .contains(&attr.internal_name.to_ascii_lowercase())
-            })
+            }).await
         };
 
         match cycle_result {
@@ -149,11 +154,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Err(e) = ws_hub.broadcast_json(&event) {
                     eprintln!("[WS] No se pudo serializar/broadcast de ciclo {}: {}", cycle, e);
                 }
+
+                // Persist only every DB_SAVE_INTERVAL (Snapshots)
+                if last_save.elapsed() >= save_interval {
+                    println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
+                    if let Err(e) = interactor.save_telemetry(&readings).await {
+                        eprintln!("[DB] ERROR al persistir snapshot: {}", e);
+                    } else {
+                        last_save = tokio::time::Instant::now();
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("[ERROR] Ciclo {}: {}", cycle, e);
             }
         }
-        std::thread::sleep(Duration::from_secs(config.cycle_interval_secs));
+        tokio::time::sleep(Duration::from_secs(config.cycle_interval_secs)).await;
     }
 }

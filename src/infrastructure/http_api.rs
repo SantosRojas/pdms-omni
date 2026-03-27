@@ -1,4 +1,4 @@
-//! HTTP REST API: Auth, Users, Equivalences, Telemetry history.
+//! HTTP REST API: Auth, Users, Equivalences, Telemetry history using sqlx.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -8,7 +8,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, HeaderMap};
 use axum::response::IntoResponse;
 use axum::Json;
-use rusqlite::Connection;
+use sqlx::{SqlitePool, Row};
 use serde::{Deserialize, Serialize};
 
 // ─── Shared State ───────────────────────────────────────────────
@@ -24,7 +24,7 @@ pub struct Session {
 
 #[derive(Clone)]
 pub struct ApiState {
-    pub db: Arc<Mutex<Connection>>,
+    pub db: SqlitePool,
     pub sessions: Arc<Mutex<HashMap<String, Session>>>,
 }
 
@@ -88,34 +88,28 @@ pub async fn login(
     State(state): State<ApiState>,
     Json(body): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
-    let result = conn.query_row(
-        "SELECT id, username, password, full_name, email, role, active, created_at FROM users WHERE username = ?1",
-        rusqlite::params![body.username],
-        |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?, // full_name
-                row.get::<_, String>(4)?, // email
-                row.get::<_, String>(5)?, // role
-                row.get::<_, bool>(6)?,   // active
-                row.get::<_, String>(7)?, // created_at
-            ))
-        },
-    );
+    let result = sqlx::query(
+        "SELECT id, username, password, full_name, email, role, active, created_at FROM users WHERE username = ?1"
+    )
+    .bind(&body.username)
+    .fetch_optional(&state.db)
+    .await;
 
     match result {
-        Ok((id, username, password, full_name, email, role, active, created_at)) => {
+        Ok(Some(row)) => {
+            let id: i64 = row.get(0);
+            let username: String = row.get(1);
+            let password_hash: String = row.get(2);
+            let full_name: String = row.get(3);
+            let email: String = row.get(4);
+            let role: String = row.get(5);
+            let active: bool = row.get(6);
+            let created_at: String = row.get(7);
+
             if !active {
                 return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Account disabled"}))).into_response();
             }
-            if password != body.password {
+            if password_hash != body.password {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response();
             }
 
@@ -123,16 +117,14 @@ pub async fn login(
             let user = UserDto { id, username: username.clone(), full_name: full_name.clone(), email: email.clone(), role: role.clone(), active, created_at };
             let session = Session { user_id: id, username, full_name, email, role };
 
-            drop(conn); // release DB lock before locking sessions
             if let Ok(mut sessions) = state.sessions.lock() {
                 sessions.insert(token.clone(), session);
             }
 
             Json(LoginResponse { token, user }).into_response()
         }
-        Err(_) => {
-            (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response()
-        }
+        Ok(None) => (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response(),
+        Err(e) => db_err(e.to_string()).into_response(),
     }
 }
 
@@ -185,29 +177,25 @@ pub async fn list_users(
         return forbidden().into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
+    let result = sqlx::query("SELECT id, username, full_name, email, role, active, created_at FROM users ORDER BY id")
+        .fetch_all(&state.db)
+        .await;
 
-    let mut stmt = match conn.prepare("SELECT id, username, full_name, email, role, active, created_at FROM users ORDER BY id") {
-        Ok(s) => s,
-        Err(e) => return db_err(e.to_string()).into_response(),
-    };
-
-    let users: Vec<UserDto> = stmt.query_map([], |row| {
-        Ok(UserDto {
-            id: row.get(0)?,
-            username: row.get(1)?,
-            full_name: row.get(2)?,
-            email: row.get(3)?,
-            role: row.get(4)?,
-            active: row.get(5)?,
-            created_at: row.get(6)?,
-        })
-    }).unwrap().filter_map(|r| r.ok()).collect();
-
-    Json(users).into_response()
+    match result {
+        Ok(rows) => {
+            let users: Vec<UserDto> = rows.into_iter().map(|row| UserDto {
+                id: row.get(0),
+                username: row.get(1),
+                full_name: row.get(2),
+                email: row.get(3),
+                role: row.get(4),
+                active: row.get(5),
+                created_at: row.get(6),
+            }).collect();
+            Json(users).into_response()
+        }
+        Err(e) => db_err(e.to_string()).into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -237,18 +225,18 @@ pub async fn create_user(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid role. Must be: admin, operator, viewer"}))).into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
     let full_name = body.full_name.unwrap_or_default();
     let email = body.email.unwrap_or_default();
 
-    match conn.execute(
-        "INSERT INTO users (username, password, full_name, email, role) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![body.username, body.password, full_name, email, body.role],
-    ) {
+    match sqlx::query(
+        "INSERT INTO users (username, password, full_name, email, role) VALUES (?1, ?2, ?3, ?4, ?5)"
+    )
+    .bind(&body.username)
+    .bind(&body.password)
+    .bind(&full_name)
+    .bind(&email)
+    .bind(&body.role)
+    .execute(&state.db).await {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     }
@@ -284,7 +272,7 @@ pub async fn update_user(
 
     if let Some(ref role) = body.role {
         if !is_admin {
-            return forbidden().into_response(); // only admin can change roles
+            return forbidden().into_response();
         }
         if !["admin", "operator", "viewer"].contains(&role.as_str()) {
             return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid role"}))).into_response();
@@ -292,28 +280,23 @@ pub async fn update_user(
     }
 
     if body.active.is_some() && !is_admin {
-        return forbidden().into_response(); // only admin can disable/enable accounts
+        return forbidden().into_response(); 
     }
-
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
 
     if let Some(ref pw) = body.password {
-        let _ = conn.execute("UPDATE users SET password = ?1 WHERE id = ?2", rusqlite::params![pw, user_id]);
+        let _ = sqlx::query("UPDATE users SET password = ?1 WHERE id = ?2").bind(pw).bind(user_id).execute(&state.db).await;
     }
     if let Some(ref fn_) = body.full_name {
-        let _ = conn.execute("UPDATE users SET full_name = ?1 WHERE id = ?2", rusqlite::params![fn_, user_id]);
+        let _ = sqlx::query("UPDATE users SET full_name = ?1 WHERE id = ?2").bind(fn_).bind(user_id).execute(&state.db).await;
     }
     if let Some(ref e) = body.email {
-        let _ = conn.execute("UPDATE users SET email = ?1 WHERE id = ?2", rusqlite::params![e, user_id]);
+        let _ = sqlx::query("UPDATE users SET email = ?1 WHERE id = ?2").bind(e).bind(user_id).execute(&state.db).await;
     }
     if let Some(ref role) = body.role {
-        let _ = conn.execute("UPDATE users SET role = ?1 WHERE id = ?2", rusqlite::params![role, user_id]);
+        let _ = sqlx::query("UPDATE users SET role = ?1 WHERE id = ?2").bind(role).bind(user_id).execute(&state.db).await;
     }
     if let Some(active) = body.active {
-        let _ = conn.execute("UPDATE users SET active = ?1 WHERE id = ?2", rusqlite::params![active, user_id]);
+        let _ = sqlx::query("UPDATE users SET active = ?1 WHERE id = ?2").bind(active).bind(user_id).execute(&state.db).await;
     }
 
     Json(serde_json::json!({"ok": true})).into_response()
@@ -337,12 +320,7 @@ pub async fn delete_user(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Cannot delete yourself"}))).into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
-    let _ = conn.execute("DELETE FROM users WHERE id = ?1", rusqlite::params![user_id]);
+    let _ = sqlx::query("DELETE FROM users WHERE id = ?1").bind(user_id).execute(&state.db).await;
     Json(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -367,31 +345,26 @@ pub async fn list_equivalences(
         return unauthorized().into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
-    let mut stmt = match conn.prepare(
+    let result = sqlx::query(
         "SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name
          FROM attribute_equivalences ae
          JOIN signals s ON ae.signal_id = s.id
          ORDER BY s.internal_name, ae.numeric_value"
-    ) {
-        Ok(s) => s,
-        Err(e) => return db_err(e.to_string()).into_response(),
-    };
+    )
+    .fetch_all(&state.db).await;
 
-    let rows: Vec<EquivalenceDto> = stmt.query_map([], |row| {
-        Ok(EquivalenceDto {
-            signal_id: row.get(0)?,
-            internal_name: row.get(1)?,
-            numeric_value: row.get(2)?,
-            display_name: row.get(3)?,
-        })
-    }).unwrap().filter_map(|r| r.ok()).collect();
-
-    Json(rows).into_response()
+    match result {
+        Ok(rows) => {
+            let eq: Vec<EquivalenceDto> = rows.into_iter().map(|row| EquivalenceDto {
+                signal_id: row.get(0),
+                internal_name: row.get(1),
+                numeric_value: row.get(2),
+                display_name: row.get(3),
+            }).collect();
+            Json(eq).into_response()
+        }
+        Err(e) => db_err(e.to_string()).into_response(),
+    }
 }
 
 #[derive(Deserialize)]
@@ -415,29 +388,17 @@ pub async fn create_equivalence(
         return forbidden().into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
+    let _ = sqlx::query("INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)")
+        .bind(&body.internal_name).execute(&state.db).await;
 
-    // Ensure signal exists
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)",
-        rusqlite::params![body.internal_name],
-    );
+    let res = sqlx::query("SELECT id FROM signals WHERE internal_name = ?1")
+        .bind(&body.internal_name).fetch_one(&state.db).await;
 
-    let signal_id: Result<i64, _> = conn.query_row(
-        "SELECT id FROM signals WHERE internal_name = ?1",
-        rusqlite::params![body.internal_name],
-        |r| r.get(0),
-    );
-
-    match signal_id {
-        Ok(sid) => {
-            match conn.execute(
-                "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)",
-                rusqlite::params![sid, body.numeric_value, body.display_name],
-            ) {
+    match res {
+        Ok(row) => {
+            let sid: i64 = row.get(0);
+            match sqlx::query("INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)")
+                .bind(sid).bind(body.numeric_value).bind(&body.display_name).execute(&state.db).await {
                 Ok(_) => Json(serde_json::json!({"ok": true, "signal_id": sid})).into_response(),
                 Err(e) => db_err(e.to_string()).into_response(),
             }
@@ -466,15 +427,8 @@ pub async fn delete_equivalence(
         return forbidden().into_response();
     }
 
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
-    let _ = conn.execute(
-        "DELETE FROM attribute_equivalences WHERE signal_id = ?1 AND numeric_value = ?2",
-        rusqlite::params![params.signal_id, params.numeric_value],
-    );
+    let _ = sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = ?1 AND numeric_value = ?2")
+        .bind(params.signal_id).bind(params.numeric_value).execute(&state.db).await;
 
     Json(serde_json::json!({"ok": true})).into_response()
 }
@@ -518,21 +472,18 @@ fn default_export_limit() -> u32 { 5000 }
 
 /// GET /api/patients
 pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
+    let result = sqlx::query("SELECT id, patient_id_str, created_at FROM patients ORDER BY created_at DESC")
+        .fetch_all(&state.db).await;
 
-    let mut stmt = match conn.prepare("SELECT id, patient_id_str, created_at FROM patients ORDER BY created_at DESC") {
-        Ok(s) => s,
-        Err(e) => return db_err(e.to_string()).into_response(),
-    };
-
-    let rows: Vec<PatientDto> = stmt.query_map([], |row| {
-        Ok(PatientDto { id: row.get(0)?, patient_id_str: row.get(1)?, created_at: row.get(2)? })
-    }).unwrap().filter_map(|r| r.ok()).collect();
-
-    Json(rows).into_response()
+    match result {
+        Ok(rows) => {
+            let pts: Vec<PatientDto> = rows.into_iter().map(|row| PatientDto {
+                id: row.get(0), patient_id_str: row.get(1), created_at: row.get(2)
+            }).collect();
+            Json(pts).into_response()
+        }
+        Err(e) => db_err(e.to_string()).into_response(),
+    }
 }
 
 /// GET /api/history?patient=XYZ&limit=500
@@ -540,45 +491,37 @@ pub async fn patient_history(
     State(state): State<ApiState>,
     Query(params): Query<HistoryQuery>,
 ) -> impl IntoResponse {
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return db_err("db lock".into()).into_response(),
-    };
-
-    let mut stmt = match conn.prepare(
-        "SELECT t.id, t.timestamp, s.internal_name, t.physical_value, e.display_name, t.unit
+    let result = sqlx::query(
+        "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
          FROM telemetry t
          JOIN patients p ON t.patient_id = p.id
          JOIN signals s ON t.signal_id = s.id
          LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
          WHERE p.patient_id_str = ?1
          ORDER BY t.timestamp DESC LIMIT ?2"
-    ) {
-        Ok(s) => s,
-        Err(e) => return db_err(e.to_string()).into_response(),
-    };
+    )
+    .bind(&params.patient)
+    .bind(params.limit)
+    .fetch_all(&state.db).await;
 
-    let rows: Vec<HistoryRowDto> = stmt.query_map(
-        rusqlite::params![params.patient, params.limit],
-        |row| {
-            let pv: rusqlite::types::Value = row.get(3)?;
-            let physical_value = match pv {
-                rusqlite::types::Value::Real(n) => n,
-                rusqlite::types::Value::Integer(i) => i as f64,
-                _ => 0.0,
-            };
-            Ok(HistoryRowDto {
-                id: row.get(0)?,
-                timestamp: row.get(1)?,
-                internal_name: row.get(2)?,
-                physical_value,
-                display_value: row.get(4)?,
-                unit: row.get(5)?,
-            })
-        },
-    ).unwrap().filter_map(|r| r.ok()).collect();
-
-    Json(rows).into_response()
+    match result {
+        Ok(rows) => {
+            let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
+                let phys_str: String = row.get(3);
+                let physical_value = phys_str.parse::<f64>().unwrap_or(0.0);
+                HistoryRowDto {
+                    id: row.get(0),
+                    timestamp: row.get(1),
+                    internal_name: row.get(2),
+                    physical_value,
+                    display_value: row.get(4),
+                    unit: row.get(5),
+                }
+            }).collect();
+            Json(data).into_response()
+        }
+        Err(e) => db_err(e.to_string()).into_response(),
+    }
 }
 
 /// GET /api/export?patient=XYZ&limit=5000
@@ -586,59 +529,44 @@ pub async fn export_csv(
     State(state): State<ApiState>,
     Query(params): Query<ExportQuery>,
 ) -> impl IntoResponse {
-    let conn = match state.db.lock() {
-        Ok(c) => c,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "DB lock error".to_string()).into_response(),
-    };
-
-    let mut stmt = match conn.prepare(
-        "SELECT t.timestamp, s.internal_name, t.physical_value, e.display_name, t.unit
+    let result = sqlx::query(
+        "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
          FROM telemetry t
          JOIN patients p ON t.patient_id = p.id
          JOIN signals s ON t.signal_id = s.id
          LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
          WHERE p.patient_id_str = ?1
          ORDER BY t.timestamp ASC LIMIT ?2"
-    ) {
-        Ok(s) => s,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    };
+    )
+    .bind(&params.patient)
+    .bind(params.limit)
+    .fetch_all(&state.db).await;
 
-    let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
+    match result {
+        Ok(rows) => {
+            let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
+            for row in rows {
+                let ts: String = row.get(0);
+                let name: String = row.get(1);
+                let val_str: String = row.get(2);
+                let disp: String = row.get::<Option<String>, _>(3).unwrap_or_default();
+                let unit: String = row.get(4);
+                
+                csv.push_str(&format!("{},{},{},{},{}\n",
+                    ts.replace(',', ";"), name.replace(',', ";"), val_str, disp.replace(',', ";"), unit.replace(',', ";")
+                ));
+            }
 
-    let iter = stmt.query_map(
-        rusqlite::params![params.patient, params.limit],
-        |row| {
-            let ts: String = row.get(0)?;
-            let name: String = row.get(1)?;
-            let pv: rusqlite::types::Value = row.get(2)?;
-            let val = match pv {
-                rusqlite::types::Value::Real(n) => format!("{:.2}", n),
-                rusqlite::types::Value::Integer(i) => format!("{}", i),
-                _ => "0".to_string(),
-            };
-            let display: Option<String> = row.get(3)?;
-            let unit: String = row.get(4)?;
-            Ok((ts, name, val, display.unwrap_or_default(), unit))
-        },
-    ).unwrap();
-
-    for item in iter {
-        if let Ok((ts, name, val, disp, unit)) = item {
-            csv.push_str(&format!("{},{},{},{},{}\n",
-                ts.replace(',', ";"), name.replace(',', ";"),
-                val, disp.replace(',', ";"), unit.replace(',', ";"),
-            ));
+            let filename = format!("omni_report_{}.csv", params.patient);
+            (
+                StatusCode::OK,
+                [
+                    ("Content-Type", "text/csv; charset=utf-8"),
+                    ("Content-Disposition", &format!("attachment; filename=\"{}\"", filename)),
+                ],
+                csv,
+            ).into_response()
         }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
-
-    let filename = format!("omni_report_{}.csv", params.patient);
-    (
-        StatusCode::OK,
-        [
-            ("Content-Type", "text/csv; charset=utf-8"),
-            ("Content-Disposition", &format!("attachment; filename=\"{}\"", filename)),
-        ],
-        csv,
-    ).into_response()
 }

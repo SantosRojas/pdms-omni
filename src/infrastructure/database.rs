@@ -1,32 +1,39 @@
-//! Database initialization and connection management.
-//! Extracts all SQLite-specific setup from main.rs.
+//! Database initialization and connection management using sqlx.
+//! Generates schema and populates tables as needed.
 
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
+use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row};
+use std::str::FromStr;
 
-use super::sqlite_repository::{
-    SqliteDataAttrRepository, SqliteDictionaryRepository,
-    SqliteTelemetryRepository, SqliteVersionRepository,
-    SqliteAttributeEquivalenceRepository,
+use super::sqlx_repository::{
+    SqlxDataAttrRepository, SqlxDictionaryRepository,
+    SqlxTelemetryRepository, SqlxVersionRepository,
+    SqlxAttributeEquivalenceRepository,
 };
 
 /// All repository instances bundled together for easy injection.
 pub struct Repositories {
-    pub attr_repo: SqliteDataAttrRepository,
-    pub dict_repo: SqliteDictionaryRepository,
-    pub telemetry_repo: SqliteTelemetryRepository,
-    pub version_repo: SqliteVersionRepository,
-    pub equiv_repo: SqliteAttributeEquivalenceRepository,
+    pub attr_repo: SqlxDataAttrRepository,
+    pub dict_repo: SqlxDictionaryRepository,
+    pub telemetry_repo: SqlxTelemetryRepository,
+    pub version_repo: SqlxVersionRepository,
+    pub equiv_repo: SqlxAttributeEquivalenceRepository,
     /// Shared DB connection for the HTTP API layer
-    pub db: Arc<Mutex<Connection>>,
+    pub db: SqlitePool,
 }
 
-/// Initializes the SQLite database: opens connection, creates schema,
+/// Initializes the sqlx SQLite database: opens connection, creates schema,
 /// and returns all repository instances ready for injection.
-pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
-    let mut conn = Connection::open(db_path)?;
+pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+    let options = SqliteConnectOptions::from_str(db_url)?
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal);
+    
+    // Connect to database
+    let pool = SqlitePool::connect_with(options).await?;
 
-    conn.execute_batch("
+    // Execute schema migrations
+    sqlx::query(
+        "
         CREATE TABLE IF NOT EXISTS versions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -55,13 +62,11 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             dict_id INTEGER PRIMARY KEY,
             text TEXT
         );
-        -- Patient tracking table
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id_str TEXT UNIQUE,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-        -- Normalizing telemetry: storing signal_id for permanent historical decoupling
         CREATE TABLE IF NOT EXISTS telemetry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -73,8 +78,6 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             FOREIGN KEY(patient_id) REFERENCES patients(id),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
-        -- New table for equivalences, using signal_id
-        -- numeric_value is the PHYSICAL (final) value, not the raw transmitted bytes
         CREATE TABLE IF NOT EXISTS attribute_equivalences (
             signal_id INTEGER,
             numeric_value REAL,
@@ -82,7 +85,6 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             PRIMARY KEY (signal_id, numeric_value),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
-        -- User management
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -93,53 +95,58 @@ pub fn initialize_sqlite(db_path: &str) -> Result<Repositories, Box<dyn std::err
             active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-    ")?;
+        "
+    ).execute(&pool).await?;
 
     // Safe migrations for existing DB
-    let _ = conn.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''", []);
-    let _ = conn.execute("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''", []);
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
 
     // Seed default admin user if no users exist
-    let user_count: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap_or(0);
+    let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
+    let user_count: i64 = row.get(0);
+    
     if user_count == 0 {
-        conn.execute(
-            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')",
-            [],
-        )?;
+        sqlx::query(
+            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
+        ).execute(&pool).await?;
         println!("  [DB] Default admin user created (username: admin, password: admin123)");
     }
 
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM attribute_equivalences", [], |r| r.get(0)).unwrap_or(0);
+    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
+    let count: i64 = row.get(0);
+    
     if count == 0 {
         use crate::infrastructure::equivalences_data::EQUIVALENCES;
-        let tx = conn.transaction()?;
+        let mut tx = pool.begin().await?;
         for eq in EQUIVALENCES {
-            tx.execute(
-                "INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)",
-                rusqlite::params![eq.internal_name]
-            )?;
-            let signal_id: i64 = tx.query_row(
-                "SELECT id FROM signals WHERE internal_name = ?1",
-                rusqlite::params![eq.internal_name],
-                |r| r.get(0)
-            )?;
-            tx.execute(
-                "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)",
-                rusqlite::params![signal_id, eq.numeric_value, eq.display_name]
-            )?;
+            sqlx::query("INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)")
+                .bind(eq.internal_name)
+                .execute(&mut *tx).await?;
+                
+            let row = sqlx::query("SELECT id FROM signals WHERE internal_name = ?1")
+                .bind(eq.internal_name)
+                .fetch_one(&mut *tx).await?;
+            let signal_id: i64 = row.get(0);
+            
+            sqlx::query(
+                "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)"
+            )
+            .bind(signal_id)
+            .bind(eq.numeric_value)
+            .bind(eq.display_name)
+            .execute(&mut *tx).await?;
         }
-        tx.commit()?;
+        tx.commit().await?;
         println!("  [DB] Embedded equivalences initialized.");
     }
 
-    let db = Arc::new(Mutex::new(conn));
-
     Ok(Repositories {
-        attr_repo:      SqliteDataAttrRepository::new(Arc::clone(&db)),
-        dict_repo:      SqliteDictionaryRepository::new(Arc::clone(&db)),
-        telemetry_repo: SqliteTelemetryRepository::new(Arc::clone(&db)),
-        version_repo:   SqliteVersionRepository::new(Arc::clone(&db)),
-        equiv_repo:     SqliteAttributeEquivalenceRepository::new(Arc::clone(&db)),
-        db,
+        attr_repo:      SqlxDataAttrRepository::new(pool.clone()),
+        dict_repo:      SqlxDictionaryRepository::new(pool.clone()),
+        telemetry_repo: SqlxTelemetryRepository::new(pool.clone()),
+        version_repo:   SqlxVersionRepository::new(pool.clone()),
+        equiv_repo:     SqlxAttributeEquivalenceRepository::new(pool.clone()),
+        db:             pool,
     })
 }
