@@ -19,7 +19,9 @@ export const useTelemetry = (patientId) => {
       g_therapy_mode_set: { value: 'N/A' },
       g_anticoag_mode_set: { value: 'N/A' },
       d_kit_type_str: { value: 'N/A' },
-      c_acc_therapy_time_act: { value: 0, unit: 'min' }
+      c_acc_therapy_time_act: { value: 0, unit: 'min' },
+      g_patient_id_str: { value: 'N/A' },
+      d_renal_dose_act: { value: 0, unit: 'ml/kg/h' }
     }
   });
 

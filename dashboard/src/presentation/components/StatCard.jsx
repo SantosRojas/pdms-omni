@@ -24,11 +24,11 @@ export const StatCard = ({ title, value, unit, iconName, color = 'var(--primary)
       }}>
         <Icon size={24} />
       </div>
-      
+
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{title}</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-          <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)' }}>
+          <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
             {value}
           </span>
           {unit && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{unit}</span>}

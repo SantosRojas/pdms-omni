@@ -97,9 +97,11 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
             <h3 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <User size={20} color="var(--secondary)" /> General Information
             </h3>
+            <StatCard title="Patient ID" value={data.info.g_patient_id_str.value} iconName="Contact" color="#0ea5e9" />
             <StatCard title="Patient Weight" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
             <StatCard title="Therapy Mode" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" />
             <StatCard title="Anticoagulant" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" />
+            <StatCard title="Renal Dose" value={data.info.d_renal_dose_act.value} unit={data.info.d_renal_dose_act.unit} iconName="Zap" color="#f97316" />
             <StatCard title="Kit Type" value={data.info.d_kit_type_str.value} iconName="HardDrive" color="#eab308" />
             <StatCard title="Therapy Time" value={data.info.c_acc_therapy_time_act.value} unit={data.info.c_acc_therapy_time_act.unit} iconName="Clock" color="var(--primary)" />
           </div>

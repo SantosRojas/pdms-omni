@@ -36,6 +36,13 @@
   --btn-nav-history-text: #93c5fd;
   --btn-nav-equiv-text: #c4b5fd;
   --btn-nav-admin-text: #fcd34d;
+  
+  /* Cylinder specifics */
+  --cylinder-bg: rgba(0, 0, 0, 0.4);
+  --cylinder-border: rgba(255, 255, 255, 0.1);
+  --cylinder-edge: rgba(255, 255, 255, 0.05);
+  --cylinder-glass-reflection: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.4) 100%);
+  --cylinder-base: #1a1c23;
 }
 
 :root[data-theme='light'] {
@@ -57,6 +64,13 @@
   --btn-nav-history-text: #2563eb;
   --btn-nav-equiv-text: #9333ea;
   --btn-nav-admin-text: #d97706;
+
+  /* Cylinder specifics */
+  --cylinder-bg: rgba(240, 244, 248, 0.8);
+  --cylinder-border: rgba(0, 0, 0, 0.1);
+  --cylinder-edge: rgba(255, 255, 255, 0.8);
+  --cylinder-glass-reflection: linear-gradient(90deg, rgba(255,255,255,0.5) 0%, transparent 25%, transparent 75%, rgba(0,0,0,0.05) 100%);
+  --cylinder-base: #e2e8f0;
 }
 
 * {
