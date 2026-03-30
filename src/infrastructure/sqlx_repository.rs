@@ -332,6 +332,25 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             }
         }).collect())
     }
+
+    async fn set_therapy_start(&self, patient_id: i64) -> Result<(), RepositoryError> {
+        // Only update if current therapy_start is null (the 'first' start of the session)
+        sqlx::query("UPDATE patients SET therapy_start = CURRENT_TIMESTAMP WHERE id = ?1 AND therapy_start IS NULL")
+            .bind(patient_id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+        Ok(())
+    }
+
+    async fn set_therapy_end(&self, patient_id: i64) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE patients SET therapy_end = CURRENT_TIMESTAMP WHERE id = ?1")
+            .bind(patient_id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+        Ok(())
+    }
 }
 
 // ═══════════════════════════════════════════════

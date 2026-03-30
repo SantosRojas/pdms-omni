@@ -65,7 +65,9 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id_str TEXT UNIQUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            therapy_start DATETIME,
+            therapy_end DATETIME
         );
         CREATE TABLE IF NOT EXISTS telemetry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,6 +103,8 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
     // Safe migrations for existing DB
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME").execute(&pool).await;
 
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;

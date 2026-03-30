@@ -22,6 +22,10 @@ struct TelemetryEvent<'a> {
     event_type: &'static str,
     cycle: u64,
     readings: &'a [TelemetryReading],
+    therapy_active: bool,
+    therapy_state_name: String,
+    therapy_start: Option<String>,
+    therapy_end: Option<String>,
 }
 
 #[tokio::main]
@@ -100,6 +104,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cycle: u64 = 0;
     let mut last_save = tokio::time::Instant::now();
     let save_interval = Duration::from_secs(config.db_save_interval_secs);
+    let mut was_in_therapy = false;
+    let mut therapy_start_time: Option<String> = None;
+    let mut therapy_end_time: Option<String> = None;
+    let mut current_patient_id: Option<i64> = None;
+
     println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
 
     loop {
@@ -124,20 +133,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
                 
                 // Determine if we are in therapy mode (value 2.0 for c_trmt_main_state or g_trmt_main_state_set)
-                let is_in_therapy = if config.db_save_only_on_therapy {
-                    use crate::domain::entities::TelemetryValue;
-                    readings.iter().any(|r| {
-                        (r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
-                        && matches!(r.physical_value, TelemetryValue::Number(n) if (n - 2.0).abs() < 0.1)
-                    })
-                } else {
-                    true
-                };
+                let is_in_therapy = readings.iter().any(|r| {
+                    (r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
+                    && matches!(&r.physical_value, crate::domain::entities::TelemetryValue::Number(n) if (n - 2.0).abs() < 0.1)
+                });
+
+                let therapy_state_name = readings.iter()
+                    .find(|r| r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
+                    .and_then(|r| r.display_value.clone())
+                    .unwrap_or_else(|| "N/A".to_string());
+
+                println!("[Estado] Terapia activa: {}, Estado: {}", is_in_therapy, therapy_state_name);
+
+                // Detect state transitions and patient changes
+                let patient_id = readings.first().and_then(|r| r.patient_id);
+                
+                if patient_id != current_patient_id {
+                    // Patient changed! Reset therapy state
+                    current_patient_id = patient_id;
+                    was_in_therapy = false;
+                    therapy_start_time = None;
+                    therapy_end_time = None;
+                    println!("[EVENTO] Cambio de paciente detectado: {:?}", patient_id);
+                }
+
+                if let Some(pid) = patient_id {
+                    if is_in_therapy && !was_in_therapy {
+                        println!("[DB] Detectado INICIO de terapia!");
+                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        therapy_start_time = Some(now);
+                        therapy_end_time = None;
+                        let _ = interactor.start_therapy(pid).await;
+                    } else if !is_in_therapy && was_in_therapy {
+                        println!("[DB] Detectado FIN de terapia!");
+                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        therapy_end_time = Some(now);
+                        let _ = interactor.end_therapy(pid).await;
+                    }
+                }
+                was_in_therapy = is_in_therapy;
 
                 for r in &readings {
                     use crate::domain::entities::TelemetryValue;
                     match &r.physical_value {
-// ... existing print logic ...
                         TelemetryValue::Number(n) => {
                             if let Some(display) = &r.display_value {
                                 println!(
@@ -164,6 +202,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     event_type: "telemetry",
                     cycle,
                     readings: &readings,
+                    therapy_active: is_in_therapy,
+                    therapy_state_name: therapy_state_name.clone(),
+                    therapy_start: therapy_start_time.clone(),
+                    therapy_end: therapy_end_time.clone(),
                 };
                 if let Err(e) = ws_hub.broadcast_json(&event) {
                     eprintln!("[WS] No se pudo serializar/broadcast de ciclo {}: {}", cycle, e);
@@ -171,20 +213,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Persist only every DB_SAVE_INTERVAL (Snapshots) AND only if we are in therapy if requested
                 if last_save.elapsed() >= save_interval {
-                    if is_in_therapy {
+                    let should_save = !config.db_save_only_on_therapy || is_in_therapy;
+                    
+                    if should_save {
                         println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
                         if let Err(e) = interactor.save_telemetry(&readings).await {
                             eprintln!("[DB] ERROR al persistir snapshot: {}", e);
                         } else {
                             last_save = tokio::time::Instant::now();
                         }
-                    } else if config.db_save_only_on_therapy {
+                    } else {
                         println!("[DB] Snapshot omitido (el paciente no está en terapia).");
-                        // We reset last_save to avoid logging "Snapshot omitido" every cycle once interval passed
-                        // Actually, if we don't reset it, we'll see it every cycle until therapy starts.
-                        // Better to NOT reset it so it saves IMMEDIATELY when therapy starts.
-                        // But to avoid log spam, I'll only print it if we haven't printed it in a while?
-                        // Or just let it be. Just printing it once per "interval" is enough.
                         last_save = tokio::time::Instant::now();
                     }
                 }

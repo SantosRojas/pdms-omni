@@ -47,6 +47,12 @@ pub trait TelemetryRepository: Send + Sync {
     
     /// Retrieves historical telemetry for a specific patient
     async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
+
+    /// Updates the therapy start timestamp for a patient (only if not already set or specifically requested)
+    async fn set_therapy_start(&self, patient_id: i64) -> Result<(), RepositoryError>;
+
+    /// Updates the therapy end timestamp for a patient
+    async fn set_therapy_end(&self, patient_id: i64) -> Result<(), RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.

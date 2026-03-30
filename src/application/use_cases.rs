@@ -500,6 +500,16 @@ where
         Ok(())
     }
 
+    pub async fn start_therapy(&self, patient_id: i64) -> Result<(), UseCaseError> {
+        self.telemetry_repo.set_therapy_start(patient_id).await?;
+        Ok(())
+    }
+
+    pub async fn end_therapy(&self, patient_id: i64) -> Result<(), UseCaseError> {
+        self.telemetry_repo.set_therapy_end(patient_id).await?;
+        Ok(())
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  FULL INITIALIZATION (convenience)
     // ═══════════════════════════════════════════════════════════════
