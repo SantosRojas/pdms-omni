@@ -111,19 +111,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             interactor.get_cyclical_values().await
         } else {
             interactor.get_cyclical_values_filtered(|attr| {
+                let name_lc = attr.internal_name.to_ascii_lowercase();
                 config.capture_handles.contains(&attr.handle)
-                    || config
-                        .capture_names
-                        .contains(&attr.internal_name.to_ascii_lowercase())
+                    || config.capture_names.contains(&name_lc)
+                    // If we only save on therapy, we MUST capture the state variable
+                    || (config.db_save_only_on_therapy && (name_lc == "c_trmt_main_state" || name_lc == "g_trmt_main_state_set"))
             }).await
         };
 
         match cycle_result {
             Ok(readings) => {
                 println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
+                
+                // Determine if we are in therapy mode (value 2.0 for c_trmt_main_state or g_trmt_main_state_set)
+                let is_in_therapy = if config.db_save_only_on_therapy {
+                    use crate::domain::entities::TelemetryValue;
+                    readings.iter().any(|r| {
+                        (r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
+                        && matches!(r.physical_value, TelemetryValue::Number(n) if (n - 2.0).abs() < 0.1)
+                    })
+                } else {
+                    true
+                };
+
                 for r in &readings {
                     use crate::domain::entities::TelemetryValue;
                     match &r.physical_value {
+// ... existing print logic ...
                         TelemetryValue::Number(n) => {
                             if let Some(display) = &r.display_value {
                                 println!(
@@ -155,12 +169,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("[WS] No se pudo serializar/broadcast de ciclo {}: {}", cycle, e);
                 }
 
-                // Persist only every DB_SAVE_INTERVAL (Snapshots)
+                // Persist only every DB_SAVE_INTERVAL (Snapshots) AND only if we are in therapy if requested
                 if last_save.elapsed() >= save_interval {
-                    println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
-                    if let Err(e) = interactor.save_telemetry(&readings).await {
-                        eprintln!("[DB] ERROR al persistir snapshot: {}", e);
-                    } else {
+                    if is_in_therapy {
+                        println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
+                        if let Err(e) = interactor.save_telemetry(&readings).await {
+                            eprintln!("[DB] ERROR al persistir snapshot: {}", e);
+                        } else {
+                            last_save = tokio::time::Instant::now();
+                        }
+                    } else if config.db_save_only_on_therapy {
+                        println!("[DB] Snapshot omitido (el paciente no está en terapia).");
+                        // We reset last_save to avoid logging "Snapshot omitido" every cycle once interval passed
+                        // Actually, if we don't reset it, we'll see it every cycle until therapy starts.
+                        // Better to NOT reset it so it saves IMMEDIATELY when therapy starts.
+                        // But to avoid log spam, I'll only print it if we haven't printed it in a while?
+                        // Or just let it be. Just printing it once per "interval" is enough.
                         last_save = tokio::time::Instant::now();
                     }
                 }

@@ -24,6 +24,7 @@ pub struct AppConfig {
     pub ws_port: u16,
     pub cycle_interval_secs: u64,
     pub db_save_interval_secs: u64,
+    pub db_save_only_on_therapy: bool,
     pub capture_mode: CaptureMode,
     pub capture_handles: HashSet<u16>,
     pub capture_names: HashSet<String>,
@@ -102,6 +103,10 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(60),
+            db_save_only_on_therapy: env::var("DB_SAVE_ONLY_ON_THERAPY")
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                == "true",
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),
