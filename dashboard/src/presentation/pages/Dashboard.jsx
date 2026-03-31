@@ -98,6 +98,8 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
               <User size={20} color="var(--secondary)" /> General Information
             </h3>
             <StatCard title="Patient ID" value={data.info.g_patient_id_str.value} iconName="Contact" color="#0ea5e9" />
+            <StatCard title="System State" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" />
+            <StatCard title="Current Action" value={data.info.g_trmt_sub_state_set.value} iconName="Layers" color="#8b5cf6" />
             <StatCard title="Patient Weight" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
             <StatCard title="Therapy Mode" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" />
             <StatCard title="Anticoagulant" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" />
@@ -127,10 +129,10 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
               <Thermometer size={20} color="var(--accent)" /> Real-Time Pressures
             </h3>
             <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', flex: 1, paddingBottom: '20px' }}>
-              <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-300} colorVar="--art-color" />
-              <Cylinder label="Venous (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={500} min={-100} colorVar="--ven-color" />
-              <Cylinder label="TMP" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} max={600} min={-100} colorVar="--tmp-color" />
-              <Cylinder label="Filter (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} max={600} min={-100} colorVar="--fil-color" />
+              <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
+              <Cylinder label="Venous (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={300} min={-400} colorVar="--ven-color" />
+              <Cylinder label="TMP (PTM)" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} max={80} min={0} colorVar="--tmp-color" />
+              <Cylinder label="Filter (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} max={500} min={0} colorVar="--fil-color" />
             </div>
           </div>
         </div>

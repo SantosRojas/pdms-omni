@@ -8,18 +8,20 @@ export const Cylinder = ({
   min = -200, 
   colorVar = '--primary' 
 }) => {
-  // Calculate percentage for fill (handling negative mins correctly)
   const range = max - min;
   const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
   
-  // Clamp value between min and max for raw visuals
+  // Clamp value between min and max
   const clampedValue = Math.max(min, Math.min(max, numValue));
   
   // Calculate height percentage from bottom (0% = min, 100% = max)
   const heightPercent = ((clampedValue - min) / range) * 100;
   
+  // 0 point indicator line (if minimum is negative)
+  const zeroPercent = min < 0 && max > 0 ? ((0 - min) / range) * 100 : null;
+  
   return (
-    <div className="cylinder-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+    <div className="cylinder-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
       
       {/* Title */}
       <div className="cylinder-header" style={{ textAlign: 'center' }}>
@@ -29,108 +31,61 @@ export const Cylinder = ({
         </div>
       </div>
 
-      {/* 3D Cylinder Visual */}
-      <div className="cylinder-visual-wrapper" style={{ position: 'relative', padding: '10px' }}>
+      {/* 2D Flat Visual */}
+      <div className="cylinder-visual-wrapper" style={{ position: 'relative', marginTop: '10px' }}>
         <div className="cylinder-visual" style={{
           position: 'relative',
-          width: '56px',
+          width: '40px',
           height: '240px',
           backgroundColor: 'var(--cylinder-bg)',
-          borderRadius: '28px',
-          border: '1.5px solid var(--cylinder-border)',
-          boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2), 0 10px 25px -10px rgba(0,0,0,0.3)',
+          border: '1px solid var(--border)',
+          borderRadius: '4px',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-end',
-          zIndex: 2
         }}>
           
-          {/* Fill */ }
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: `${heightPercent}%`,
-            background: `linear-gradient(90deg, 
-              rgba(0,0,0,0.2) 0%, 
-              var(${colorVar}) 25%, 
-              var(${colorVar}) 50%, 
-              rgba(255,255,255,0.3) 85%, 
-              var(${colorVar}) 100%)`,
-            boxShadow: `0 -5px 15px -3px var(${colorVar}), 0 0 10px var(${colorVar})40`,
-            transition: 'height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          }}>
-            {/* Top surface of liquid with a slight glow */}
+          {/* Zero Line Marker (if necessary) */}
+          {zeroPercent !== null && (
             <div style={{
               position: 'absolute',
-              top: '-10px',
+              bottom: `${zeroPercent}%`,
               left: 0,
               right: 0,
-              height: '20px',
-              borderRadius: '50%',
-              backgroundColor: `var(${colorVar})`,
-              filter: 'brightness(1.35)',
-              boxShadow: `inset 0 0 8px rgba(0,0,0,0.1), 0 0 15px var(${colorVar})`,
-              opacity: heightPercent > 2 ? 1 : 0,
-              zIndex: 3
-            }}/>
-          </div>
+              height: '2px',
+              backgroundColor: 'var(--text-muted)',
+              opacity: 0.6,
+              zIndex: 1,
+            }} title="Zero Pressure" />
+          )}
 
-          {/* Scale markers */}
+          {/* Fill */}
           <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-            padding: '20px 0', pointerEvents: 'none', opacity: 0.3
-          }}>
-            {[1,2,3,4,5,6,7,8].map(i => (
-              <div key={i} style={{ width: i%2 === 0 ? '15px' : '8px', height: '1.5px', background: 'var(--text-muted)', marginLeft: 'auto' }} />
-            ))}
-          </div>
+            width: '100%',
+            height: `${heightPercent}%`,
+            backgroundColor: `var(${colorVar})`,
+            transition: 'height 0.3s ease-out',
+            zIndex: 0,
+          }} />
 
-          {/* Outer Cylinder Highlights (Glass Reflection) */}
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: 'var(--cylinder-glass-reflection)',
-            pointerEvents: 'none',
-            borderRadius: '28px',
-            zIndex: 4
-          }}/>
         </div>
         
-        {/* Decorative Ring at the top */}
+        {/* Helper numbers/scale text if needed could go here, for now keeping it very simple */}
         <div style={{
           position: 'absolute',
-          top: '-2px', left: '50%', transform: 'translateX(-50%)',
-          width: '64px', height: '24px',
-          borderRadius: '50%', border: '2px solid var(--cylinder-border)',
-          background: 'var(--cylinder-base)', opacity: 0.5, zIndex: 1
-        }} />
-      </div>
-
-      {/* Base */}
-      <div className="cylinder-base-container" style={{ position: 'relative' }}>
-        <div style={{
-          width: '70px',
-          height: '12px',
-          backgroundColor: 'var(--cylinder-base)',
-          borderRadius: '50%',
-          boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
-          border: '1px solid var(--cylinder-border)',
-          zIndex: 5,
-          position: 'relative'
-        }}/>
-        {/* Glow under base */}
-        <div style={{
-          position: 'absolute',
-          top: '4px', left: '10%', right: '10%', height: '8px',
-          backgroundColor: `var(${colorVar})`,
-          filter: 'blur(10px)', opacity: 0.2, zIndex: 0
-        }}/>
+          top: 0, bottom: 0, left: '48px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500
+        }}>
+          <span>{max}</span>
+          {zeroPercent !== null && (
+            <span style={{ position: 'absolute', bottom: `calc(${zeroPercent}% - 6px)` }}>0</span>
+          )}
+          <span>{min}</span>
+        </div>
       </div>
     </div>
   );
 };
+

@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::routing::{get, post, put, delete};
 use axum::Router;
-use sqlx::SqlitePool;
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tower_http::cors::{CorsLayer, Any};
 
+use super::db_pool::DbPool;
 use super::http_api::{self, ApiState};
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ pub struct WebSocketHub {
 }
 
 impl WebSocketHub {
-    pub fn start(addr: SocketAddr, db: SqlitePool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn start(addr: SocketAddr, db: DbPool) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
 

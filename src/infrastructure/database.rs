@@ -1,34 +1,49 @@
-//! Database initialization and connection management using sqlx.
-//! Generates schema and populates tables as needed.
+//! Database initialization and connection management.
+//! Supports both SQLite (via sqlx) and MSSQL (via tiberius + bb8).
+//! Detects backend from the DB_CONNECTION environment variable.
 
-use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row};
+use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row as SqlxRow};
+use bb8::Pool;
+use bb8_tiberius::ConnectionManager;
+use tiberius::{Row as TibRow, Query as TibQuery};
 use std::str::FromStr;
 
-use super::sqlx_repository::{
-    SqlxDataAttrRepository, SqlxDictionaryRepository,
-    SqlxTelemetryRepository, SqlxVersionRepository,
-    SqlxAttributeEquivalenceRepository,
-};
+use super::db_pool::DbPool;
+use super::repo_dispatch::*;
+use super::sqlx_repository::*;
+use super::mssql_repository::*;
 
 /// All repository instances bundled together for easy injection.
+/// Uses enum dispatch so the same struct works for both SQLite and MSSQL.
 pub struct Repositories {
-    pub attr_repo: SqlxDataAttrRepository,
-    pub dict_repo: SqlxDictionaryRepository,
-    pub telemetry_repo: SqlxTelemetryRepository,
-    pub version_repo: SqlxVersionRepository,
-    pub equiv_repo: SqlxAttributeEquivalenceRepository,
-    /// Shared DB connection for the HTTP API layer
-    pub db: SqlitePool,
+    pub attr_repo:      DynAttrRepo,
+    pub dict_repo:      DynDictRepo,
+    pub telemetry_repo: DynTelemetryRepo,
+    pub version_repo:   DynVersionRepo,
+    pub equiv_repo:     DynEquivRepo,
+    /// Shared DB pool for the HTTP API layer
+    pub db: DbPool,
 }
 
-/// Initializes the sqlx SQLite database: opens connection, creates schema,
+/// Initializes the database: opens connection, creates schema,
 /// and returns all repository instances ready for injection.
 pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+    if db_url.starts_with("mssql://") {
+        initialize_mssql(db_url).await
+    } else {
+        initialize_sqlite(db_url).await
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SQLite backend (existing)
+// ═══════════════════════════════════════════════════════════════
+
+async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
     let options = SqliteConnectOptions::from_str(db_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal);
-    
-    // Connect to database
+
     let pool = SqlitePool::connect_with(options).await?;
 
     // Execute schema migrations
@@ -105,11 +120,11 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN patient_id INTEGER").execute(&pool).await;
 
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
     let user_count: i64 = row.get(0);
-    
     if user_count == 0 {
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
@@ -117,9 +132,9 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
         println!("  [DB] Default admin user created (username: admin, password: admin123)");
     }
 
+    // Seed equivalences
     let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
     let count: i64 = row.get(0);
-    
     if count == 0 {
         use crate::infrastructure::equivalences_data::EQUIVALENCES;
         let mut tx = pool.begin().await?;
@@ -127,12 +142,10 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
             sqlx::query("INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)")
                 .bind(eq.internal_name)
                 .execute(&mut *tx).await?;
-                
             let row = sqlx::query("SELECT id FROM signals WHERE internal_name = ?1")
                 .bind(eq.internal_name)
                 .fetch_one(&mut *tx).await?;
             let signal_id: i64 = row.get(0);
-            
             sqlx::query(
                 "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)"
             )
@@ -146,11 +159,174 @@ pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::er
     }
 
     Ok(Repositories {
-        attr_repo:      SqlxDataAttrRepository::new(pool.clone()),
-        dict_repo:      SqlxDictionaryRepository::new(pool.clone()),
-        telemetry_repo: SqlxTelemetryRepository::new(pool.clone()),
-        version_repo:   SqlxVersionRepository::new(pool.clone()),
-        equiv_repo:     SqlxAttributeEquivalenceRepository::new(pool.clone()),
-        db:             pool,
+        attr_repo:      DynAttrRepo::Sqlite(SqlxDataAttrRepository::new(pool.clone())),
+        dict_repo:      DynDictRepo::Sqlite(SqlxDictionaryRepository::new(pool.clone())),
+        telemetry_repo: DynTelemetryRepo::Sqlite(SqlxTelemetryRepository::new(pool.clone())),
+        version_repo:   DynVersionRepo::Sqlite(SqlxVersionRepository::new(pool.clone())),
+        equiv_repo:     DynEquivRepo::Sqlite(SqlxAttributeEquivalenceRepository::new(pool.clone())),
+        db:             DbPool::Sqlite(pool),
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MSSQL backend (new)
+// ═══════════════════════════════════════════════════════════════
+
+/// Parses an mssql:// URL into tiberius-compatible ADO.NET connection string
+fn parse_mssql_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Expected format: mssql://user:password@host:port/database
+    let stripped = url.strip_prefix("mssql://").unwrap_or(url);
+    let (user_pass, rest) = stripped.split_once('@').ok_or("Invalid MSSQL URL: missing @")?;
+    let (user, pass) = user_pass.split_once(':').ok_or("Invalid MSSQL URL: missing password")?;
+    let (host_port, db) = rest.split_once('/').ok_or("Invalid MSSQL URL: missing database")?;
+    let (host, port) = host_port.split_once(':').unwrap_or((host_port, "1433"));
+
+    Ok(format!(
+        "server=tcp:{},{};user={};password={};database={};TrustServerCertificate=true",
+        host, port, user, pass, db
+    ))
+}
+
+async fn initialize_mssql(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+    let conn_str = parse_mssql_url(db_url)?;
+    println!("  [DB] Connecting to SQL Server...");
+
+    let mgr = ConnectionManager::build(conn_str.as_str())?;
+    let pool = Pool::builder().max_size(8).build(mgr).await?;
+
+    // Create schema (MSSQL uses IF NOT EXISTS via conditional checks)
+    {
+        let mut conn = pool.get().await?;
+
+        let schema_statements = vec![
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'versions')
+             CREATE TABLE versions (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 created_at DATETIME2 DEFAULT GETUTCDATE(),
+                 language_id INT,
+                 system_sw NVARCHAR(100), dss_fw NVARCHAR(100), dss_hw NVARCHAR(100),
+                 css_fw NVARCHAR(100), css_hw NVARCHAR(100),
+                 pss_fw NVARCHAR(100), pss_hw NVARCHAR(100),
+                 lang1 NVARCHAR(100), lang2 NVARCHAR(100), lang3 NVARCHAR(100)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'signals')
+             CREATE TABLE signals (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 internal_name NVARCHAR(200) UNIQUE
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'data_attributes')
+             CREATE TABLE data_attributes (
+                 handle INT PRIMARY KEY,
+                 data_type INT, size INT, conversion_factor INT,
+                 label_did INT, unit_did INT, signal_id INT,
+                 FOREIGN KEY(signal_id) REFERENCES signals(id)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'dictionary')
+             CREATE TABLE dictionary (
+                 dict_id INT PRIMARY KEY,
+                 text NVARCHAR(MAX)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'patients')
+             CREATE TABLE patients (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 patient_id_str NVARCHAR(200) UNIQUE,
+                 created_at DATETIME2 DEFAULT GETUTCDATE(),
+                 therapy_start DATETIME2 NULL,
+                 therapy_end DATETIME2 NULL
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'telemetry')
+             CREATE TABLE telemetry (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 timestamp DATETIME2 DEFAULT GETUTCDATE(),
+                 patient_id INT, signal_id INT,
+                 raw_value BIGINT, physical_value FLOAT, unit NVARCHAR(100),
+                 FOREIGN KEY(patient_id) REFERENCES patients(id),
+                 FOREIGN KEY(signal_id) REFERENCES signals(id)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'attribute_equivalences')
+             CREATE TABLE attribute_equivalences (
+                 signal_id INT, numeric_value FLOAT, display_name NVARCHAR(500),
+                 PRIMARY KEY (signal_id, numeric_value),
+                 FOREIGN KEY(signal_id) REFERENCES signals(id)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'users')
+             CREATE TABLE users (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 username NVARCHAR(200) UNIQUE NOT NULL,
+                 password NVARCHAR(500) NOT NULL,
+                 full_name NVARCHAR(500) NOT NULL DEFAULT '',
+                 email NVARCHAR(500) NOT NULL DEFAULT '',
+                 role NVARCHAR(50) NOT NULL DEFAULT 'viewer',
+                 active BIT NOT NULL DEFAULT 1,
+                 created_at DATETIME2 DEFAULT GETUTCDATE()
+             )",
+        ];
+
+        for stmt in schema_statements {
+            let mut q = TibQuery::new(stmt);
+            q.execute(&mut *conn).await?;
+        }
+        println!("  [DB] SQL Server schema verified.");
+    }
+
+    // Seed default admin user
+    {
+        let mut conn = pool.get().await?;
+        let mut q = TibQuery::new("SELECT COUNT(*) FROM users");
+        let stream = q.query(&mut *conn).await?;
+        let rows: Vec<TibRow> = stream.into_first_result().await?;
+        let user_count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+        if user_count == 0 {
+            let mut qi = TibQuery::new("INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)");
+            qi.bind("admin"); qi.bind("admin123"); qi.bind("Administrator"); qi.bind("admin");
+            qi.execute(&mut *conn).await?;
+            println!("  [DB] Default admin user created (username: admin, password: admin123)");
+        }
+    }
+
+    // Seed equivalences
+    {
+        let mut conn = pool.get().await?;
+        let mut q = TibQuery::new("SELECT COUNT(*) FROM attribute_equivalences");
+        let stream = q.query(&mut *conn).await?;
+        let rows: Vec<TibRow> = stream.into_first_result().await?;
+        let count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+
+        if count == 0 {
+            use crate::infrastructure::equivalences_data::EQUIVALENCES;
+            for eq in EQUIVALENCES {
+                let mut c = pool.get().await?;
+
+                let mut q1 = TibQuery::new("IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)");
+                q1.bind(eq.internal_name);
+                q1.execute(&mut *c).await?;
+
+                let mut q2 = TibQuery::new("SELECT id FROM signals WHERE internal_name = @P1");
+                q2.bind(eq.internal_name);
+                let stream = q2.query(&mut *c).await?;
+                let rows: Vec<TibRow> = stream.into_first_result().await?;
+                let signal_id = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+
+                let mut q3 = TibQuery::new(
+                    "MERGE attribute_equivalences AS tgt \
+                     USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src \
+                     ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value \
+                     WHEN MATCHED THEN UPDATE SET display_name = @P3 \
+                     WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);"
+                );
+                q3.bind(signal_id); q3.bind(eq.numeric_value); q3.bind(eq.display_name);
+                q3.execute(&mut *c).await?;
+            }
+            println!("  [DB] Embedded equivalences initialized.");
+        }
+    }
+
+    Ok(Repositories {
+        attr_repo:      DynAttrRepo::Mssql(MssqlDataAttrRepository::new(pool.clone())),
+        dict_repo:      DynDictRepo::Mssql(MssqlDictionaryRepository::new(pool.clone())),
+        telemetry_repo: DynTelemetryRepo::Mssql(MssqlTelemetryRepository::new(pool.clone())),
+        version_repo:   DynVersionRepo::Mssql(MssqlVersionRepository::new(pool.clone())),
+        equiv_repo:     DynEquivRepo::Mssql(MssqlAttributeEquivalenceRepository::new(pool.clone())),
+        db:             DbPool::Mssql(pool),
     })
 }
