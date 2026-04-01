@@ -6,6 +6,7 @@ pub mod db_pool;
 pub mod serial_communicator;
 pub mod config;
 pub mod database;
+pub mod postgres_repository;
 pub mod websocket_server;
 pub mod equivalences_data;
 pub mod http_api;

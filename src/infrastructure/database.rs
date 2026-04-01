@@ -1,21 +1,23 @@
 //! Database initialization and connection management.
-//! Supports both SQLite (via sqlx) and MSSQL (via tiberius + bb8).
+//! Supports SQLite (via sqlx), PostgreSQL (via sqlx), and MSSQL (via tiberius + bb8).
 //! Detects backend from the DB_CONNECTION environment variable.
 
 use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row as SqlxRow};
+use sqlx::postgres::PgPoolOptions;
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{AuthMethod, Config as TibConfig, Row as TibRow, Query as TibQuery};
 use std::str::FromStr;
 
 use super::db_pool::DbPool;
-use super::config::{DatabaseConfig, MssqlSettings};
+use super::config::{DatabaseConfig, MssqlSettings, PostgresSettings};
 use super::null_repository::{
     NullAttributeEquivalenceRepository, NullDataAttrRepository, NullDictionaryRepository,
     NullTelemetryRepository, NullVersionRepository,
 };
 use super::repo_dispatch::*;
 use super::sqlx_repository::*;
+use super::postgres_repository::*;
 use super::mssql_repository::*;
 
 /// All repository instances bundled together for easy injection.
@@ -35,6 +37,7 @@ pub struct Repositories {
 pub async fn initialize_db(db_config: &DatabaseConfig) -> Result<Repositories, Box<dyn std::error::Error>> {
     match db_config {
         DatabaseConfig::Sqlite { url } => initialize_sqlite(url).await,
+        DatabaseConfig::Postgres(cfg) => initialize_postgres(cfg).await,
         DatabaseConfig::Mssql(cfg) => initialize_mssql(cfg).await,
         DatabaseConfig::Other { url } => {
             Err(format!("DB backend not implemented yet for URL: {}", url).into())
@@ -184,6 +187,139 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         version_repo:   DynVersionRepo::Sqlite(SqlxVersionRepository::new(pool.clone())),
         equiv_repo:     DynEquivRepo::Sqlite(SqlxAttributeEquivalenceRepository::new(pool.clone())),
         db:             Some(DbPool::Sqlite(pool)),
+    })
+}
+
+async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
+    println!("  [DB] Connecting to PostgreSQL...");
+
+    let url = format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        settings.username, settings.password, settings.host, settings.port, settings.database
+    );
+    let pool = PgPoolOptions::new().max_connections(8).connect(&url).await?;
+
+    let schema_statements = vec![
+        "CREATE TABLE IF NOT EXISTS versions (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            language_id INTEGER,
+            system_sw TEXT,
+            dss_fw TEXT, dss_hw TEXT,
+            css_fw TEXT, css_hw TEXT,
+            pss_fw TEXT, pss_hw TEXT,
+            lang1 TEXT, lang2 TEXT, lang3 TEXT
+        )",
+        "CREATE TABLE IF NOT EXISTS signals (
+            id BIGSERIAL PRIMARY KEY,
+            internal_name TEXT UNIQUE
+        )",
+        "CREATE TABLE IF NOT EXISTS data_attributes (
+            handle INTEGER PRIMARY KEY,
+            data_type INTEGER,
+            size INTEGER,
+            conversion_factor INTEGER,
+            label_did INTEGER,
+            unit_did INTEGER,
+            signal_id BIGINT REFERENCES signals(id)
+        )",
+        "CREATE TABLE IF NOT EXISTS dictionary (
+            dict_id INTEGER PRIMARY KEY,
+            text TEXT
+        )",
+        "CREATE TABLE IF NOT EXISTS patients (
+            id BIGSERIAL PRIMARY KEY,
+            patient_id_str TEXT UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            therapy_start TIMESTAMPTZ,
+            therapy_end TIMESTAMPTZ
+        )",
+        "CREATE TABLE IF NOT EXISTS telemetry (
+            id BIGSERIAL PRIMARY KEY,
+            timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            patient_id BIGINT REFERENCES patients(id),
+            signal_id BIGINT REFERENCES signals(id),
+            raw_value BIGINT,
+            physical_value TEXT,
+            unit TEXT
+        )",
+        "CREATE TABLE IF NOT EXISTS attribute_equivalences (
+            signal_id BIGINT REFERENCES signals(id),
+            numeric_value DOUBLE PRECISION,
+            display_name TEXT,
+            PRIMARY KEY (signal_id, numeric_value)
+        )",
+        "CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            full_name TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'viewer',
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+    ];
+
+    for stmt in schema_statements {
+        sqlx::query(stmt).execute(&pool).await?;
+    }
+
+    let migration_statements = vec![
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_start TIMESTAMPTZ",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_end TIMESTAMPTZ",
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS patient_id BIGINT",
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS physical_value TEXT",
+    ];
+
+    for stmt in migration_statements {
+        let _ = sqlx::query(stmt).execute(&pool).await;
+    }
+
+    let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
+    let user_count: i64 = row.get(0);
+    if user_count == 0 {
+        sqlx::query(
+            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
+        ).execute(&pool).await?;
+        println!("  [DB] Default admin user created (username: admin, password: admin123)");
+    }
+
+    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
+    let count: i64 = row.get(0);
+    if count == 0 {
+        use crate::infrastructure::equivalences_data::EQUIVALENCES;
+        let mut tx = pool.begin().await?;
+        for eq in EQUIVALENCES {
+            sqlx::query("INSERT INTO signals (internal_name) VALUES ($1) ON CONFLICT (internal_name) DO NOTHING")
+                .bind(eq.internal_name)
+                .execute(&mut *tx).await?;
+            let row = sqlx::query("SELECT id FROM signals WHERE internal_name = $1")
+                .bind(eq.internal_name)
+                .fetch_one(&mut *tx).await?;
+            let signal_id: i64 = row.get(0);
+            sqlx::query(
+                "INSERT INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES ($1, $2, $3)
+                 ON CONFLICT (signal_id, numeric_value) DO UPDATE SET display_name = EXCLUDED.display_name"
+            )
+            .bind(signal_id)
+            .bind(eq.numeric_value)
+            .bind(eq.display_name)
+            .execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        println!("  [DB] Embedded equivalences initialized.");
+    }
+
+    Ok(Repositories {
+        attr_repo:      DynAttrRepo::Postgres(PgDataAttrRepository::new(pool.clone())),
+        dict_repo:      DynDictRepo::Postgres(PgDictionaryRepository::new(pool.clone())),
+        telemetry_repo: DynTelemetryRepo::Postgres(PgTelemetryRepository::new(pool.clone())),
+        version_repo:   DynVersionRepo::Postgres(PgVersionRepository::new(pool.clone())),
+        equiv_repo:     DynEquivRepo::Postgres(PgAttributeEquivalenceRepository::new(pool.clone())),
+        db:             Some(DbPool::Postgres(pool)),
     })
 }
 

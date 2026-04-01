@@ -19,9 +19,19 @@ pub struct MssqlSettings {
 }
 
 #[derive(Debug, Clone)]
+pub struct PostgresSettings {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum DatabaseConfig {
     Sqlite { url: String },
     Mssql(MssqlSettings),
+    Postgres(PostgresSettings),
     Other { url: String },
 }
 
@@ -149,12 +159,13 @@ impl AppConfig {
                 password: self.db_password.clone(),
                 trust_server_certificate: true,
             }),
-            "postgres" | "pgsql" => DatabaseConfig::Other {
-                url: format!(
-                    "postgres://{}:{}@{}:{}/{}",
-                    self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
-                ),
-            },
+            "postgres" | "pgsql" | "postgresql" => DatabaseConfig::Postgres(PostgresSettings {
+                host: self.db_host.clone(),
+                port: self.db_port.parse::<u16>().unwrap_or(5432),
+                database: self.db_database.clone(),
+                username: self.db_username.clone(),
+                password: self.db_password.clone(),
+            }),
             "mysql" => DatabaseConfig::Other {
                 url: format!(
                     "mysql://{}:{}@{}:{}/{}",
@@ -172,6 +183,10 @@ impl AppConfig {
             DatabaseConfig::Sqlite { url } => url,
             DatabaseConfig::Mssql(cfg) => format!(
                 "mssql://{}:***@{}:{}/{}",
+                cfg.username, cfg.host, cfg.port, cfg.database
+            ),
+            DatabaseConfig::Postgres(cfg) => format!(
+                "postgresql://{}:***@{}:{}/{}",
                 cfg.username, cfg.host, cfg.port, cfg.database
             ),
             DatabaseConfig::Other { .. } => format!("{}://***", self.db_connection),

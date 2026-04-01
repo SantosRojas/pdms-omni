@@ -2,7 +2,7 @@
 //! Provides all the direct query methods needed by the HTTP API layer.
 //! MSSQL queries use tiberius::Query with .bind() for mixed parameter types.
 
-use sqlx::{SqlitePool, Row as SqlxRow};
+use sqlx::{PgPool, SqlitePool, Row as SqlxRow};
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{Row as TibRow, Query};
@@ -11,6 +11,7 @@ use tiberius::{Row as TibRow, Query};
 #[derive(Clone)]
 pub enum DbPool {
     Sqlite(SqlitePool),
+    Postgres(PgPool),
     Mssql(Pool<ConnectionManager>),
 }
 
@@ -63,6 +64,19 @@ impl DbPool {
                     ],
                 }))
             }
+            DbPool::Postgres(pool) => {
+                let row = sqlx::query("SELECT id, username, password, full_name, email, role, active, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM users WHERE username = $1")
+                    .bind(username).fetch_optional(pool).await.map_err(|e| e.to_string())?;
+                Ok(row.map(|r| GenericRow {
+                    values: vec![
+                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
+                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
+                        Some(r.get::<String, _>(4)), Some(r.get::<String, _>(5)),
+                        Some(if r.get::<bool, _>(6) { "1".into() } else { "0".into() }),
+                        Some(r.get::<String, _>(7)),
+                    ],
+                }))
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new("SELECT id, username, password, full_name, email, role, active, CONVERT(NVARCHAR(30), created_at, 120) AS created_at FROM users WHERE username = @P1");
@@ -86,6 +100,19 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query("SELECT id, username, full_name, email, role, active, created_at FROM users ORDER BY id")
+                    .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| GenericRow {
+                    values: vec![
+                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
+                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
+                        Some(r.get::<String, _>(4)),
+                        Some(if r.get::<bool, _>(5) { "1".into() } else { "0".into() }),
+                        Some(r.get::<String, _>(6)),
+                    ],
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query("SELECT id, username, full_name, email, role, active, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM users ORDER BY id")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
                     values: vec![
@@ -123,6 +150,12 @@ impl DbPool {
                     .execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
+            DbPool::Postgres(pool) => {
+                sqlx::query("INSERT INTO users (username, password, full_name, email, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password, full_name = EXCLUDED.full_name, email = EXCLUDED.email, role = EXCLUDED.role")
+                    .bind(username).bind(password).bind(full_name).bind(email).bind(role)
+                    .execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new("INSERT INTO users (username, password, full_name, email, role) VALUES (@P1, @P2, @P3, @P4, @P5)");
@@ -139,6 +172,11 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let sql = format!("UPDATE users SET {} = ?1 WHERE id = ?2", field);
+                sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                let sql = format!("UPDATE users SET {} = $1 WHERE id = $2", field);
                 sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
@@ -160,6 +198,11 @@ impl DbPool {
                     .execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
+            DbPool::Postgres(pool) => {
+                sqlx::query("UPDATE users SET active = $1 WHERE id = $2").bind(active).bind(user_id)
+                    .execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new("UPDATE users SET active = @P1 WHERE id = @P2");
@@ -174,6 +217,10 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 sqlx::query("DELETE FROM users WHERE id = ?1").bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query("DELETE FROM users WHERE id = $1").bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Mssql(pool) => {
@@ -191,6 +238,13 @@ impl DbPool {
     pub async fn list_equivalences(&self) -> Result<Vec<GenericRow>, String> {
         match self {
             DbPool::Sqlite(pool) => {
+                let rows = sqlx::query("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value")
+                    .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| GenericRow {
+                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<f64, _>(2).to_string()), Some(r.get::<String, _>(3))],
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
                 let rows = sqlx::query("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
@@ -216,6 +270,12 @@ impl DbPool {
                 let row = sqlx::query("SELECT id FROM signals WHERE internal_name = ?1").bind(internal_name).fetch_one(pool).await.map_err(|e| e.to_string())?;
                 Ok(row.get::<i64, _>(0))
             }
+            DbPool::Postgres(pool) => {
+                sqlx::query("INSERT INTO signals (internal_name) VALUES ($1) ON CONFLICT (internal_name) DO NOTHING")
+                    .bind(internal_name).execute(pool).await.map_err(|e| e.to_string())?;
+                let row = sqlx::query("SELECT id FROM signals WHERE internal_name = $1").bind(internal_name).fetch_one(pool).await.map_err(|e| e.to_string())?;
+                Ok(row.get::<i64, _>(0))
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q1 = Query::new("IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)");
@@ -238,6 +298,11 @@ impl DbPool {
                     .bind(signal_id).bind(numeric_value).bind(display_name).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
+            DbPool::Postgres(pool) => {
+                sqlx::query("INSERT INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES ($1, $2, $3) ON CONFLICT (signal_id, numeric_value) DO UPDATE SET display_name = EXCLUDED.display_name")
+                    .bind(signal_id).bind(numeric_value).bind(display_name).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new("MERGE attribute_equivalences AS tgt USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value WHEN MATCHED THEN UPDATE SET display_name = @P3 WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);");
@@ -252,6 +317,11 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = ?1 AND numeric_value = ?2")
+                    .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = $1 AND numeric_value = $2")
                     .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
@@ -271,6 +341,13 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query("SELECT id, patient_id_str, created_at FROM patients ORDER BY created_at DESC")
+                    .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| GenericRow {
+                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2))],
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query("SELECT id, patient_id_str, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM patients ORDER BY created_at DESC")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
                     values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2))],
@@ -298,6 +375,14 @@ impl DbPool {
                     values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)), r.get::<Option<String>, _>(4), Some(r.get::<String, _>(5))],
                 }).collect())
             }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    r#"SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND CASE WHEN t.physical_value ~ '^-?[0-9]+(\.[0-9]+)?$' THEN t.physical_value::double precision END = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2"#
+                ).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| GenericRow {
+                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)), r.get::<Option<String>, _>(4), Some(r.get::<String, _>(5))],
+                }).collect())
+            }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(
@@ -319,6 +404,14 @@ impl DbPool {
                 let rows = sqlx::query(
                     "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND CAST(t.physical_value AS REAL) = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2"
                 ).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| GenericRow {
+                    values: vec![Some(r.get::<String, _>(0)), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), r.get::<Option<String>, _>(3), Some(r.get::<String, _>(4))],
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    r#"SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND CASE WHEN t.physical_value ~ '^-?[0-9]+(\.[0-9]+)?$' THEN t.physical_value::double precision END = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2"#
+                ).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
                     values: vec![Some(r.get::<String, _>(0)), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), r.get::<Option<String>, _>(3), Some(r.get::<String, _>(4))],
                 }).collect())
