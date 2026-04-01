@@ -14,7 +14,7 @@ use crate::domain::repositories::{
     TelemetryRepository, VersionRepository,
 };
 use crate::infrastructure::persistence_helpers::{
-    MSSQL_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
+    MSSQL_NUMERIC_EQ_EXPR, build_telemetry_reading, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: impl std::fmt::Display) -> RepositoryError {
@@ -77,7 +77,7 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
 
     async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new(
+        let q = Query::new(
             "SELECT d.handle, d.data_type, d.size, d.conversion_factor, d.label_did, d.unit_did, d.signal_id, s.internal_name \
              FROM data_attributes d JOIN signals s ON d.signal_id = s.id ORDER BY d.handle"
         );
@@ -120,7 +120,7 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
 
     async fn delete_all(&self) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new("DELETE FROM data_attributes");
+        let q = Query::new("DELETE FROM data_attributes");
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
@@ -168,7 +168,7 @@ impl DictionaryRepository for MssqlDictionaryRepository {
 
     async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new("SELECT dict_id, text FROM dictionary ORDER BY dict_id");
+        let q = Query::new("SELECT dict_id, text FROM dictionary ORDER BY dict_id");
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
@@ -180,7 +180,7 @@ impl DictionaryRepository for MssqlDictionaryRepository {
 
     async fn delete_all(&self) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new("DELETE FROM dictionary");
+        let q = Query::new("DELETE FROM dictionary");
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
@@ -209,7 +209,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         );
         q.bind(reading.patient_id.map(|v| v as i32));
         q.bind(reading.signal_id as i32);
-        q.bind(reading.raw_value as i32);
+        q.bind(reading.raw_value);
         q.bind(physical_value.as_str());
         q.bind(reading.unit.as_str());
         q.execute(&mut *conn).await.map_err(map_db_err)?;
@@ -217,8 +217,22 @@ impl TelemetryRepository for MssqlTelemetryRepository {
     }
 
     async fn save_batch(&self, readings: &[TelemetryReading]) -> Result<(), RepositoryError> {
+        if readings.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
         for reading in readings {
-            self.save(reading).await?;
+            let physical_value = telemetry_value_to_storage(&reading.physical_value);
+            let mut q = Query::new(
+                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit) VALUES (@P1, @P2, @P3, @P4, @P5)"
+            );
+            q.bind(reading.patient_id.map(|v| v as i32));
+            q.bind(reading.signal_id as i32);
+            q.bind(reading.raw_value);
+            q.bind(physical_value.as_str());
+            q.bind(reading.unit.as_str());
+            q.execute(&mut *conn).await.map_err(map_db_err)?;
         }
         Ok(())
     }
@@ -240,19 +254,17 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row: Row| {
-            let phys_str = row.get::<&str, _>(6).unwrap_or("0").to_string();
-            let physical_value = telemetry_value_from_storage(phys_str);
-            TelemetryReading {
-                id: row.get::<i32, _>(0).map(|v| v as i64),
-                timestamp: row.get::<&str, _>(1).unwrap_or("").to_string(),
-                patient_id: row.get::<i32, _>(2).map(|v| v as i64),
-                signal_id: row.get::<i32, _>(3).unwrap_or(0) as i64,
-                internal_name: row.get::<&str, _>(4).unwrap_or("").to_string(),
-                raw_value: row.get::<i64, _>(5).unwrap_or(0),
-                physical_value,
-                unit: row.get::<&str, _>(7).unwrap_or("").to_string(),
-                display_value: row.get::<&str, _>(8).map(|v: &str| v.to_string()),
-            }
+            build_telemetry_reading(
+                row.get::<i32, _>(0).map(|v| v as i64),
+                row.get::<&str, _>(1).unwrap_or("").to_string(),
+                row.get::<i32, _>(2).map(|v| v as i64),
+                row.get::<i32, _>(3).unwrap_or(0) as i64,
+                row.get::<&str, _>(4).unwrap_or("").to_string(),
+                row.get::<i64, _>(5).unwrap_or(0),
+                row.get::<&str, _>(6).unwrap_or("0").to_string(),
+                row.get::<&str, _>(7).unwrap_or("").to_string(),
+                row.get::<&str, _>(8).map(|v: &str| v.to_string()),
+            )
         }).collect())
     }
 
@@ -297,19 +309,17 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row: Row| {
-            let phys_str = row.get::<&str, _>(6).unwrap_or("0").to_string();
-            let physical_value = telemetry_value_from_storage(phys_str);
-            TelemetryReading {
-                id: row.get::<i32, _>(0).map(|v| v as i64),
-                timestamp: row.get::<&str, _>(1).unwrap_or("").to_string(),
-                patient_id: row.get::<i32, _>(2).map(|v| v as i64),
-                signal_id: row.get::<i32, _>(3).unwrap_or(0) as i64,
-                internal_name: row.get::<&str, _>(4).unwrap_or("").to_string(),
-                raw_value: row.get::<i64, _>(5).unwrap_or(0),
-                physical_value,
-                unit: row.get::<&str, _>(7).unwrap_or("").to_string(),
-                display_value: row.get::<&str, _>(8).map(|v: &str| v.to_string()),
-            }
+            build_telemetry_reading(
+                row.get::<i32, _>(0).map(|v| v as i64),
+                row.get::<&str, _>(1).unwrap_or("").to_string(),
+                row.get::<i32, _>(2).map(|v| v as i64),
+                row.get::<i32, _>(3).unwrap_or(0) as i64,
+                row.get::<&str, _>(4).unwrap_or("").to_string(),
+                row.get::<i64, _>(5).unwrap_or(0),
+                row.get::<&str, _>(6).unwrap_or("0").to_string(),
+                row.get::<&str, _>(7).unwrap_or("").to_string(),
+                row.get::<&str, _>(8).map(|v: &str| v.to_string()),
+            )
         }).collect())
     }
 
@@ -367,7 +377,7 @@ impl VersionRepository for MssqlVersionRepository {
 
     async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new(
+        let q = Query::new(
             "SELECT TOP(1) language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3 \
              FROM versions ORDER BY id DESC"
         );
@@ -447,7 +457,7 @@ impl AttributeEquivalenceRepository for MssqlAttributeEquivalenceRepository {
 
     async fn get_all(&self) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new(
+        let q = Query::new(
             "SELECT s.internal_name, e.numeric_value, e.display_name \
              FROM attribute_equivalences e JOIN signals s ON e.signal_id = s.id"
         );

@@ -137,6 +137,17 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         "
     ).execute(&pool).await?;
 
+    // Query-performance indexes (safe, idempotent)
+    sqlx::query(
+        "
+        CREATE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name);
+        CREATE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str);
+        CREATE INDEX IF NOT EXISTS idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id);
+        CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value);
+        "
+    ).execute(&pool).await?;
+
     // Safe migrations for existing DB
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
@@ -263,6 +274,19 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
 
     for stmt in schema_statements {
         sqlx::query(stmt).execute(&pool).await?;
+    }
+
+    // Query-performance indexes (safe, idempotent)
+    let index_statements = vec![
+        "CREATE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name)",
+        "CREATE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str)",
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
+        "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+    ];
+
+    for stmt in index_statements {
+        let _ = sqlx::query(stmt).execute(&pool).await;
     }
 
     let migration_statements = vec![
@@ -414,9 +438,24 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
              )",
         ];
 
+        let index_statements = vec![
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_signals_internal_name' AND object_id = OBJECT_ID('signals')) CREATE INDEX idx_signals_internal_name ON signals(internal_name)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_patients_patient_id_str' AND object_id = OBJECT_ID('patients')) CREATE INDEX idx_patients_patient_id_str ON patients(patient_id_str)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_patient_timestamp' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_signal' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_signal ON telemetry(signal_id)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_signal_numeric' AND object_id = OBJECT_ID('attribute_equivalences')) CREATE INDEX idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+        ];
+
         for stmt in schema_statements {
-            let mut q = TibQuery::new(stmt);
+            let q = TibQuery::new(stmt);
             q.execute(&mut *conn).await?;
+        }
+
+        for stmt in index_statements {
+            let q = TibQuery::new(stmt);
+            if let Err(e) = q.execute(&mut *conn).await {
+                eprintln!("  [DB] Index warning: {}", e);
+            }
         }
         println!("  [DB] SQL Server schema verified.");
 
@@ -431,7 +470,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
         ];
 
         for stmt in migration_statements {
-            let mut q = TibQuery::new(stmt);
+            let q = TibQuery::new(stmt);
             if let Err(e) = q.execute(&mut *conn).await {
                 // Migration errors are not fatal; log and continue
                 eprintln!("  [DB] Migration warning: {}", e);
@@ -442,7 +481,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
     // Seed default admin user
     {
         let mut conn = pool.get().await?;
-        let mut q = TibQuery::new("SELECT COUNT(*) FROM users");
+        let q = TibQuery::new("SELECT COUNT(*) FROM users");
         let stream = q.query(&mut *conn).await?;
         let rows: Vec<TibRow> = stream.into_first_result().await?;
         let user_count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
@@ -457,7 +496,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
     // Seed equivalences
     {
         let mut conn = pool.get().await?;
-        let mut q = TibQuery::new("SELECT COUNT(*) FROM attribute_equivalences");
+        let q = TibQuery::new("SELECT COUNT(*) FROM attribute_equivalences");
         let stream = q.query(&mut *conn).await?;
         let rows: Vec<TibRow> = stream.into_first_result().await?;
         let count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);

@@ -11,7 +11,7 @@ use crate::domain::repositories::{
     TelemetryRepository, VersionRepository,
 };
 use crate::infrastructure::persistence_helpers::{
-    SQLITE_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
+    SQLITE_NUMERIC_EQ_EXPR, build_telemetry_reading, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: sqlx::Error) -> RepositoryError {
@@ -256,20 +256,17 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         .map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row| {
-            let phys_str: String = row.get(6);
-            let physical_value = telemetry_value_from_storage(phys_str);
-            
-            TelemetryReading {
-                id: Some(row.get(0)),
-                timestamp: row.get(1),
-                patient_id: row.get(2),
-                signal_id: row.get(3),
-                internal_name: row.get(4),
-                raw_value: row.get(5),
-                physical_value,
-                unit: row.get(7),
-                display_value: row.get(8),
-            }
+            build_telemetry_reading(
+                Some(row.get(0)),
+                row.get(1),
+                row.get(2),
+                row.get(3),
+                row.get(4),
+                row.get(5),
+                row.get::<String, _>(6),
+                row.get(7),
+                row.get(8),
+            )
         }).collect())
     }
 
@@ -307,20 +304,17 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         .map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row| {
-             let phys_str: String = row.get(6);
-            let physical_value = telemetry_value_from_storage(phys_str);
-            
-            TelemetryReading {
-                id: Some(row.get(0)),
-                timestamp: row.get(1),
-                patient_id: row.get(2),
-                signal_id: row.get(3),
-                internal_name: row.get(4),
-                raw_value: row.get(5),
-                physical_value,
-                unit: row.get(7),
-                display_value: row.get(8),
-            }
+            build_telemetry_reading(
+                Some(row.get(0)),
+                row.get(1),
+                row.get(2),
+                row.get(3),
+                row.get(4),
+                row.get(5),
+                row.get::<String, _>(6),
+                row.get(7),
+                row.get(8),
+            )
         }).collect())
     }
 

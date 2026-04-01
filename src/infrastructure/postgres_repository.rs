@@ -11,7 +11,7 @@ use crate::domain::repositories::{
     TelemetryRepository, VersionRepository,
 };
 use crate::infrastructure::persistence_helpers::{
-    POSTGRES_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
+    POSTGRES_NUMERIC_EQ_EXPR, build_telemetry_reading, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: sqlx::Error) -> RepositoryError {
@@ -221,9 +221,28 @@ impl TelemetryRepository for PgTelemetryRepository {
     }
 
     async fn save_batch(&self, readings: &[TelemetryReading]) -> Result<(), RepositoryError> {
-        for reading in readings {
-            self.save(reading).await?;
+        if readings.is_empty() {
+            return Ok(());
         }
+
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
+        for reading in readings {
+            let physical_value = telemetry_value_to_storage(&reading.physical_value);
+            sqlx::query(
+                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+                 VALUES ($1, $2, $3, $4, $5)"
+            )
+            .bind(reading.patient_id.map(|v| v as i64))
+            .bind(reading.signal_id as i64)
+            .bind(reading.raw_value)
+            .bind(physical_value)
+            .bind(&reading.unit)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 
@@ -244,20 +263,17 @@ impl TelemetryRepository for PgTelemetryRepository {
         .map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row| {
-            let phys_str: String = row.get(6);
-            let physical_value = telemetry_value_from_storage(phys_str);
-
-            TelemetryReading {
-                id: Some(row.get::<i64, _>(0)),
-                timestamp: row.get::<String, _>(1),
-                patient_id: row.get::<Option<i64>, _>(2),
-                signal_id: row.get::<i64, _>(3),
-                internal_name: row.get::<String, _>(4),
-                raw_value: row.get::<i64, _>(5),
-                physical_value,
-                unit: row.get::<String, _>(7),
-                display_value: row.get::<Option<String>, _>(8),
-            }
+            build_telemetry_reading(
+                Some(row.get::<i64, _>(0)),
+                row.get::<String, _>(1),
+                row.get::<Option<i64>, _>(2),
+                row.get::<i64, _>(3),
+                row.get::<String, _>(4),
+                row.get::<i64, _>(5),
+                row.get::<String, _>(6),
+                row.get::<String, _>(7),
+                row.get::<Option<String>, _>(8),
+            )
         }).collect())
     }
 
@@ -297,20 +313,17 @@ impl TelemetryRepository for PgTelemetryRepository {
         .map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row| {
-            let phys_str: String = row.get(6);
-            let physical_value = telemetry_value_from_storage(phys_str);
-
-            TelemetryReading {
-                id: Some(row.get::<i64, _>(0)),
-                timestamp: row.get::<String, _>(1),
-                patient_id: row.get::<Option<i64>, _>(2),
-                signal_id: row.get::<i64, _>(3),
-                internal_name: row.get::<String, _>(4),
-                raw_value: row.get::<i64, _>(5),
-                physical_value,
-                unit: row.get::<String, _>(7),
-                display_value: row.get::<Option<String>, _>(8),
-            }
+            build_telemetry_reading(
+                Some(row.get::<i64, _>(0)),
+                row.get::<String, _>(1),
+                row.get::<Option<i64>, _>(2),
+                row.get::<i64, _>(3),
+                row.get::<String, _>(4),
+                row.get::<i64, _>(5),
+                row.get::<String, _>(6),
+                row.get::<String, _>(7),
+                row.get::<Option<String>, _>(8),
+            )
         }).collect())
     }
 

@@ -2,12 +2,15 @@
 //! Provides all the direct query methods needed by the HTTP API layer.
 //! MSSQL queries use tiberius::Query with .bind() for mixed parameter types.
 
-use sqlx::{PgPool, SqlitePool, Row as SqlxRow};
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
-use tiberius::{Row as TibRow, Query};
+use sqlx::{PgPool, Row as SqlxRow, SqlitePool};
+use tiberius::{Query, Row as TibRow};
+
 use crate::infrastructure::persistence_helpers::{
-    MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR, SQLITE_NUMERIC_EQ_EXPR,
+    build_equivalence_row, build_export_row, build_history_row, build_patient_row,
+    build_user_list_row, build_user_row, MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR,
+    SQLITE_NUMERIC_EQ_EXPR, GenericRow,
 };
 
 /// A backend-agnostic database connection pool.
@@ -16,33 +19,6 @@ pub enum DbPool {
     Sqlite(SqlitePool),
     Postgres(PgPool),
     Mssql(Pool<ConnectionManager>),
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Row abstraction for query results
-// ═══════════════════════════════════════════════════════════════════
-
-#[derive(Debug, Clone)]
-pub struct GenericRow {
-    pub values: Vec<Option<String>>,
-}
-
-impl GenericRow {
-    pub fn get_string(&self, idx: usize) -> String {
-        self.values.get(idx).and_then(|v| v.clone()).unwrap_or_default()
-    }
-    pub fn get_i64(&self, idx: usize) -> i64 {
-        self.values.get(idx).and_then(|v| v.as_ref()).and_then(|s| s.parse().ok()).unwrap_or(0)
-    }
-    pub fn get_f64(&self, idx: usize) -> f64 {
-        self.values.get(idx).and_then(|v| v.as_ref()).and_then(|s| s.parse().ok()).unwrap_or(0.0)
-    }
-    pub fn get_bool(&self, idx: usize) -> bool {
-        self.values.get(idx).and_then(|v| v.as_ref()).map(|s| s == "1" || s.eq_ignore_ascii_case("true")).unwrap_or(false)
-    }
-    pub fn get_optional_string(&self, idx: usize) -> Option<String> {
-        self.values.get(idx).and_then(|v| v.clone())
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -57,28 +33,30 @@ impl DbPool {
             DbPool::Sqlite(pool) => {
                 let row = sqlx::query("SELECT id, username, password, full_name, email, role, active, created_at FROM users WHERE username = ?1")
                     .bind(username).fetch_optional(pool).await.map_err(|e| e.to_string())?;
-                Ok(row.map(|r| GenericRow {
-                    values: vec![
-                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
-                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
-                        Some(r.get::<String, _>(4)), Some(r.get::<String, _>(5)),
-                        Some(if r.get::<bool, _>(6) { "1".into() } else { "0".into() }),
-                        Some(r.get::<String, _>(7)),
-                    ],
-                }))
+                Ok(row.map(|r| build_user_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<String, _>(5),
+                    r.get::<bool, _>(6),
+                    r.get::<String, _>(7),
+                )))
             }
             DbPool::Postgres(pool) => {
                 let row = sqlx::query("SELECT id, username, password, full_name, email, role, active, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM users WHERE username = $1")
                     .bind(username).fetch_optional(pool).await.map_err(|e| e.to_string())?;
-                Ok(row.map(|r| GenericRow {
-                    values: vec![
-                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
-                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
-                        Some(r.get::<String, _>(4)), Some(r.get::<String, _>(5)),
-                        Some(if r.get::<bool, _>(6) { "1".into() } else { "0".into() }),
-                        Some(r.get::<String, _>(7)),
-                    ],
-                }))
+                Ok(row.map(|r| build_user_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<String, _>(5),
+                    r.get::<bool, _>(6),
+                    r.get::<String, _>(7),
+                )))
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
@@ -86,15 +64,16 @@ impl DbPool {
                 q.bind(username);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().next().map(|r: TibRow| GenericRow {
-                    values: vec![
-                        r.get::<i32, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()),
-                        r.get::<&str, _>(2).map(|v| v.to_string()), r.get::<&str, _>(3).map(|v| v.to_string()),
-                        r.get::<&str, _>(4).map(|v| v.to_string()), r.get::<&str, _>(5).map(|v| v.to_string()),
-                        r.get::<bool, _>(6).map(|v| if v { "1".into() } else { "0".into() }),
-                        r.get::<&str, _>(7).map(|v| v.to_string()),
-                    ],
-                }))
+                Ok(rows.into_iter().next().map(|r: TibRow| build_user_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<&str, _>(4).unwrap_or("").to_string(),
+                    r.get::<&str, _>(5).unwrap_or("").to_string(),
+                    r.get::<bool, _>(6).unwrap_or(false),
+                    r.get::<&str, _>(7).unwrap_or("").to_string(),
+                )))
             }
         }
     }
@@ -104,43 +83,43 @@ impl DbPool {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query("SELECT id, username, full_name, email, role, active, created_at FROM users ORDER BY id")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![
-                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
-                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
-                        Some(r.get::<String, _>(4)),
-                        Some(if r.get::<bool, _>(5) { "1".into() } else { "0".into() }),
-                        Some(r.get::<String, _>(6)),
-                    ],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_user_list_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<bool, _>(5),
+                    r.get::<String, _>(6),
+                )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query("SELECT id, username, full_name, email, role, active, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM users ORDER BY id")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![
-                        Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)),
-                        Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)),
-                        Some(r.get::<String, _>(4)),
-                        Some(if r.get::<bool, _>(5) { "1".into() } else { "0".into() }),
-                        Some(r.get::<String, _>(6)),
-                    ],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_user_list_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<bool, _>(5),
+                    r.get::<String, _>(6),
+                )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let mut q = Query::new("SELECT id, username, full_name, email, role, active, CONVERT(NVARCHAR(30), created_at, 120) FROM users ORDER BY id");
+                let q = Query::new("SELECT id, username, full_name, email, role, active, CONVERT(NVARCHAR(30), created_at, 120) FROM users ORDER BY id");
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| GenericRow {
-                    values: vec![
-                        r.get::<i32, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()),
-                        r.get::<&str, _>(2).map(|v| v.to_string()), r.get::<&str, _>(3).map(|v| v.to_string()),
-                        r.get::<&str, _>(4).map(|v| v.to_string()),
-                        r.get::<bool, _>(5).map(|v| if v { "1".into() } else { "0".into() }),
-                        r.get::<&str, _>(6).map(|v| v.to_string()),
-                    ],
-                }).collect())
+                Ok(rows.into_iter().map(|r: TibRow| build_user_list_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<&str, _>(4).unwrap_or("").to_string(),
+                    r.get::<bool, _>(5).unwrap_or(false),
+                    r.get::<&str, _>(6).unwrap_or("").to_string(),
+                )).collect())
             }
         }
     }
@@ -243,25 +222,34 @@ impl DbPool {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<f64, _>(2).to_string()), Some(r.get::<String, _>(3))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_equivalence_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<f64, _>(2),
+                    r.get::<String, _>(3),
+                )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<f64, _>(2).to_string()), Some(r.get::<String, _>(3))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_equivalence_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<f64, _>(2),
+                    r.get::<String, _>(3),
+                )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let mut q = Query::new("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value");
+                let q = Query::new("SELECT ae.signal_id, s.internal_name, ae.numeric_value, ae.display_name FROM attribute_equivalences ae JOIN signals s ON ae.signal_id = s.id ORDER BY s.internal_name, ae.numeric_value");
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| GenericRow {
-                    values: vec![r.get::<i32, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()), r.get::<f64, _>(2).map(|v| v.to_string()), r.get::<&str, _>(3).map(|v| v.to_string())],
-                }).collect())
+                Ok(rows.into_iter().map(|r: TibRow| build_equivalence_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<f64, _>(2).unwrap_or(0.0),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                )).collect())
             }
         }
     }
@@ -345,25 +333,31 @@ impl DbPool {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query("SELECT id, patient_id_str, created_at FROM patients ORDER BY created_at DESC")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_patient_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query("SELECT id, patient_id_str, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM patients ORDER BY created_at DESC")
                     .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_patient_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let mut q = Query::new("SELECT id, patient_id_str, CONVERT(NVARCHAR(30), created_at, 120) FROM patients ORDER BY created_at DESC");
+                let q = Query::new("SELECT id, patient_id_str, CONVERT(NVARCHAR(30), created_at, 120) FROM patients ORDER BY created_at DESC");
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| GenericRow {
-                    values: vec![r.get::<i32, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()), r.get::<&str, _>(2).map(|v| v.to_string())],
-                }).collect())
+                Ok(rows.into_iter().map(|r: TibRow| build_patient_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                )).collect())
             }
         }
     }
@@ -375,18 +369,28 @@ impl DbPool {
                     "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp DESC LIMIT ?2",
                     SQLITE_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)), r.get::<Option<String>, _>(4), Some(r.get::<String, _>(5))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_history_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<Option<String>, _>(4),
+                    r.get::<String, _>(5),
+                )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
                     "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)), r.get::<Option<String>, _>(4), Some(r.get::<String, _>(5))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_history_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<Option<String>, _>(4),
+                    r.get::<String, _>(5),
+                )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
@@ -398,9 +402,14 @@ impl DbPool {
                 q.bind(limit as i32); q.bind(patient_id_str);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| GenericRow {
-                    values: vec![r.get::<i32, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()), r.get::<&str, _>(2).map(|v| v.to_string()), r.get::<&str, _>(3).map(|v| v.to_string()), r.get::<&str, _>(4).map(|v| v.to_string()), r.get::<&str, _>(5).map(|v| v.to_string())],
-                }).collect())
+                Ok(rows.into_iter().map(|r: TibRow| build_history_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<&str, _>(4).map(|v| v.to_string()),
+                    r.get::<&str, _>(5).unwrap_or("").to_string(),
+                )).collect())
             }
         }
     }
@@ -412,18 +421,26 @@ impl DbPool {
                     "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2",
                     SQLITE_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<String, _>(0)), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), r.get::<Option<String>, _>(3), Some(r.get::<String, _>(4))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_export_row(
+                    r.get::<String, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<Option<String>, _>(3),
+                    r.get::<String, _>(4),
+                )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
                     "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| GenericRow {
-                    values: vec![Some(r.get::<String, _>(0)), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), r.get::<Option<String>, _>(3), Some(r.get::<String, _>(4))],
-                }).collect())
+                Ok(rows.into_iter().map(|r| build_export_row(
+                    r.get::<String, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<Option<String>, _>(3),
+                    r.get::<String, _>(4),
+                )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
@@ -435,9 +452,13 @@ impl DbPool {
                 q.bind(limit as i32); q.bind(patient_id_str);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| GenericRow {
-                    values: vec![r.get::<&str, _>(0).map(|v| v.to_string()), r.get::<&str, _>(1).map(|v| v.to_string()), r.get::<&str, _>(2).map(|v| v.to_string()), r.get::<&str, _>(3).map(|v| v.to_string()), r.get::<&str, _>(4).map(|v| v.to_string())],
-                }).collect())
+                Ok(rows.into_iter().map(|r: TibRow| build_export_row(
+                    r.get::<&str, _>(0).unwrap_or("").to_string(),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).map(|v| v.to_string()),
+                    r.get::<&str, _>(4).unwrap_or("").to_string(),
+                )).collect())
             }
         }
     }

@@ -99,9 +99,8 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
               <User size={20} color="var(--secondary)" /> General Information
             </h3>
             <StatCard title="Patient ID" value={data.info.g_patient_id_str.value} iconName="Contact" color="#0ea5e9" />
-            <StatCard title="System State" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" />
-            <StatCard title="Current Action" value={data.info.g_trmt_sub_state_set.value} iconName="Layers" color="#8b5cf6" />
             <StatCard title="Patient Weight" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
+            <StatCard title="System State" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" />
             <StatCard title="Therapy Mode" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" />
             <StatCard title="Anticoagulant" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" />
             <StatCard title="Renal Dose" value={data.info.d_renal_dose_act.value} unit={data.info.d_renal_dose_act.unit} iconName="Zap" color="#f97316" />
@@ -130,7 +129,7 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
             <h3 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '40px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Thermometer size={20} color="var(--accent)" /> Real-Time Pressures
             </h3>
-            
+
             {/* Cylinders */}
             <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: '40px', minHeight: '200px' }}>
               <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
@@ -148,21 +147,21 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.history}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis 
-                      dataKey="time" 
-                      stroke="var(--text-muted)" 
-                      fontSize={12} 
-                      tickLine={false} 
+                    <XAxis
+                      dataKey="time"
+                      stroke="var(--text-muted)"
+                      fontSize={12}
+                      tickLine={false}
                       axisLine={false}
                     />
-                    <YAxis 
-                      stroke="var(--text-muted)" 
-                      fontSize={12} 
-                      tickLine={false} 
+                    <YAxis
+                      stroke="var(--text-muted)"
+                      fontSize={12}
+                      tickLine={false}
                       axisLine={false}
                       domain={['auto', 'auto']}
                     />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', background: 'var(--panel-bg)' }}
                       labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
                     />
