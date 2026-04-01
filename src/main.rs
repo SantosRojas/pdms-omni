@@ -48,6 +48,8 @@ async fn initialize_device_with_retry_timeout<Dev>(
         Dev,
     >,
     retry_timeout_secs: u64,
+    backoff_step_secs: u64,
+    backoff_max_attempts: u32,
 ) -> Result<crate::domain::entities::VersionInfo, Box<dyn std::error::Error>>
 where
     Dev: crate::domain::device::DeviceCommunicator,
@@ -71,7 +73,7 @@ where
                 }
 
                 let remaining = retry_timeout.saturating_sub(elapsed);
-                let backoff_secs = (attempt.min(6) * 2) as u64;
+                let backoff_secs = backoff_step_secs.saturating_mul(attempt.min(backoff_max_attempts) as u64);
                 let sleep_secs = backoff_secs.min(remaining.as_secs().max(1));
                 eprintln!("[Device] Inicialización fallida (intento {}): {}", attempt, e);
                 eprintln!("[Device] Reintentando en {}s...", sleep_secs);
@@ -90,11 +92,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Configuración
     let config = AppConfig::from_env();
     println!(
-        "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, WS=ws://{}:{}/ws",
+        "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, Backoff={}s x{} intentos, WS=ws://{}:{}/ws",
         config.get_database_url_redacted(),
         config.port_name,
         config.baudrate,
         config.serial_timeout_secs,
+        config.device_init_retry_backoff_step_secs,
+        config.device_init_retry_backoff_max_attempts,
         config.ws_host,
         config.ws_port
     );
@@ -167,7 +171,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 5. Inicialización del protocolo OMNI-ODI
-    let version = match initialize_device_with_retry_timeout(&mut interactor, config.device_init_retry_timeout_secs).await {
+    let version = match initialize_device_with_retry_timeout(
+        &mut interactor,
+        config.device_init_retry_timeout_secs,
+        config.device_init_retry_backoff_step_secs,
+        config.device_init_retry_backoff_max_attempts,
+    ).await {
         Ok(version) => version,
         Err(e) => {
             eprintln!("[Device] {}", e);

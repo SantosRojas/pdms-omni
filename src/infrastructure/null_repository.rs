@@ -51,6 +51,10 @@ impl DictionaryRepository for NullDictionaryRepository {
         Ok(())
     }
 
+    async fn save_batch(&self, _entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+
     async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         Ok(Vec::new())
     }

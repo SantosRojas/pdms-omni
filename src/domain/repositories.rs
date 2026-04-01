@@ -23,6 +23,12 @@ pub trait DataAttributeRepository: Send + Sync {
 /// Persists and retrieves dictionary entries (labels, units, etc.).
 pub trait DictionaryRepository: Send + Sync {
     async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError>;
+    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+        for entry in entries {
+            self.save(entry).await?;
+        }
+        Ok(())
+    }
     async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError>;
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError>;
     async fn delete_all(&self) -> Result<(), RepositoryError>;

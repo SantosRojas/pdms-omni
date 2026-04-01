@@ -153,6 +153,26 @@ impl DictionaryRepository for MssqlDictionaryRepository {
         Ok(())
     }
 
+    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        for entry in entries {
+            let mut q = Query::new(
+                "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id) AS src ON tgt.dict_id = src.dict_id \
+                 WHEN MATCHED THEN UPDATE SET text = @P2 \
+                 WHEN NOT MATCHED THEN INSERT (dict_id, text) VALUES (@P1, @P2);"
+            );
+            q.bind(entry.dict_id as i32);
+            q.bind(entry.text.as_str());
+            q.execute(&mut *conn).await.map_err(map_db_err)?;
+        }
+
+        Ok(())
+    }
+
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new("SELECT dict_id, text FROM dictionary WHERE dict_id = @P1");

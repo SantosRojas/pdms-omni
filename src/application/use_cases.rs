@@ -327,7 +327,6 @@ where
                 dict_id,
                 text: text.clone(),
             };
-            self.dict_repo.save(&entry).await?;
             self.dict_cache.insert(dict_id, text.clone());
             entries.push(entry);
 
@@ -349,6 +348,7 @@ where
             prev_id = dict_id;
         }
 
+        self.dict_repo.save_batch(&entries).await?;
         println!("      Dictionary complete: {} entries", entries.len());
         Ok(entries)
     }

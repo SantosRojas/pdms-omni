@@ -148,6 +148,25 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         Ok(())
     }
 
+    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
+        for entry in entries {
+            sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text) VALUES (?1, ?2)")
+                .bind(entry.dict_id)
+                .bind(&entry.text)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_db_err)?;
+        }
+
+        tx.commit().await.map_err(map_db_err)?;
+        Ok(())
+    }
+
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError> {
         let row = sqlx::query("SELECT dict_id, text FROM dictionary WHERE dict_id = ?1")
             .bind(dict_id)
