@@ -4,11 +4,14 @@
 use sqlx::{SqlitePool, Row};
 
 use crate::domain::entities::{
-    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
+    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
 };
 use crate::domain::repositories::{
     AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository, RepositoryError,
     TelemetryRepository, VersionRepository,
+};
+use crate::infrastructure::persistence_helpers::{
+    SQLITE_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: sqlx::Error) -> RepositoryError {
@@ -197,10 +200,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         // SQLite uses dynamic typing, but sqlx forces us to bind a specific rust type. 
         // We can just bind the exact type. To keep it simple, we store numerical as REAL and string as TEXT.
         // Wait, for SQLite, we can just bind both as TEXT or bind the one that has value,
-        let physical_value = match &reading.physical_value {
-            TelemetryValue::Number(n) => n.to_string(),
-            TelemetryValue::String(s) => s.clone(),
-        };
+        let physical_value = telemetry_value_to_storage(&reading.physical_value);
 
         sqlx::query(
             "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
@@ -221,10 +221,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         
         for reading in readings {
-            let physical_value = match &reading.physical_value {
-                TelemetryValue::Number(n) => n.to_string(),
-                TelemetryValue::String(s) => s.clone(),
-            };
+            let physical_value = telemetry_value_to_storage(&reading.physical_value);
             
             sqlx::query(
                 "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
@@ -245,13 +242,14 @@ impl TelemetryRepository for SqlxTelemetryRepository {
     }
 
     async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
-        let rows = sqlx::query(
+        let rows = sqlx::query(&format!(
             "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
              JOIN signals s ON t.signal_id = s.id
-             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
-             ORDER BY t.id DESC LIMIT ?1"
-        )
+             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+             ORDER BY t.id DESC LIMIT ?1",
+            SQLITE_NUMERIC_EQ_EXPR
+        ))
         .bind(limit)
         .fetch_all(&self.pool)
         .await
@@ -259,11 +257,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
 
         Ok(rows.into_iter().map(|row| {
             let phys_str: String = row.get(6);
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
             
             TelemetryReading {
                 id: Some(row.get(0)),
@@ -296,15 +290,16 @@ impl TelemetryRepository for SqlxTelemetryRepository {
     }
 
     async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
-        let rows = sqlx::query(
+        let rows = sqlx::query(&format!(
             "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
              JOIN patients p ON t.patient_id = p.id
              JOIN signals s ON t.signal_id = s.id
-             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
+             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
              WHERE p.patient_id_str = ?1
-             ORDER BY t.timestamp DESC LIMIT ?2"
-        )
+             ORDER BY t.timestamp DESC LIMIT ?2",
+            SQLITE_NUMERIC_EQ_EXPR
+        ))
         .bind(patient_id_str)
         .bind(limit)
         .fetch_all(&self.pool)
@@ -313,11 +308,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
 
         Ok(rows.into_iter().map(|row| {
              let phys_str: String = row.get(6);
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
             
             TelemetryReading {
                 id: Some(row.get(0)),

@@ -7,11 +7,14 @@ use bb8_tiberius::ConnectionManager;
 use tiberius::{Row, Query};
 
 use crate::domain::entities::{
-    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
+    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
 };
 use crate::domain::repositories::{
     AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository, RepositoryError,
     TelemetryRepository, VersionRepository,
+};
+use crate::infrastructure::persistence_helpers::{
+    MSSQL_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: impl std::fmt::Display) -> RepositoryError {
@@ -198,10 +201,7 @@ impl MssqlTelemetryRepository {
 
 impl TelemetryRepository for MssqlTelemetryRepository {
     async fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError> {
-        let physical_value = match &reading.physical_value {
-            TelemetryValue::Number(n) => n.to_string(),
-            TelemetryValue::String(s) => s.clone(),
-        };
+        let physical_value = telemetry_value_to_storage(&reading.physical_value);
 
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
@@ -225,25 +225,23 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
     async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new(
-                "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
-                    t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
-                 FROM telemetry t \
-                 JOIN signals s ON t.signal_id = s.id \
-                 LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value \
-                 ORDER BY t.id DESC"
+        let query = format!(
+            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+                t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
+             FROM telemetry t \
+             JOIN signals s ON t.signal_id = s.id \
+             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value \
+             ORDER BY t.id DESC",
+             MSSQL_NUMERIC_EQ_EXPR
         );
+        let mut q = Query::new(query);
         q.bind(limit as i32);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
         Ok(rows.into_iter().map(|row: Row| {
             let phys_str = row.get::<&str, _>(6).unwrap_or("0").to_string();
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
             TelemetryReading {
                 id: row.get::<i32, _>(0).map(|v| v as i64),
                 timestamp: row.get::<&str, _>(1).unwrap_or("").to_string(),
@@ -281,16 +279,18 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
     async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new(
-                "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
-                    t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
-                 FROM telemetry t \
-                 JOIN patients p ON t.patient_id = p.id \
-                 JOIN signals s ON t.signal_id = s.id \
-                 LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value \
-                 WHERE p.patient_id_str = @P1 \
-                 ORDER BY t.timestamp DESC"
+        let query = format!(
+            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+                t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
+             FROM telemetry t \
+             JOIN patients p ON t.patient_id = p.id \
+             JOIN signals s ON t.signal_id = s.id \
+             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value \
+             WHERE p.patient_id_str = @P1 \
+             ORDER BY t.timestamp DESC",
+             MSSQL_NUMERIC_EQ_EXPR
         );
+        let mut q = Query::new(query);
         q.bind(limit as i32);
         q.bind(patient_id_str);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
@@ -298,11 +298,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
         Ok(rows.into_iter().map(|row: Row| {
             let phys_str = row.get::<&str, _>(6).unwrap_or("0").to_string();
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
             TelemetryReading {
                 id: row.get::<i32, _>(0).map(|v| v as i64),
                 timestamp: row.get::<&str, _>(1).unwrap_or("").to_string(),

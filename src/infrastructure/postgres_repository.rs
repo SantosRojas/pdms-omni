@@ -4,11 +4,14 @@
 use sqlx::{PgPool, Row};
 
 use crate::domain::entities::{
-    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
+    AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
 };
 use crate::domain::repositories::{
     AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository, RepositoryError,
     TelemetryRepository, VersionRepository,
+};
+use crate::infrastructure::persistence_helpers::{
+    POSTGRES_NUMERIC_EQ_EXPR, telemetry_value_from_storage, telemetry_value_to_storage,
 };
 
 fn map_db_err(e: sqlx::Error) -> RepositoryError {
@@ -29,10 +32,6 @@ async fn get_or_create_signal_id(pool: &PgPool, name: &str) -> Result<i64, Repos
         .map_err(map_db_err)?;
 
     Ok(row.get(0))
-}
-
-fn telemetry_numeric_match_expr() -> &'static str {
-    r#"CASE WHEN t.physical_value ~ '^-?[0-9]+(\.[0-9]+)?$' THEN t.physical_value::double precision END"#
 }
 
 // ═══════════════════════════════════════════════
@@ -204,10 +203,7 @@ impl PgTelemetryRepository {
 
 impl TelemetryRepository for PgTelemetryRepository {
     async fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError> {
-        let physical_value = match &reading.physical_value {
-            TelemetryValue::Number(n) => n.to_string(),
-            TelemetryValue::String(s) => s.clone(),
-        };
+        let physical_value = telemetry_value_to_storage(&reading.physical_value);
 
         sqlx::query(
             "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
@@ -240,7 +236,7 @@ impl TelemetryRepository for PgTelemetryRepository {
              LEFT JOIN attribute_equivalences e
                ON s.id = e.signal_id AND {} = e.numeric_value
              ORDER BY t.id DESC LIMIT $1",
-            telemetry_numeric_match_expr()
+            POSTGRES_NUMERIC_EQ_EXPR
         ))
         .bind(limit as i64)
         .fetch_all(&self.pool)
@@ -249,11 +245,7 @@ impl TelemetryRepository for PgTelemetryRepository {
 
         Ok(rows.into_iter().map(|row| {
             let phys_str: String = row.get(6);
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
 
             TelemetryReading {
                 id: Some(row.get::<i64, _>(0)),
@@ -296,7 +288,7 @@ impl TelemetryRepository for PgTelemetryRepository {
                ON s.id = e.signal_id AND {} = e.numeric_value
              WHERE p.patient_id_str = $1
              ORDER BY t.timestamp DESC LIMIT $2",
-            telemetry_numeric_match_expr()
+            POSTGRES_NUMERIC_EQ_EXPR
         ))
         .bind(patient_id_str)
         .bind(limit as i64)
@@ -306,11 +298,7 @@ impl TelemetryRepository for PgTelemetryRepository {
 
         Ok(rows.into_iter().map(|row| {
             let phys_str: String = row.get(6);
-            let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                TelemetryValue::Number(n)
-            } else {
-                TelemetryValue::String(phys_str)
-            };
+            let physical_value = telemetry_value_from_storage(phys_str);
 
             TelemetryReading {
                 id: Some(row.get::<i64, _>(0)),
