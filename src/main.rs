@@ -26,6 +26,16 @@ struct TelemetryEvent<'a> {
     therapy_state_name: String,
     therapy_start: Option<String>,
     therapy_end: Option<String>,
+    persistence_enabled: bool,
+    persistence_status: &'static str,
+}
+
+async fn run_api_only_mode() -> Result<(), Box<dyn std::error::Error>> {
+    println!("[Modo] API-only activo: sin dispositivo serial. HTTP/WS permanecen operativos.");
+    println!("[Modo] Presiona Ctrl+C para detener el servicio.");
+    tokio::signal::ctrl_c().await?;
+    println!("[Modo] Señal de apagado recibida. Cerrando servicio...");
+    Ok(())
 }
 
 #[tokio::main]
@@ -38,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env();
     println!(
         "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, WS=ws://{}:{}/ws",
-        config.get_database_url(),
+        config.get_database_url_redacted(),
         config.port_name,
         config.baudrate,
         config.serial_timeout_secs,
@@ -64,12 +74,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ws_addr = format!("{}:{}", config.ws_host, config.ws_port).parse()?;
 
     // 2. Base de datos (intercambiable)
-    let db_url = config.get_database_url();
-    let repos = database::initialize_db(&db_url).await?;
-    println!("[DB] Conectada: {}", db_url);
+    let db_config = config.database_config();
+    let (repos, persistence_enabled) = match database::initialize_db(&db_config).await {
+        Ok(repos) => {
+            println!("[DB] Conectada: {}", config.get_database_url_redacted());
+            (repos, true)
+        }
+        Err(e) => {
+            eprintln!("[DB] ERROR de conexión: {}", e);
+            eprintln!("[DB] Persistencia deshabilitada: se continuará con lectura serial en tiempo real.");
+            (database::initialize_without_persistence(), false)
+        }
+    };
 
     // 3. WebSocket + HTTP API server (shares DB connection)
-    let ws_hub = WebSocketHub::start(ws_addr, repos.db.clone())?;
+    let ws_hub = WebSocketHub::start(ws_addr, repos.db.clone(), persistence_enabled)?;
 
     // 3. Dispositivo serial (intercambiable)
     let serial_config = SerialConfig {
@@ -79,7 +98,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         src_addr: config.src_addr,
         dst_addr: config.dst_addr,
     };
-    let device = SerialDeviceCommunicator::new(serial_config)?;
+    let device = match SerialDeviceCommunicator::new(serial_config) {
+        Ok(dev) => dev,
+        Err(err) => {
+            eprintln!("[Serial] No se pudo abrir el puerto: {}", err);
+            eprintln!("[Serial] Continuando en modo API-only.");
+            // Keep the server handle alive while waiting for shutdown signal.
+            let _keep_ws_alive = ws_hub;
+            return run_api_only_mode().await;
+        }
+    };
     println!(
         "[Serial] Puerto {} abierto (19200, 8N1)\n",
         config.port_name
@@ -108,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut therapy_start_time: Option<String> = None;
     let mut therapy_end_time: Option<String> = None;
     let mut current_patient_id: Option<i64> = None;
+    let mut persistence_warned = false;
 
     println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
 
@@ -159,16 +188,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(pid) = patient_id {
                     if is_in_therapy && !was_in_therapy {
-                        println!("[DB] Detectado INICIO de terapia!");
+                        println!("[Therapy] Detectado INICIO de terapia!");
                         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                         therapy_start_time = Some(now);
                         therapy_end_time = None;
-                        let _ = interactor.start_therapy(pid).await;
+                        if persistence_enabled {
+                            let _ = interactor.start_therapy(pid).await;
+                        }
                     } else if !is_in_therapy && was_in_therapy {
-                        println!("[DB] Detectado FIN de terapia!");
+                        println!("[Therapy] Detectado FIN de terapia!");
                         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                         therapy_end_time = Some(now);
-                        let _ = interactor.end_therapy(pid).await;
+                        if persistence_enabled {
+                            let _ = interactor.end_therapy(pid).await;
+                        }
                     }
                 }
                 was_in_therapy = is_in_therapy;
@@ -206,6 +239,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     therapy_state_name: therapy_state_name.clone(),
                     therapy_start: therapy_start_time.clone(),
                     therapy_end: therapy_end_time.clone(),
+                    persistence_enabled,
+                    persistence_status: if persistence_enabled { "persisting" } else { "not_persisting" },
                 };
                 if let Err(e) = ws_hub.broadcast_json(&event) {
                     eprintln!("[WS] No se pudo serializar/broadcast de ciclo {}: {}", cycle, e);
@@ -213,6 +248,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Persist only every DB_SAVE_INTERVAL (Snapshots) AND only if we are in therapy if requested
                 if last_save.elapsed() >= save_interval {
+                    if !persistence_enabled {
+                        if !persistence_warned {
+                            eprintln!("[Persistencia] DESHABILITADA: los datos se muestran en tiempo real pero no se guardan en base de datos.");
+                            persistence_warned = true;
+                        }
+                        last_save = tokio::time::Instant::now();
+                        continue;
+                    }
+
                     let should_save = !config.db_save_only_on_therapy || is_in_therapy;
                     
                     if should_save {

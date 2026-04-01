@@ -18,14 +18,9 @@ pub struct WebSocketHub {
 }
 
 impl WebSocketHub {
-    pub fn start(addr: SocketAddr, db: DbPool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn start(addr: SocketAddr, db: Option<DbPool>, persistence_enabled: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
-
-        let api_state = ApiState {
-            db,
-            sessions: Arc::new(Mutex::new(HashMap::new())),
-        };
 
         tokio::spawn(async move {
             let cors = CorsLayer::new()
@@ -33,31 +28,62 @@ impl WebSocketHub {
                 .allow_methods(Any)
                 .allow_headers(Any);
 
-            let app = Router::new()
-                // WebSocket
-                .route("/ws", get(move |ws: WebSocketUpgrade| {
-                    let tx = app_tx.clone();
-                    async move { ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe())) }
-                }))
-                // Auth
-                .route("/api/auth/login", post(http_api::login))
-                .route("/api/auth/logout", post(http_api::logout))
-                .route("/api/auth/me", get(http_api::get_me))
-                // Users CRUD
-                .route("/api/users", get(http_api::list_users))
-                .route("/api/users", post(http_api::create_user))
-                .route("/api/users/{id}", put(http_api::update_user))
-                .route("/api/users/{id}", delete(http_api::delete_user))
-                // Equivalences CRUD
-                .route("/api/equivalences", get(http_api::list_equivalences))
-                .route("/api/equivalences", post(http_api::create_equivalence))
-                .route("/api/equivalences", delete(http_api::delete_equivalence))
-                // Telemetry
-                .route("/api/patients", get(http_api::list_patients))
-                .route("/api/history", get(http_api::patient_history))
-                .route("/api/export", get(http_api::export_csv))
-                .with_state(api_state)
-                .layer(cors);
+            let ws_route = move |ws: WebSocketUpgrade| {
+                let tx = app_tx.clone();
+                async move { ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe())) }
+            };
+
+            let app = if let Some(db) = db {
+                let api_state = ApiState {
+                    db,
+                    sessions: Arc::new(Mutex::new(HashMap::new())),
+                };
+
+                Router::new()
+                    .route("/ws", get(ws_route))
+                    .route("/api/status", get({
+                        let persistence_enabled = persistence_enabled;
+                        move || async move {
+                            axum::Json(serde_json::json!({
+                                "ok": true,
+                                "persistence_enabled": persistence_enabled
+                            }))
+                        }
+                    }))
+                    // Auth
+                    .route("/api/auth/login", post(http_api::login))
+                    .route("/api/auth/logout", post(http_api::logout))
+                    .route("/api/auth/me", get(http_api::get_me))
+                    // Users CRUD
+                    .route("/api/users", get(http_api::list_users))
+                    .route("/api/users", post(http_api::create_user))
+                    .route("/api/users/{id}", put(http_api::update_user))
+                    .route("/api/users/{id}", delete(http_api::delete_user))
+                    // Equivalences CRUD
+                    .route("/api/equivalences", get(http_api::list_equivalences))
+                    .route("/api/equivalences", post(http_api::create_equivalence))
+                    .route("/api/equivalences", delete(http_api::delete_equivalence))
+                    // Telemetry
+                    .route("/api/patients", get(http_api::list_patients))
+                    .route("/api/history", get(http_api::patient_history))
+                    .route("/api/export", get(http_api::export_csv))
+                    .with_state(api_state)
+                    .layer(cors)
+            } else {
+                Router::new()
+                    .route("/ws", get(ws_route))
+                    .route("/api/status", get({
+                        let persistence_enabled = persistence_enabled;
+                        move || async move {
+                            axum::Json(serde_json::json!({
+                                "ok": true,
+                                "persistence_enabled": persistence_enabled,
+                                "message": "API de persistencia deshabilitada: base de datos no disponible"
+                            }))
+                        }
+                    }))
+                    .layer(cors)
+            };
 
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,

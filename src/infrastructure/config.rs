@@ -8,6 +8,23 @@ pub enum CaptureMode {
     Selected,
 }
 
+#[derive(Debug, Clone)]
+pub struct MssqlSettings {
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+    pub trust_server_certificate: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum DatabaseConfig {
+    Sqlite { url: String },
+    Mssql(MssqlSettings),
+    Other { url: String },
+}
+
 pub struct AppConfig {
     pub port_name: String,
     pub baudrate: u32,
@@ -113,23 +130,46 @@ impl AppConfig {
         }
     }
 
-    /// Forms the proper JDBC/SQLx connection string based on the Laravel style variables.
-    pub fn get_database_url(&self) -> String {
-        match self.db_connection.as_str() {
-            "sqlite" => format!("sqlite://{}", self.db_database),
-            "mssql" | "sqlsrv" => format!(
-                "mssql://{}:{}@{}:{}/{}",
-                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+    pub fn database_config(&self) -> DatabaseConfig {
+        let driver = self.db_connection.to_ascii_lowercase();
+        match driver.as_str() {
+            "sqlite" => DatabaseConfig::Sqlite {
+                url: format!("sqlite://{}", self.db_database),
+            },
+            "mssql" | "sqlsrv" => DatabaseConfig::Mssql(MssqlSettings {
+                host: self.db_host.clone(),
+                port: self.db_port.parse::<u16>().unwrap_or(1433),
+                database: self.db_database.clone(),
+                username: self.db_username.clone(),
+                password: self.db_password.clone(),
+                trust_server_certificate: true,
+            }),
+            "postgres" | "pgsql" => DatabaseConfig::Other {
+                url: format!(
+                    "postgres://{}:{}@{}:{}/{}",
+                    self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+                ),
+            },
+            "mysql" => DatabaseConfig::Other {
+                url: format!(
+                    "mysql://{}:{}@{}:{}/{}",
+                    self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+                ),
+            },
+            _ => DatabaseConfig::Other {
+                url: format!("{}://{}", self.db_connection, self.db_database),
+            },
+        }
+    }
+
+    pub fn get_database_url_redacted(&self) -> String {
+        match self.database_config() {
+            DatabaseConfig::Sqlite { url } => url,
+            DatabaseConfig::Mssql(cfg) => format!(
+                "mssql://{}:***@{}:{}/{}",
+                cfg.username, cfg.host, cfg.port, cfg.database
             ),
-            "postgres" | "pgsql" => format!(
-                "postgres://{}:{}@{}:{}/{}",
-                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
-            ),
-            "mysql" => format!(
-                "mysql://{}:{}@{}:{}/{}",
-                self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
-            ),
-            _ => format!("{}://{}", self.db_connection, self.db_database), // Fallback
+            DatabaseConfig::Other { .. } => format!("{}://***", self.db_connection),
         }
     }
 }

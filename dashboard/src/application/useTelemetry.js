@@ -22,9 +22,11 @@ export const useTelemetry = (patientId) => {
       c_acc_therapy_time_act: { value: 0, unit: 'min' },
       g_patient_id_str: { value: 'N/A' },
       d_renal_dose_act: { value: 0, unit: 'ml/kg/h' },
+      c_acc_net_rem_vol_act: { value: 0, unit: 'ml' },
       g_trmt_main_state_set: { value: 'N/A' },
       g_trmt_sub_state_set: { value: 'N/A' }
-    }
+    },
+    history: []
   });
 
   const [connected, setConnected] = useState(false);
@@ -45,6 +47,18 @@ export const useTelemetry = (patientId) => {
           pressures: { ...prev.pressures },
           flows: { ...prev.flows },
           info: { ...prev.info },
+          history: [...prev.history],
+        };
+
+        const now = new Date();
+        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+        
+        const newPoint = { 
+          time: timeStr,
+          c_press_ap_act: prev.pressures.c_press_ap_act.value,
+          c_press_vp_act: prev.pressures.c_press_vp_act.value,
+          c_press_fp_act: prev.pressures.c_press_fp_act.value,
+          c_press_tmp_act: prev.pressures.c_press_tmp_act.value,
         };
 
         readings.forEach(item => {
@@ -55,12 +69,16 @@ export const useTelemetry = (patientId) => {
 
           if (next.pressures[name] !== undefined) {
             next.pressures[name] = { value: val, unit: item.unit };
+            newPoint[name] = val;
           } else if (next.flows[name] !== undefined) {
             next.flows[name] = { value: val, unit: item.unit };
           } else if (next.info[name] !== undefined) {
             next.info[name] = { value: val, unit: item.unit || '' };
           }
         });
+
+        next.history.push(newPoint);
+        if (next.history.length > 50) next.history.shift();
 
         return next;
       });

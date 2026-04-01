@@ -4,7 +4,8 @@ import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
   const [patients, setPatients] = useState([]);
@@ -90,7 +91,7 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
       </header>
 
       {/* Main Grid */}
-      <div className="dashboard-grid">
+      <div className="dashboard-grid" style={{ gridTemplateColumns: 'minmax(280px, 1fr) 3fr', gap: '20px' }}>
         {/* Left - Info */}
         <div className="side-panel">
           <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -106,11 +107,12 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
             <StatCard title="Renal Dose" value={data.info.d_renal_dose_act.value} unit={data.info.d_renal_dose_act.unit} iconName="Zap" color="#f97316" />
             <StatCard title="Kit Type" value={data.info.d_kit_type_str.value} iconName="HardDrive" color="#eab308" />
             <StatCard title="Therapy Time" value={data.info.c_acc_therapy_time_act.value} unit={data.info.c_acc_therapy_time_act.unit} iconName="Clock" color="var(--primary)" />
+            <StatCard title="Acc. Net Removal" value={data.info.c_acc_net_rem_vol_act.value} unit={data.info.c_acc_net_rem_vol_act.unit} iconName="Droplets" color="#22d3ee" />
           </div>
         </div>
 
         {/* Right */}
-        <div className="main-panel">
+        <div className="main-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Flows */}
           <div className="glass-panel" style={{ padding: '24px' }}>
             <h3 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -124,15 +126,54 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
           </div>
 
           {/* Pressures */}
-          <div className="glass-panel animate-slide-up" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div className="glass-panel" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '40px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Thermometer size={20} color="var(--accent)" /> Real-Time Pressures
             </h3>
-            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', flex: 1, paddingBottom: '20px' }}>
+            
+            {/* Cylinders */}
+            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: '40px', minHeight: '200px' }}>
               <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
               <Cylinder label="Venous (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={300} min={-400} colorVar="--ven-color" />
               <Cylinder label="TMP (PTM)" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} max={80} min={0} colorVar="--tmp-color" />
               <Cylinder label="Filter (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} max={500} min={0} colorVar="--fil-color" />
+            </div>
+
+            {/* Time Series Chart */}
+            <div style={{ flex: 1, minHeight: '300px', width: '100%', marginTop: 'auto', borderTop: '1px solid var(--border)', pt: '24px' }}>
+              <h4 style={{ margin: '20px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                <TrendingUp size={16} /> Pressure Trends (Time Series)
+              </h4>
+              <div style={{ width: '100%', height: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.history}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis 
+                      dataKey="time" 
+                      stroke="var(--text-muted)" 
+                      fontSize={12} 
+                      tickLine={false} 
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      stroke="var(--text-muted)" 
+                      fontSize={12} 
+                      tickLine={false} 
+                      axisLine={false}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', background: 'var(--panel-bg)' }}
+                      labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={3} animationDuration={300} />
+                    <Line type="monotone" dataKey="c_press_vp_act" stroke="var(--ven-color)" name="Venous" dot={false} strokeWidth={3} animationDuration={300} />
+                    <Line type="monotone" dataKey="c_press_tmp_act" stroke="var(--tmp-color)" name="TMP" dot={false} strokeWidth={3} animationDuration={300} />
+                    <Line type="monotone" dataKey="c_press_fp_act" stroke="var(--fil-color)" name="Filter" dot={false} strokeWidth={3} animationDuration={300} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </div>

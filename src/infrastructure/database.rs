@@ -5,10 +5,15 @@
 use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row as SqlxRow};
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
-use tiberius::{Row as TibRow, Query as TibQuery};
+use tiberius::{AuthMethod, Config as TibConfig, Row as TibRow, Query as TibQuery};
 use std::str::FromStr;
 
 use super::db_pool::DbPool;
+use super::config::{DatabaseConfig, MssqlSettings};
+use super::null_repository::{
+    NullAttributeEquivalenceRepository, NullDataAttrRepository, NullDictionaryRepository,
+    NullTelemetryRepository, NullVersionRepository,
+};
 use super::repo_dispatch::*;
 use super::sqlx_repository::*;
 use super::mssql_repository::*;
@@ -22,16 +27,30 @@ pub struct Repositories {
     pub version_repo:   DynVersionRepo,
     pub equiv_repo:     DynEquivRepo,
     /// Shared DB pool for the HTTP API layer
-    pub db: DbPool,
+    pub db: Option<DbPool>,
 }
 
 /// Initializes the database: opens connection, creates schema,
 /// and returns all repository instances ready for injection.
-pub async fn initialize_db(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
-    if db_url.starts_with("mssql://") {
-        initialize_mssql(db_url).await
-    } else {
-        initialize_sqlite(db_url).await
+pub async fn initialize_db(db_config: &DatabaseConfig) -> Result<Repositories, Box<dyn std::error::Error>> {
+    match db_config {
+        DatabaseConfig::Sqlite { url } => initialize_sqlite(url).await,
+        DatabaseConfig::Mssql(cfg) => initialize_mssql(cfg).await,
+        DatabaseConfig::Other { url } => {
+            Err(format!("DB backend not implemented yet for URL: {}", url).into())
+        }
+    }
+}
+
+/// Builds in-memory/no-op repositories for degraded operation without persistence.
+pub fn initialize_without_persistence() -> Repositories {
+    Repositories {
+        attr_repo:      DynAttrRepo::Null(NullDataAttrRepository::new()),
+        dict_repo:      DynDictRepo::Null(NullDictionaryRepository::new()),
+        telemetry_repo: DynTelemetryRepo::Null(NullTelemetryRepository::new()),
+        version_repo:   DynVersionRepo::Null(NullVersionRepository::new()),
+        equiv_repo:     DynEquivRepo::Null(NullAttributeEquivalenceRepository::new()),
+        db:             None,
     }
 }
 
@@ -164,7 +183,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         telemetry_repo: DynTelemetryRepo::Sqlite(SqlxTelemetryRepository::new(pool.clone())),
         version_repo:   DynVersionRepo::Sqlite(SqlxVersionRepository::new(pool.clone())),
         equiv_repo:     DynEquivRepo::Sqlite(SqlxAttributeEquivalenceRepository::new(pool.clone())),
-        db:             DbPool::Sqlite(pool),
+        db:             Some(DbPool::Sqlite(pool)),
     })
 }
 
@@ -172,26 +191,23 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
 //  MSSQL backend (new)
 // ═══════════════════════════════════════════════════════════════
 
-/// Parses an mssql:// URL into tiberius-compatible ADO.NET connection string
-fn parse_mssql_url(url: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Expected format: mssql://user:password@host:port/database
-    let stripped = url.strip_prefix("mssql://").unwrap_or(url);
-    let (user_pass, rest) = stripped.split_once('@').ok_or("Invalid MSSQL URL: missing @")?;
-    let (user, pass) = user_pass.split_once(':').ok_or("Invalid MSSQL URL: missing password")?;
-    let (host_port, db) = rest.split_once('/').ok_or("Invalid MSSQL URL: missing database")?;
-    let (host, port) = host_port.split_once(':').unwrap_or((host_port, "1433"));
-
-    Ok(format!(
-        "server=tcp:{},{};user={};password={};database={};TrustServerCertificate=true",
-        host, port, user, pass, db
-    ))
-}
-
-async fn initialize_mssql(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
-    let conn_str = parse_mssql_url(db_url)?;
+async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
     println!("  [DB] Connecting to SQL Server...");
 
-    let mgr = ConnectionManager::build(conn_str.as_str())?;
+    // Keep this aligned with the known-good standalone tiberius sample.
+    let mut tib_config = TibConfig::new();
+    tib_config.host(settings.host.as_str());
+    tib_config.port(settings.port);
+    tib_config.database(settings.database.as_str());
+    tib_config.authentication(AuthMethod::sql_server(
+        settings.username.as_str(),
+        settings.password.as_str(),
+    ));
+    if settings.trust_server_certificate {
+        tib_config.trust_cert();
+    }
+
+    let mgr = ConnectionManager::new(tib_config);
     let pool = Pool::builder().max_size(8).build(mgr).await?;
 
     // Create schema (MSSQL uses IF NOT EXISTS via conditional checks)
@@ -327,6 +343,6 @@ async fn initialize_mssql(db_url: &str) -> Result<Repositories, Box<dyn std::err
         telemetry_repo: DynTelemetryRepo::Mssql(MssqlTelemetryRepository::new(pool.clone())),
         version_repo:   DynVersionRepo::Mssql(MssqlVersionRepository::new(pool.clone())),
         equiv_repo:     DynEquivRepo::Mssql(MssqlAttributeEquivalenceRepository::new(pool.clone())),
-        db:             DbPool::Mssql(pool),
+        db:             Some(DbPool::Mssql(pool)),
     })
 }

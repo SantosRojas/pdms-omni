@@ -1,5 +1,6 @@
 pub mod sqlx_repository;
 pub mod mssql_repository;
+pub mod null_repository;
 pub mod repo_dispatch;
 pub mod db_pool;
 pub mod serial_communicator;
