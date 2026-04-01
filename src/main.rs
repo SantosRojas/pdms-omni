@@ -38,6 +38,49 @@ async fn run_api_only_mode() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn initialize_device_with_retry_timeout<Dev>(
+    interactor: &mut OmniInteractor<
+        impl crate::domain::repositories::DataAttributeRepository,
+        impl crate::domain::repositories::DictionaryRepository,
+        impl crate::domain::repositories::TelemetryRepository,
+        impl crate::domain::repositories::VersionRepository,
+        impl crate::domain::repositories::AttributeEquivalenceRepository,
+        Dev,
+    >,
+    retry_timeout_secs: u64,
+) -> Result<crate::domain::entities::VersionInfo, Box<dyn std::error::Error>>
+where
+    Dev: crate::domain::device::DeviceCommunicator,
+{
+    let started_at = tokio::time::Instant::now();
+    let retry_timeout = Duration::from_secs(retry_timeout_secs.max(1));
+    let mut attempt: u32 = 0;
+
+    loop {
+        attempt += 1;
+        match interactor.initialize().await {
+            Ok(version) => return Ok(version),
+            Err(e) => {
+                let elapsed = started_at.elapsed();
+                if elapsed >= retry_timeout {
+                    return Err(format!(
+                        "Device initialization timed out after {}s (last error: {})",
+                        retry_timeout_secs, e
+                    )
+                    .into());
+                }
+
+                let remaining = retry_timeout.saturating_sub(elapsed);
+                let backoff_secs = (attempt.min(6) * 2) as u64;
+                let sleep_secs = backoff_secs.min(remaining.as_secs().max(1));
+                eprintln!("[Device] Inicialización fallida (intento {}): {}", attempt, e);
+                eprintln!("[Device] Reintentando en {}s...", sleep_secs);
+                tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╔══════════════════════════════════════════════╗");
@@ -124,7 +167,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 5. Inicialización del protocolo OMNI-ODI
-    let version = interactor.initialize().await?;
+    let version = match initialize_device_with_retry_timeout(&mut interactor, config.device_init_retry_timeout_secs).await {
+        Ok(version) => version,
+        Err(e) => {
+            eprintln!("[Device] {}", e);
+            eprintln!("[Device] Continuando en modo API-only sin lecturas del dispositivo.");
+            let _keep_ws_alive = ws_hub;
+            return run_api_only_mode().await;
+        }
+    };
     println!("[OK] OMNI inicializado: System SW={}", version.system_sw);
 
     // 6. Fase cíclica: lectura de valores cada segundo
