@@ -292,7 +292,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(
-                    "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp DESC LIMIT ?2"
+                    "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND CAST(t.physical_value AS REAL) = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp DESC LIMIT ?2"
                 ).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
                     values: vec![Some(r.get::<i64, _>(0).to_string()), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), Some(r.get::<String, _>(3)), r.get::<Option<String>, _>(4), Some(r.get::<String, _>(5))],
@@ -301,7 +301,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(
-                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp DESC"
+                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp DESC"
                 );
                 q.bind(limit as i32); q.bind(patient_id_str);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
@@ -317,7 +317,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(
-                    "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2"
+                    "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND CAST(t.physical_value AS REAL) = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2"
                 ).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r| GenericRow {
                     values: vec![Some(r.get::<String, _>(0)), Some(r.get::<String, _>(1)), Some(r.get::<String, _>(2)), r.get::<Option<String>, _>(3), Some(r.get::<String, _>(4))],
@@ -326,7 +326,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(
-                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp ASC"
+                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp ASC"
                 );
                 q.bind(limit as i32); q.bind(patient_id_str);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;

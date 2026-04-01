@@ -226,12 +226,12 @@ impl TelemetryRepository for MssqlTelemetryRepository {
     async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
-            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+                "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
                     t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
-             FROM telemetry t \
-             JOIN signals s ON t.signal_id = s.id \
-             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value \
-             ORDER BY t.id DESC"
+                 FROM telemetry t \
+                 JOIN signals s ON t.signal_id = s.id \
+                 LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value \
+                 ORDER BY t.id DESC"
         );
         q.bind(limit as i32);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
@@ -282,14 +282,14 @@ impl TelemetryRepository for MssqlTelemetryRepository {
     async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
-            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+                "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
                     t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
-             FROM telemetry t \
-             JOIN patients p ON t.patient_id = p.id \
-             JOIN signals s ON t.signal_id = s.id \
-             LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value \
-             WHERE p.patient_id_str = @P2 \
-             ORDER BY t.timestamp DESC"
+                 FROM telemetry t \
+                 JOIN patients p ON t.patient_id = p.id \
+                 JOIN signals s ON t.signal_id = s.id \
+                 LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND TRY_CONVERT(FLOAT, t.physical_value) = e.numeric_value \
+                 WHERE p.patient_id_str = @P1 \
+                 ORDER BY t.timestamp DESC"
         );
         q.bind(limit as i32);
         q.bind(patient_id_str);
