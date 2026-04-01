@@ -255,7 +255,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                  id INT IDENTITY(1,1) PRIMARY KEY,
                  timestamp DATETIME2 DEFAULT GETUTCDATE(),
                  patient_id INT, signal_id INT,
-                 raw_value BIGINT, physical_value FLOAT, unit NVARCHAR(100),
+                 raw_value BIGINT, physical_value NVARCHAR(MAX), unit NVARCHAR(100),
                  FOREIGN KEY(patient_id) REFERENCES patients(id),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
@@ -283,6 +283,24 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             q.execute(&mut *conn).await?;
         }
         println!("  [DB] SQL Server schema verified.");
+
+        // Schema migrations to update existing tables
+        let migration_statements = vec![
+            // Convert physical_value from FLOAT to NVARCHAR(MAX) to support string values
+            "IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('telemetry') AND name = 'physical_value' AND system_type_id = 62)
+             BEGIN
+                 ALTER TABLE telemetry ALTER COLUMN physical_value NVARCHAR(MAX);
+                 PRINT 'Migrated telemetry.physical_value from FLOAT to NVARCHAR(MAX)';
+             END",
+        ];
+
+        for stmt in migration_statements {
+            let mut q = TibQuery::new(stmt);
+            if let Err(e) = q.execute(&mut *conn).await {
+                // Migration errors are not fatal; log and continue
+                eprintln!("  [DB] Migration warning: {}", e);
+            }
+        }
     }
 
     // Seed default admin user
