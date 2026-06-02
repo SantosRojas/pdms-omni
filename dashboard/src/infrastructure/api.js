@@ -1,9 +1,16 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9001';
 
-let authToken = null;
+let authToken = localStorage.getItem('authToken') || null;
 
 export const apiService = {
-  setToken(token) { authToken = token; },
+  setToken(token) {
+    authToken = token;
+    if (token) {
+      localStorage.setItem('authToken', token);
+    } else {
+      localStorage.removeItem('authToken');
+    }
+  },
   getToken() { return authToken; },
 
   _headers() {
@@ -24,7 +31,7 @@ export const apiService = {
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     const data = await res.json();
-    authToken = data.token;
+    this.setToken(data.token);
     return data;
   },
 
@@ -33,7 +40,7 @@ export const apiService = {
       method: 'POST',
       headers: this._headers(),
     }).catch(() => { });
-    authToken = null;
+    this.setToken(null);
   },
 
   async getMe() {
