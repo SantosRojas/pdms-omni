@@ -71,6 +71,7 @@ impl DictionaryRepository for NullDictionaryRepository {
 pub struct NullTelemetryRepository {
     patients: Arc<Mutex<HashMap<String, i64>>>,
     next_id: Arc<Mutex<i64>>,
+    next_therapy_id: Arc<Mutex<i64>>,
 }
 
 impl NullTelemetryRepository {
@@ -78,6 +79,7 @@ impl NullTelemetryRepository {
         Self {
             patients: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(Mutex::new(1)),
+            next_therapy_id: Arc::new(Mutex::new(1)),
         }
     }
 }
@@ -93,6 +95,10 @@ impl TelemetryRepository for NullTelemetryRepository {
 
     async fn get_recent_readings(&self, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         Ok(Vec::new())
+    }
+
+    async fn get_or_create_machine(&self, _serial_number: &str, _software_version: &str) -> Result<i64, RepositoryError> {
+        Ok(1)
     }
 
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
@@ -116,15 +122,21 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(assigned)
     }
 
-    async fn get_patient_history(&self, _patient_id_str: &str, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str) -> Result<i64, RepositoryError> {
+        let mut next_therapy_id = self
+            .next_therapy_id
+            .lock()
+            .map_err(|_| RepositoryError::DatabaseError("therapy id lock poisoned".to_string()))?;
+        let assigned = *next_therapy_id;
+        *next_therapy_id += 1;
+        Ok(assigned)
+    }
+
+    async fn get_therapy_history(&self, _therapy_id: i64, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         Ok(Vec::new())
     }
 
-    async fn set_therapy_start(&self, _patient_id: i64) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn set_therapy_end(&self, _patient_id: i64) -> Result<(), RepositoryError> {
+    async fn set_therapy_end(&self, _therapy_id: i64) -> Result<(), RepositoryError> {
         Ok(())
     }
 }

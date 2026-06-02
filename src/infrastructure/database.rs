@@ -106,15 +106,33 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
             therapy_start DATETIME,
             therapy_end DATETIME
         );
+        CREATE TABLE IF NOT EXISTS machines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            serial_number TEXT NOT NULL,
+            software_version TEXT NOT NULL,
+            registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status TEXT,
+            UNIQUE(serial_number, software_version)
+        );
+        CREATE TABLE IF NOT EXISTS therapies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            patient_id INTEGER NOT NULL,
+            machine_id INTEGER NOT NULL,
+            status TEXT,
+            ended_at DATETIME,
+            FOREIGN KEY(patient_id) REFERENCES patients(id),
+            FOREIGN KEY(machine_id) REFERENCES machines(id)
+        );
         CREATE TABLE IF NOT EXISTS telemetry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            patient_id INTEGER,
+            therapy_id INTEGER,
             signal_id INTEGER,
             raw_value INTEGER,
             physical_value NUMERIC,
             unit TEXT,
-            FOREIGN KEY(patient_id) REFERENCES patients(id),
+            FOREIGN KEY(therapy_id) REFERENCES therapies(id),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
         CREATE TABLE IF NOT EXISTS attribute_equivalences (
@@ -142,7 +160,9 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         "
         CREATE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name);
         CREATE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str);
-        CREATE INDEX IF NOT EXISTS idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_machines_serial_version ON machines(serial_number, software_version);
+        CREATE INDEX IF NOT EXISTS idx_therapies_patient_machine ON therapies(patient_id, machine_id, ended_at);
+        CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id);
         CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value);
         "
@@ -153,7 +173,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN patient_id INTEGER").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER").execute(&pool).await;
 
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
@@ -245,10 +265,26 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
             therapy_start TIMESTAMPTZ,
             therapy_end TIMESTAMPTZ
         )",
+        "CREATE TABLE IF NOT EXISTS machines (
+            id BIGSERIAL PRIMARY KEY,
+            serial_number TEXT NOT NULL,
+            software_version TEXT NOT NULL,
+            registered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            status TEXT,
+            UNIQUE(serial_number, software_version)
+        )",
+        "CREATE TABLE IF NOT EXISTS therapies (
+            id BIGSERIAL PRIMARY KEY,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            patient_id BIGINT REFERENCES patients(id),
+            machine_id BIGINT REFERENCES machines(id),
+            status TEXT,
+            ended_at TIMESTAMPTZ
+        )",
         "CREATE TABLE IF NOT EXISTS telemetry (
             id BIGSERIAL PRIMARY KEY,
             timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            patient_id BIGINT REFERENCES patients(id),
+            therapy_id BIGINT REFERENCES therapies(id),
             signal_id BIGINT REFERENCES signals(id),
             raw_value BIGINT,
             physical_value TEXT,
@@ -280,7 +316,9 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
     let index_statements = vec![
         "CREATE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name)",
         "CREATE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_machines_serial_version ON machines(serial_number, software_version)",
+        "CREATE INDEX IF NOT EXISTS idx_therapies_patient_machine ON therapies(patient_id, machine_id, ended_at)",
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
         "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
         "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
     ];
@@ -294,7 +332,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_start TIMESTAMPTZ",
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_end TIMESTAMPTZ",
-        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS patient_id BIGINT",
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS therapy_id BIGINT",
         "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS physical_value TEXT",
     ];
 
@@ -410,13 +448,33 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                  therapy_start DATETIME2 NULL,
                  therapy_end DATETIME2 NULL
              )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'machines')
+             CREATE TABLE machines (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 serial_number NVARCHAR(200) NOT NULL,
+                 software_version NVARCHAR(200) NOT NULL,
+                 registered_at DATETIME2 DEFAULT GETUTCDATE(),
+                 status NVARCHAR(50),
+                 CONSTRAINT uq_machines_serial_version UNIQUE (serial_number, software_version)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'therapies')
+             CREATE TABLE therapies (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 started_at DATETIME2 DEFAULT GETUTCDATE(),
+                 patient_id INT,
+                 machine_id INT,
+                 status NVARCHAR(50),
+                 ended_at DATETIME2 NULL,
+                 FOREIGN KEY(patient_id) REFERENCES patients(id),
+                 FOREIGN KEY(machine_id) REFERENCES machines(id)
+             )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'telemetry')
              CREATE TABLE telemetry (
                  id INT IDENTITY(1,1) PRIMARY KEY,
                  timestamp DATETIME2 DEFAULT GETUTCDATE(),
-                 patient_id INT, signal_id INT,
+                 therapy_id INT, signal_id INT,
                  raw_value BIGINT, physical_value NVARCHAR(MAX), unit NVARCHAR(100),
-                 FOREIGN KEY(patient_id) REFERENCES patients(id),
+                 FOREIGN KEY(therapy_id) REFERENCES therapies(id),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'attribute_equivalences')
@@ -441,7 +499,9 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
         let index_statements = vec![
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_signals_internal_name' AND object_id = OBJECT_ID('signals')) CREATE INDEX idx_signals_internal_name ON signals(internal_name)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_patients_patient_id_str' AND object_id = OBJECT_ID('patients')) CREATE INDEX idx_patients_patient_id_str ON patients(patient_id_str)",
-            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_patient_timestamp' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_patient_timestamp ON telemetry(patient_id, timestamp DESC)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_machines_serial_version' AND object_id = OBJECT_ID('machines')) CREATE INDEX idx_machines_serial_version ON machines(serial_number, software_version)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_therapies_patient_machine' AND object_id = OBJECT_ID('therapies')) CREATE INDEX idx_therapies_patient_machine ON therapies(patient_id, machine_id, ended_at)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_therapy_timestamp' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_signal' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_signal ON telemetry(signal_id)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_signal_numeric' AND object_id = OBJECT_ID('attribute_equivalences')) CREATE INDEX idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
         ];
@@ -466,6 +526,10 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
              BEGIN
                  ALTER TABLE telemetry ALTER COLUMN physical_value NVARCHAR(MAX);
                  PRINT 'Migrated telemetry.physical_value from FLOAT to NVARCHAR(MAX)';
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('telemetry') AND name = 'therapy_id')
+             BEGIN
+                 ALTER TABLE telemetry ADD therapy_id INT NULL;
              END",
         ];
 

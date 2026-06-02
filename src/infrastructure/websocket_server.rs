@@ -65,8 +65,11 @@ impl WebSocketHub {
                     .route("/api/equivalences", delete(http_api::delete_equivalence))
                     // Telemetry
                     .route("/api/patients", get(http_api::list_patients))
+                    .route("/api/therapies", get(http_api::list_therapies))
                     .route("/api/history", get(http_api::patient_history))
                     .route("/api/export", get(http_api::export_csv))
+                    .route("/api/therapy-history", get(http_api::therapy_history))
+                    .route("/api/therapy-export", get(http_api::export_therapy_csv))
                     .with_state(api_state)
                     .layer(cors)
             } else {

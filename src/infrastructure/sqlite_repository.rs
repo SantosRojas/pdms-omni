@@ -218,10 +218,10 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
         };
         conn.execute(
-            "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+            "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
-                reading.patient_id,
+                reading.therapy_id,
                 reading.signal_id,
                 reading.raw_value,
                 p_val,
@@ -236,7 +236,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         let tx = guard.transaction().map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+                "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
             ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
@@ -246,7 +246,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
                     TelemetryValue::String(s) => rusqlite::types::Value::Text(s.clone()),
                 };
                 stmt.execute(params![
-                    reading.patient_id,
+                    reading.therapy_id,
                     reading.signal_id,
                     reading.raw_value,
                     p_val,
@@ -261,7 +261,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let conn = lock_conn(&self.conn)?;
         let mut stmt = conn.prepare(
-            "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
+            "SELECT t.id, t.timestamp, t.therapy_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
              FROM telemetry t
              JOIN signals s ON t.signal_id = s.id
              LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
@@ -279,7 +279,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             Ok(TelemetryReading {
                 id: Some(row.get::<_, i64>(0)?),
                 timestamp: row.get::<_, String>(1)?,
-                patient_id: row.get::<_, Option<i64>>(2)?,
+                therapy_id: row.get::<_, Option<i64>>(2)?,
                 signal_id: row.get::<_, i64>(3)?,
                 internal_name: row.get::<_, String>(4)?,
                 raw_value: row.get::<_, i64>(5)?,
@@ -294,6 +294,22 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             result.push(item.map_err(|e| RepositoryError::DatabaseError(e.to_string()))?);
         }
         Ok(result)
+    }
+
+    fn get_or_create_machine(&self, serial_number: &str, software_version: &str) -> Result<i64, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO machines (serial_number, software_version) VALUES (?1, ?2)",
+            params![serial_number, software_version],
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let id_val: i64 = conn.query_row(
+            "SELECT id FROM machines WHERE serial_number = ?1 AND software_version = ?2",
+            params![serial_number, software_version],
+            |r| r.get(0),
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        Ok(id_val)
     }
 
     fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
@@ -312,19 +328,36 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         Ok(id_val)
     }
 
-    fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+
+        conn.execute(
+            "INSERT INTO therapies (started_at, patient_id, machine_id, status) VALUES (?1, ?2, ?3, 'active')",
+            params![started_at, patient_id, machine_id],
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        let id_val: i64 = conn.query_row(
+            "SELECT id FROM therapies WHERE patient_id = ?1 AND machine_id = ?2 AND started_at = ?3 ORDER BY id DESC LIMIT 1",
+            params![patient_id, machine_id, started_at],
+            |r| r.get(0),
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+
+        Ok(id_val)
+    }
+
+    fn get_therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let conn = lock_conn(&self.conn)?;
         let mut stmt = conn.prepare(
-            "SELECT t.id, t.timestamp, t.patient_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
+            "SELECT t.id, t.timestamp, t.therapy_id, t.signal_id, s.internal_name, t.raw_value, t.physical_value, t.unit, e.display_name
              FROM telemetry t
-             JOIN patients p ON t.patient_id = p.id
+             JOIN therapies th ON t.therapy_id = th.id
              JOIN signals s ON t.signal_id = s.id
              LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND t.physical_value = e.numeric_value
-             WHERE p.patient_id_str = ?1
+             WHERE th.id = ?1
              ORDER BY t.timestamp DESC LIMIT ?2"
         ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
 
-        let iter = stmt.query_map(params![patient_id_str, limit], |row| {
+        let iter = stmt.query_map(params![therapy_id, limit], |row| {
             let val: rusqlite::types::Value = row.get(6)?;
             let physical_value = match val {
                 rusqlite::types::Value::Real(n) => TelemetryValue::Number(n),
@@ -335,7 +368,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             Ok(TelemetryReading {
                 id: Some(row.get::<_, i64>(0)?),
                 timestamp: row.get::<_, String>(1)?,
-                patient_id: row.get::<_, Option<i64>>(2)?,
+                therapy_id: row.get::<_, Option<i64>>(2)?,
                 signal_id: row.get::<_, i64>(3)?,
                 internal_name: row.get::<_, String>(4)?,
                 raw_value: row.get::<_, i64>(5)?,
@@ -350,6 +383,15 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             result.push(item.map_err(|e| RepositoryError::DatabaseError(e.to_string()))?);
         }
         Ok(result)
+    }
+
+    fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError> {
+        let conn = lock_conn(&self.conn)?;
+        conn.execute(
+            "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE id = ?1 AND ended_at IS NULL",
+            params![therapy_id],
+        ).map_err(|e| RepositoryError::DatabaseError(e.to_string()))?;
+        Ok(())
     }
 }
 

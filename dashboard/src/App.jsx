@@ -11,7 +11,7 @@ import './index.css';
 function App() {
   const [user, setUser] = useState(null);     // { id, username, role, ... }
   const [view, setView] = useState('dashboard');
-  const [historyPatient, setHistoryPatient] = useState('');
+  const [historyTherapy, setHistoryTherapy] = useState(null);
 
   const handleLogin = (userData, token) => {
     apiService.setToken(token);
@@ -35,7 +35,7 @@ function App() {
     case 'history':
       return (
         <HistoryView
-          patientId={historyPatient}
+          therapy={historyTherapy}
           onBack={() => setView('dashboard')}
         />
       );
@@ -69,8 +69,8 @@ function App() {
       return (
         <Dashboard
           user={user}
-          onNavigateHistory={(patientId) => {
-            setHistoryPatient(patientId);
+          onNavigateHistory={(therapy) => {
+            setHistoryTherapy(therapy);
             setView('history');
           }}
           onNavigateAdmin={() => setView('admin')}

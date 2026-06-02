@@ -6,16 +6,16 @@ use byteorder::{ByteOrder, LittleEndian};
 use thiserror::Error;
 
 use crate::domain::device::{
-    DeviceCommunicator,
-    CMD_CODE_GET_VERSIONS, CMD_CODE_GET_HANDLES, CMD_CODE_GET_DATA_ATTRS,
-    CMD_CODE_GET_NEXT_DICT_STR, CMD_CODE_GET_CYCLICAL_VALUES, CMD_CODE_NAK,
+    CMD_CODE_GET_CYCLICAL_VALUES, CMD_CODE_GET_DATA_ATTRS, CMD_CODE_GET_HANDLES,
+    CMD_CODE_GET_NEXT_DICT_STR, CMD_CODE_GET_VERSIONS, CMD_CODE_NAK, DeviceCommunicator,
     VERSION_STRING_LENGTH,
 };
 use crate::domain::entities::{
     DataAttribute, DataType, DictionaryEntry, TelemetryReading, TelemetryValue, VersionInfo,
 };
 use crate::domain::repositories::{
-    AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository, TelemetryRepository, VersionRepository,
+    AttributeEquivalenceRepository, DataAttributeRepository, DictionaryRepository,
+    TelemetryRepository, VersionRepository,
 };
 
 #[derive(Debug, Error)]
@@ -62,7 +62,14 @@ where
     E: AttributeEquivalenceRepository,
     Dev: DeviceCommunicator,
 {
-    pub fn new(attr_repo: A, dict_repo: Di, telemetry_repo: T, version_repo: V, equiv_repo: E, device: Dev) -> Self {
+    pub fn new(
+        attr_repo: A,
+        dict_repo: Di,
+        telemetry_repo: T,
+        version_repo: V,
+        equiv_repo: E,
+        device: Dev,
+    ) -> Self {
         Self {
             attr_repo,
             dict_repo,
@@ -93,12 +100,20 @@ where
 
         // First 2 bytes = echoed command code
         if data.len() < 2 {
-            return Err(UseCaseError::Protocol("Response too short for versions".into()));
+            return Err(UseCaseError::Protocol(
+                "Response too short for versions".into(),
+            ));
         }
         let resp_cmd = LittleEndian::read_u16(&data[0..2]);
         if resp_cmd == CMD_CODE_NAK {
-            let err_code = if data.len() >= 4 { LittleEndian::read_u16(&data[2..4]) } else { 0 };
-            return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
+            let err_code = if data.len() >= 4 {
+                LittleEndian::read_u16(&data[2..4])
+            } else {
+                0
+            };
+            return Err(UseCaseError::Device(
+                crate::domain::device::DeviceError::Nak(err_code),
+            ));
         }
 
         // Minimum expected: cmd(2) + lang_id(2) + 7 version strings(7*16) + 3 language strings(3*16)
@@ -106,7 +121,8 @@ where
         if data.len() < expected_len {
             return Err(UseCaseError::Protocol(format!(
                 "Versions response too short: {} bytes, expected >= {}",
-                data.len(), expected_len
+                data.len(),
+                expected_len
             )));
         }
 
@@ -126,12 +142,12 @@ where
         let version = VersionInfo {
             language_id,
             system_sw: read_version(base),
-            dss_fw:    read_version(base + 16),
-            dss_hw:    read_version(base + 32),
-            css_fw:    read_version(base + 48),
-            css_hw:    read_version(base + 64),
-            pss_fw:    read_version(base + 80),
-            pss_hw:    read_version(base + 96),
+            dss_fw: read_version(base + 16),
+            dss_hw: read_version(base + 32),
+            css_fw: read_version(base + 48),
+            css_hw: read_version(base + 64),
+            pss_fw: read_version(base + 80),
+            pss_hw: read_version(base + 96),
             language1: read_version(base + 112),
             language2: read_version(base + 128),
             language3: read_version(base + 144),
@@ -139,7 +155,10 @@ where
 
         println!("      System SW: {}", version.system_sw);
         println!("      DSS FW:    {}", version.dss_fw);
-        println!("      Language:   {} (id={})", version.language1, version.language_id);
+        println!(
+            "      Language:   {} (id={})",
+            version.language1, version.language_id
+        );
 
         Ok(version)
     }
@@ -159,8 +178,14 @@ where
 
         let resp_cmd = LittleEndian::read_u16(&data[0..2]);
         if resp_cmd == CMD_CODE_NAK {
-            let err_code = if data.len() >= 4 { LittleEndian::read_u16(&data[2..4]) } else { 0 };
-            return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
+            let err_code = if data.len() >= 4 {
+                LittleEndian::read_u16(&data[2..4])
+            } else {
+                0
+            };
+            return Err(UseCaseError::Device(
+                crate::domain::device::DeviceError::Nak(err_code),
+            ));
         }
 
         let num_handles = LittleEndian::read_u16(&data[2..4]) as usize;
@@ -169,7 +194,9 @@ where
         if data.len() < expected_len {
             return Err(UseCaseError::Protocol(format!(
                 "Expected {} bytes for {} handles, got {}",
-                expected_len, num_handles, data.len()
+                expected_len,
+                num_handles,
+                data.len()
             )));
         }
 
@@ -192,27 +219,40 @@ where
     /// Sends CMD_CODE_GET_DATA_ATTRS for a single handle. Answer:
     ///   [cmd: u16][type: u16][size: u16][factor: u16]
     ///   [label_did: u16][unit_did: u16][internal_name: null-terminated ASCII, max 64+1]
-    pub async fn get_data_attributes(&mut self, handle: u16) -> Result<DataAttribute, UseCaseError> {
+    pub async fn get_data_attributes(
+        &mut self,
+        handle: u16,
+    ) -> Result<DataAttribute, UseCaseError> {
         let mut handle_bytes = [0u8; 2];
         LittleEndian::write_u16(&mut handle_bytes, handle);
 
-        let data = self.device.request(CMD_CODE_GET_DATA_ATTRS, &handle_bytes)?;
+        let data = self
+            .device
+            .request(CMD_CODE_GET_DATA_ATTRS, &handle_bytes)?;
 
         if data.len() < 12 {
-            return Err(UseCaseError::Protocol("Data attrs response too short".into()));
+            return Err(UseCaseError::Protocol(
+                "Data attrs response too short".into(),
+            ));
         }
 
         let resp_cmd = LittleEndian::read_u16(&data[0..2]);
         if resp_cmd == CMD_CODE_NAK {
-            let err_code = if data.len() >= 4 { LittleEndian::read_u16(&data[2..4]) } else { 0 };
-            return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
+            let err_code = if data.len() >= 4 {
+                LittleEndian::read_u16(&data[2..4])
+            } else {
+                0
+            };
+            return Err(UseCaseError::Device(
+                crate::domain::device::DeviceError::Nak(err_code),
+            ));
         }
 
-        let data_type   = DataType::from(LittleEndian::read_u16(&data[2..4]));
-        let size        = LittleEndian::read_u16(&data[4..6]);
-        let factor      = LittleEndian::read_u16(&data[6..8]);
-        let label_did   = LittleEndian::read_u16(&data[8..10]);
-        let unit_did    = LittleEndian::read_u16(&data[10..12]);
+        let data_type = DataType::from(LittleEndian::read_u16(&data[2..4]));
+        let size = LittleEndian::read_u16(&data[4..6]);
+        let factor = LittleEndian::read_u16(&data[6..8]);
+        let label_did = LittleEndian::read_u16(&data[8..10]);
+        let unit_did = LittleEndian::read_u16(&data[10..12]);
 
         // Internal name: null-terminated ASCII string starting at offset 12
         let name_bytes = &data[12..];
@@ -234,7 +274,7 @@ where
         };
 
         self.attr_repo.save(&attr).await?;
-        
+
         // Reload from DB to get the generated signal_id
         if let Some(saved_attr) = self.attr_repo.get_by_handle(handle).await? {
             attr = saved_attr;
@@ -247,7 +287,10 @@ where
     /// Gets attributes for ALL handles previously discovered.
     pub async fn get_all_data_attributes(&mut self) -> Result<Vec<DataAttribute>, UseCaseError> {
         let handles = self.handles.clone();
-        println!("  [3] CMD_GET_DATA_ATTRS for {} handle(s)...", handles.len());
+        println!(
+            "  [3] CMD_GET_DATA_ATTRS for {} handle(s)...",
+            handles.len()
+        );
 
         self.attr_repo.delete_all().await?;
         let mut attrs = Vec::with_capacity(handles.len());
@@ -255,9 +298,16 @@ where
 
         for (i, &handle) in handles.iter().enumerate() {
             let attr = self.get_data_attributes(handle).await?;
-            println!("      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
-                i + 1, handles.len(), handle, attr.internal_name,
-                attr.data_type, attr.size, attr.conversion_factor);
+            println!(
+                "      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
+                i + 1,
+                handles.len(),
+                handle,
+                attr.internal_name,
+                attr.data_type,
+                attr.size,
+                attr.conversion_factor
+            );
             self.attr_cache.insert(handle, attr.clone());
             attrs.push(attr);
         }
@@ -291,13 +341,21 @@ where
             let data = self.device.request(CMD_CODE_GET_NEXT_DICT_STR, &id_bytes)?;
 
             if data.len() < 4 {
-                return Err(UseCaseError::Protocol("Dictionary response too short".into()));
+                return Err(UseCaseError::Protocol(
+                    "Dictionary response too short".into(),
+                ));
             }
 
             let resp_cmd = LittleEndian::read_u16(&data[0..2]);
             if resp_cmd == CMD_CODE_NAK {
-                let err_code = if data.len() >= 4 { LittleEndian::read_u16(&data[2..4]) } else { 0 };
-                return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
+                let err_code = if data.len() >= 4 {
+                    LittleEndian::read_u16(&data[2..4])
+                } else {
+                    0
+                };
+                return Err(UseCaseError::Device(
+                    crate::domain::device::DeviceError::Nak(err_code),
+                ));
             }
 
             let dict_id = LittleEndian::read_u16(&data[2..4]);
@@ -368,7 +426,10 @@ where
 
     /// Same as `get_cyclical_values`, but allowing runtime filtering.
     /// Return and persistence include only readings where `include_reading` is true.
-    pub async fn get_cyclical_values_filtered<F>(&mut self, include_reading: F) -> Result<Vec<TelemetryReading>, UseCaseError>
+    pub async fn get_cyclical_values_filtered<F>(
+        &mut self,
+        include_reading: F,
+    ) -> Result<Vec<TelemetryReading>, UseCaseError>
     where
         F: Fn(&DataAttribute) -> bool,
     {
@@ -380,8 +441,14 @@ where
 
         let resp_cmd = LittleEndian::read_u16(&data[0..2]);
         if resp_cmd == CMD_CODE_NAK {
-            let err_code = if data.len() >= 4 { LittleEndian::read_u16(&data[2..4]) } else { 0 };
-            return Err(UseCaseError::Device(crate::domain::device::DeviceError::Nak(err_code)));
+            let err_code = if data.len() >= 4 {
+                LittleEndian::read_u16(&data[2..4])
+            } else {
+                0
+            };
+            return Err(UseCaseError::Device(
+                crate::domain::device::DeviceError::Nak(err_code),
+            ));
         }
 
         // Use the in-memory cache directly for performance (avoids N+1 DB queries)
@@ -403,8 +470,10 @@ where
 
             let size = attr.size as usize;
             if offset + size > values_data.len() {
-                eprintln!("      ⚠ Insufficient data at offset {} for '{}' (need {} bytes)",
-                    offset, attr.internal_name, size);
+                eprintln!(
+                    "      ⚠ Insufficient data at offset {} for '{}' (need {} bytes)",
+                    offset, attr.internal_name, size
+                );
                 break;
             }
 
@@ -436,8 +505,10 @@ where
                 None => {
                     // Cache miss (happens when loaded from DB without a get_all dictionary hook)
                     // Fetch from DB and insert into cache
-                    let text = self.dict_repo
-                        .get_by_id(attr.unit_did).await?
+                    let text = self
+                        .dict_repo
+                        .get_by_id(attr.unit_did)
+                        .await?
                         .map(|e| e.text)
                         .unwrap_or_default();
                     self.dict_cache.insert(attr.unit_did, text.clone());
@@ -467,7 +538,7 @@ where
                 readings.push(TelemetryReading {
                     id: None,
                     timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
-                    patient_id: None,         // populated below
+                    therapy_id: None,
                     signal_id: attr.signal_id,
                     internal_name: attr.internal_name.clone(),
                     raw_value,
@@ -484,12 +555,11 @@ where
         let patient_str = patient_id_text
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "UNKNOWN".to_string());
-            
-        let db_patient_id = self.telemetry_repo.get_or_create_patient(&patient_str).await?;
 
-        for reading in &mut readings {
-            reading.patient_id = Some(db_patient_id);
-        }
+        let _db_patient_id = self
+            .telemetry_repo
+            .get_or_create_patient(&patient_str)
+            .await?;
 
         Ok(readings)
     }
@@ -500,13 +570,38 @@ where
         Ok(())
     }
 
-    pub async fn start_therapy(&self, patient_id: i64) -> Result<(), UseCaseError> {
-        self.telemetry_repo.set_therapy_start(patient_id).await?;
-        Ok(())
+    pub async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, UseCaseError> {
+        Ok(self
+            .telemetry_repo
+            .get_or_create_patient(patient_id_str)
+            .await?)
     }
 
-    pub async fn end_therapy(&self, patient_id: i64) -> Result<(), UseCaseError> {
-        self.telemetry_repo.set_therapy_end(patient_id).await?;
+    pub async fn get_or_create_machine(
+        &self,
+        serial_number: &str,
+        software_version: &str,
+    ) -> Result<i64, UseCaseError> {
+        Ok(self
+            .telemetry_repo
+            .get_or_create_machine(serial_number, software_version)
+            .await?)
+    }
+
+    pub async fn get_or_create_therapy(
+        &self,
+        patient_id: i64,
+        machine_id: i64,
+        started_at: &str,
+    ) -> Result<i64, UseCaseError> {
+        Ok(self
+            .telemetry_repo
+            .get_or_create_therapy(patient_id, machine_id, started_at)
+            .await?)
+    }
+
+    pub async fn end_therapy(&self, therapy_id: i64) -> Result<(), UseCaseError> {
+        self.telemetry_repo.set_therapy_end(therapy_id).await?;
         Ok(())
     }
 
@@ -526,13 +621,13 @@ where
         // Compare the combination of SW, HW and Language versions
         let versions_match = match latest_db_version {
             Some(db_v) => {
-                db_v.system_sw == version.system_sw &&
-                db_v.dss_fw == version.dss_fw &&
-                db_v.dss_hw == version.dss_hw &&
-                db_v.css_fw == version.css_fw &&
-                db_v.css_hw == version.css_hw &&
-                db_v.language_id == version.language_id
-            },
+                db_v.system_sw == version.system_sw
+                    && db_v.dss_fw == version.dss_fw
+                    && db_v.dss_hw == version.dss_hw
+                    && db_v.css_fw == version.css_fw
+                    && db_v.css_hw == version.css_hw
+                    && db_v.language_id == version.language_id
+            }
             None => false,
         };
 
@@ -575,10 +670,10 @@ where
         let attrs = self.attr_repo.get_all().await?;
         self.attr_cache.clear();
         self.handles.clear();
-        
+
         for attr in attrs {
             // Note: DB doesn't inherently store the 'order' of handles like the device does.
-            // In a strict implementation, handles order must be preserved. We assume the DB 
+            // In a strict implementation, handles order must be preserved. We assume the DB
             // `ORDER BY rowid` returns them in the insertion order.
             self.handles.push(attr.handle);
             self.attr_cache.insert(attr.handle, attr);
@@ -593,7 +688,10 @@ where
         for entry in dict_entries {
             self.dict_cache.insert(entry.dict_id, entry.text);
         }
-        println!("      Loaded {} dictionary entries from DB.", self.dict_cache.len());
+        println!(
+            "      Loaded {} dictionary entries from DB.",
+            self.dict_cache.len()
+        );
         if self.dict_cache.is_empty() {
             return Ok(false);
         }
@@ -613,9 +711,11 @@ where
                 .or_insert_with(std::collections::HashMap::new)
                 .insert(eq.numeric_value.to_bits(), eq.display_name);
         }
-        println!("      {} equivalence value(s) loaded across {} signal(s).",
+        println!(
+            "      {} equivalence value(s) loaded across {} signal(s).",
             self.equiv_cache.values().map(|m| m.len()).sum::<usize>(),
-            self.equiv_cache.len());
+            self.equiv_cache.len()
+        );
         Ok(())
     }
 

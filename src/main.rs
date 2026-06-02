@@ -73,9 +73,13 @@ where
                 }
 
                 let remaining = retry_timeout.saturating_sub(elapsed);
-                let backoff_secs = backoff_step_secs.saturating_mul(attempt.min(backoff_max_attempts) as u64);
+                let backoff_secs =
+                    backoff_step_secs.saturating_mul(attempt.min(backoff_max_attempts) as u64);
                 let sleep_secs = backoff_secs.min(remaining.as_secs().max(1));
-                eprintln!("[Device] Inicialización fallida (intento {}): {}", attempt, e);
+                eprintln!(
+                    "[Device] Inicialización fallida (intento {}): {}",
+                    attempt, e
+                );
                 eprintln!("[Device] Reintentando en {}s...", sleep_secs);
                 tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
             }
@@ -129,7 +133,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             eprintln!("[DB] ERROR de conexión: {}", e);
-            eprintln!("[DB] Persistencia deshabilitada: se continuará con lectura serial en tiempo real.");
+            eprintln!(
+                "[DB] Persistencia deshabilitada: se continuará con lectura serial en tiempo real."
+            );
             (database::initialize_without_persistence(), false)
         }
     };
@@ -176,7 +182,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.device_init_retry_timeout_secs,
         config.device_init_retry_backoff_step_secs,
         config.device_init_retry_backoff_max_attempts,
-    ).await {
+    )
+    .await
+    {
         Ok(version) => version,
         Err(e) => {
             eprintln!("[Device] {}", e);
@@ -195,8 +203,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut was_in_therapy = false;
     let mut therapy_start_time: Option<String> = None;
     let mut therapy_end_time: Option<String> = None;
-    let mut current_patient_id: Option<i64> = None;
+    let mut current_patient_key: Option<String> = None;
+    let mut current_serial_number: Option<String> = None;
+    let mut current_machine_id: Option<i64> = None;
+    let mut current_therapy_id: Option<i64> = None;
     let mut persistence_warned = false;
+    let software_version = version.system_sw.clone();
 
     println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
 
@@ -212,6 +224,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let name_lc = attr.internal_name.to_ascii_lowercase();
                 config.capture_handles.contains(&attr.handle)
                     || config.capture_names.contains(&name_lc)
+                    || name_lc == "g_patient_id_str"
+                    || name_lc == "d_serial_number_to_odi"
                     // If we only save on therapy, we MUST capture the state variable
                     || (config.db_save_only_on_therapy && (name_lc == "c_trmt_main_state" || name_lc == "g_trmt_main_state_set"))
             }).await
@@ -220,49 +234,137 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match cycle_result {
             Ok(readings) => {
                 println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
-                
+
                 // Determine if we are in therapy mode (value 2.0 for c_trmt_main_state or g_trmt_main_state_set)
                 let is_in_therapy = readings.iter().any(|r| {
                     (r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
                     && matches!(&r.physical_value, crate::domain::entities::TelemetryValue::Number(n) if (n - 2.0).abs() < 0.1)
                 });
 
-                let therapy_state_name = readings.iter()
-                    .find(|r| r.internal_name == "c_trmt_main_state" || r.internal_name == "g_trmt_main_state_set")
+                let therapy_state_name = readings
+                    .iter()
+                    .find(|r| {
+                        r.internal_name == "c_trmt_main_state"
+                            || r.internal_name == "g_trmt_main_state_set"
+                    })
                     .and_then(|r| r.display_value.clone())
                     .unwrap_or_else(|| "N/A".to_string());
 
-                println!("[Estado] Terapia activa: {}, Estado: {}", is_in_therapy, therapy_state_name);
+                println!(
+                    "[Estado] Terapia activa: {}, Estado: {}",
+                    is_in_therapy, therapy_state_name
+                );
 
-                // Detect state transitions and patient changes
-                let patient_id = readings.first().and_then(|r| r.patient_id);
-                
-                if patient_id != current_patient_id {
-                    // Patient changed! Reset therapy state
-                    current_patient_id = patient_id;
+                let patient_key = readings
+                    .iter()
+                    .find(|r| r.internal_name == "g_patient_id_str")
+                    .map(|r| match (&r.display_value, &r.physical_value) {
+                        (Some(display), _) => display.clone(),
+                        (None, crate::domain::entities::TelemetryValue::String(value)) => {
+                            value.clone()
+                        }
+                        (None, crate::domain::entities::TelemetryValue::Number(value)) => {
+                            value.to_string()
+                        }
+                    })
+                    .filter(|value| !value.trim().is_empty());
+
+                let serial_number = readings
+                    .iter()
+                    .find(|r| r.internal_name == "d_serial_number_to_odi")
+                    .map(|r| match (&r.display_value, &r.physical_value) {
+                        (Some(display), _) => display.clone(),
+                        (None, crate::domain::entities::TelemetryValue::String(value)) => {
+                            value.clone()
+                        }
+                        (None, crate::domain::entities::TelemetryValue::Number(value)) => {
+                            value.to_string()
+                        }
+                    })
+                    .filter(|value| !value.trim().is_empty());
+
+                if patient_key != current_patient_key {
+                    current_patient_key = patient_key.clone();
+                    current_therapy_id = None;
                     was_in_therapy = false;
                     therapy_start_time = None;
                     therapy_end_time = None;
-                    println!("[EVENTO] Cambio de paciente detectado: {:?}", patient_id);
+                    println!(
+                        "[EVENTO] Cambio de paciente detectado: {:?}",
+                        current_patient_key
+                    );
                 }
 
-                if let Some(pid) = patient_id {
-                    if is_in_therapy && !was_in_therapy {
-                        println!("[Therapy] Detectado INICIO de terapia!");
-                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-                        therapy_start_time = Some(now);
-                        therapy_end_time = None;
-                        if persistence_enabled {
-                            let _ = interactor.start_therapy(pid).await;
-                        }
-                    } else if !is_in_therapy && was_in_therapy {
-                        println!("[Therapy] Detectado FIN de terapia!");
-                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-                        therapy_end_time = Some(now);
-                        if persistence_enabled {
-                            let _ = interactor.end_therapy(pid).await;
+                if serial_number != current_serial_number {
+                    current_serial_number = serial_number.clone();
+                    current_machine_id = None;
+                    current_therapy_id = None;
+                    println!(
+                        "[EVENTO] Cambio de máquina detectado: {:?}",
+                        current_serial_number
+                    );
+                }
+
+                if is_in_therapy {
+                    if current_machine_id.is_none() {
+                        if let Some(serial) = current_serial_number.as_deref() {
+                            if persistence_enabled {
+                                match interactor
+                                    .get_or_create_machine(serial, &software_version)
+                                    .await
+                                {
+                                    Ok(machine_id) => current_machine_id = Some(machine_id),
+                                    Err(e) => {
+                                        eprintln!("[DB] No se pudo registrar la máquina: {}", e)
+                                    }
+                                }
+                            }
                         }
                     }
+
+                    if current_therapy_id.is_none() {
+                        if let (Some(patient), Some(machine_id)) =
+                            (current_patient_key.as_deref(), current_machine_id)
+                        {
+                            if persistence_enabled {
+                                let now = chrono::Local::now()
+                                    .format("%Y-%m-%d %H:%M:%S")
+                                    .to_string();
+                                match interactor.get_or_create_patient(patient).await {
+                                    Ok(patient_id) => match interactor
+                                        .get_or_create_therapy(patient_id, machine_id, &now)
+                                        .await
+                                    {
+                                        Ok(therapy_id) => {
+                                            current_therapy_id = Some(therapy_id);
+                                            therapy_start_time = Some(now);
+                                            therapy_end_time = None;
+                                        }
+                                        Err(e) => {
+                                            eprintln!("[DB] No se pudo abrir la terapia: {}", e)
+                                        }
+                                    },
+                                    Err(e) => {
+                                        eprintln!("[DB] No se pudo registrar el paciente: {}", e)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if !was_in_therapy && current_therapy_id.is_some() {
+                        println!("[Therapy] Detectado INICIO de terapia!");
+                    }
+                } else if was_in_therapy {
+                    println!("[Therapy] Detectado FIN de terapia!");
+                    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    therapy_end_time = Some(now);
+                    if persistence_enabled {
+                        if let Some(therapy_id) = current_therapy_id {
+                            let _ = interactor.end_therapy(therapy_id).await;
+                        }
+                    }
+                    current_therapy_id = None;
                 }
                 was_in_therapy = is_in_therapy;
 
@@ -276,17 +378,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     r.internal_name, n, r.unit, display
                                 );
                             } else {
-                                println!(
-                                    "  {:30} = {:>10.2} {}",
-                                    r.internal_name, n, r.unit
-                                );
+                                println!("  {:30} = {:>10.2} {}", r.internal_name, n, r.unit);
                             }
                         }
                         TelemetryValue::String(s) => {
-                            println!(
-                                "  {:30} = {:>10} {}",
-                                r.internal_name, s, r.unit
-                            );
+                            println!("  {:30} = {:>10} {}", r.internal_name, s, r.unit);
                         }
                     }
                 }
@@ -300,28 +396,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     therapy_start: therapy_start_time.clone(),
                     therapy_end: therapy_end_time.clone(),
                     persistence_enabled,
-                    persistence_status: if persistence_enabled { "persisting" } else { "not_persisting" },
+                    persistence_status: if persistence_enabled {
+                        "persisting"
+                    } else {
+                        "not_persisting"
+                    },
                 };
                 if let Err(e) = ws_hub.broadcast_json(&event) {
-                    eprintln!("[WS] No se pudo serializar/broadcast de ciclo {}: {}", cycle, e);
+                    eprintln!(
+                        "[WS] No se pudo serializar/broadcast de ciclo {}: {}",
+                        cycle, e
+                    );
                 }
 
                 // Persist only every DB_SAVE_INTERVAL (Snapshots) AND only if we are in therapy if requested
                 if last_save.elapsed() >= save_interval {
                     if !persistence_enabled {
                         if !persistence_warned {
-                            eprintln!("[Persistencia] DESHABILITADA: los datos se muestran en tiempo real pero no se guardan en base de datos.");
+                            eprintln!(
+                                "[Persistencia] DESHABILITADA: los datos se muestran en tiempo real pero no se guardan en base de datos."
+                            );
                             persistence_warned = true;
                         }
                         last_save = tokio::time::Instant::now();
                         continue;
                     }
 
-                    let should_save = !config.db_save_only_on_therapy || is_in_therapy;
-                    
+                    let should_save = (!config.db_save_only_on_therapy || is_in_therapy)
+                        && current_therapy_id.is_some();
+
                     if should_save {
-                        println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
-                        if let Err(e) = interactor.save_telemetry(&readings).await {
+                        println!(
+                            "[DB] Guardando snapshot de ciclo {} ({} lecturas)...",
+                            cycle,
+                            readings.len()
+                        );
+                        let mut readings_to_save = readings.clone();
+                        for reading in &mut readings_to_save {
+                            reading.therapy_id = current_therapy_id;
+                        }
+                        if let Err(e) = interactor.save_telemetry(&readings_to_save).await {
                             eprintln!("[DB] ERROR al persistir snapshot: {}", e);
                         } else {
                             last_save = tokio::time::Instant::now();

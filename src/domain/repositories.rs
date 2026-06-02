@@ -3,7 +3,9 @@
 
 #![allow(dead_code)]
 
-use super::entities::{AttributeEquivalence, DataAttribute, DictionaryEntry, TelemetryReading, VersionInfo};
+use super::entities::{
+    AttributeEquivalence, DataAttribute, DictionaryEntry, TelemetryReading, VersionInfo,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -37,28 +39,47 @@ pub trait DictionaryRepository: Send + Sync {
 /// Persists telemetry readings.
 pub trait TelemetryRepository: Send + Sync {
     async fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError>;
-    
+
     async fn save_batch(&self, readings: &[TelemetryReading]) -> Result<(), RepositoryError> {
         for r in readings {
             self.save(r).await?;
         }
         Ok(())
     }
-    
+
     /// Retrieve the most recent readings from the database
-    async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
-    
+    async fn get_recent_readings(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError>;
+
+    /// Registers the connected OMNI machine by serial number and software version.
+    async fn get_or_create_machine(
+        &self,
+        serial_number: &str,
+        software_version: &str,
+    ) -> Result<i64, RepositoryError>;
+
     /// Maps a patient string ID to an auto-incrementing integer primary key
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError>;
-    
-    /// Retrieves historical telemetry for a specific patient
-    async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
 
-    /// Updates the therapy start timestamp for a patient (only if not already set or specifically requested)
-    async fn set_therapy_start(&self, patient_id: i64) -> Result<(), RepositoryError>;
+    /// Creates a new therapy session for a patient/machine start event.
+    async fn get_or_create_therapy(
+        &self,
+        patient_id: i64,
+        machine_id: i64,
+        started_at: &str,
+    ) -> Result<i64, RepositoryError>;
 
-    /// Updates the therapy end timestamp for a patient
-    async fn set_therapy_end(&self, patient_id: i64) -> Result<(), RepositoryError>;
+    /// Retrieves historical telemetry for a specific therapy
+    async fn get_therapy_history(
+        &self,
+        therapy_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError>;
+
+    /// Updates the therapy end timestamp for a therapy
+    async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.
@@ -72,6 +93,9 @@ pub trait VersionRepository: Send + Sync {
 pub trait AttributeEquivalenceRepository: Send + Sync {
     async fn save(&self, equiv: &AttributeEquivalence) -> Result<(), RepositoryError>;
     async fn save_batch(&self, equivs: &[AttributeEquivalence]) -> Result<(), RepositoryError>;
-    async fn get_by_internal_name(&self, name: &str) -> Result<Vec<AttributeEquivalence>, RepositoryError>;
+    async fn get_by_internal_name(
+        &self,
+        name: &str,
+    ) -> Result<Vec<AttributeEquivalence>, RepositoryError>;
     async fn get_all(&self) -> Result<Vec<AttributeEquivalence>, RepositoryError>;
 }

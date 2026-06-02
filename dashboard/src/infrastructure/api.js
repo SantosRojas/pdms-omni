@@ -32,7 +32,7 @@ export const apiService = {
     await fetch(`${API_BASE}/api/auth/logout`, {
       method: 'POST',
       headers: this._headers(),
-    }).catch(() => {});
+    }).catch(() => { });
     authToken = null;
   },
 
@@ -118,9 +118,22 @@ export const apiService = {
     return res.json();
   },
 
+  async getTherapies() {
+    const res = await fetch(`${API_BASE}/api/therapies`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
   async getPatientHistory(patientIdStr, limit = 500) {
     const params = new URLSearchParams({ patient: patientIdStr, limit: String(limit) });
     const res = await fetch(`${API_BASE}/api/history?${params}`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getTherapyHistory(therapyId, limit = 500) {
+    const params = new URLSearchParams({ therapy_id: String(therapyId), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/api/therapy-history?${params}`, { headers: this._headers() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
@@ -134,6 +147,21 @@ export const apiService = {
     const a = document.createElement('a');
     a.href = url;
     a.download = `omni_report_${patientIdStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  async downloadTherapyReport(therapyId, limit = 5000) {
+    const params = new URLSearchParams({ therapy_id: String(therapyId), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/api/therapy-export?${params}`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `omni_therapy_${therapyId}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();

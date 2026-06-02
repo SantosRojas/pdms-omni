@@ -151,6 +151,32 @@ pub fn build_history_row(
     }
 }
 
+pub fn build_therapy_row(
+    id: i64,
+    started_at: String,
+    ended_at: Option<String>,
+    status: String,
+    patient_id: i64,
+    patient_id_str: String,
+    machine_id: i64,
+    serial_number: String,
+    software_version: String,
+) -> GenericRow {
+    GenericRow {
+        values: vec![
+            Some(id.to_string()),
+            Some(started_at),
+            ended_at,
+            Some(status),
+            Some(patient_id.to_string()),
+            Some(patient_id_str),
+            Some(machine_id.to_string()),
+            Some(serial_number),
+            Some(software_version),
+        ],
+    }
+}
+
 pub fn build_export_row(
     timestamp: String,
     internal_name: String,
@@ -172,7 +198,7 @@ pub fn build_export_row(
 pub fn build_telemetry_reading(
     id: Option<i64>,
     timestamp: String,
-    patient_id: Option<i64>,
+    therapy_id: Option<i64>,
     signal_id: i64,
     internal_name: String,
     raw_value: i64,
@@ -183,7 +209,7 @@ pub fn build_telemetry_reading(
     TelemetryReading {
         id,
         timestamp,
-        patient_id,
+        therapy_id,
         signal_id,
         internal_name,
         raw_value,

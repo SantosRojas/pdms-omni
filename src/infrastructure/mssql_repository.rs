@@ -225,9 +225,9 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
-            "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit) VALUES (@P1, @P2, @P3, @P4, @P5)"
+            "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit) VALUES (@P1, @P2, @P3, @P4, @P5)"
         );
-        q.bind(reading.patient_id.map(|v| v as i32));
+        q.bind(reading.therapy_id.map(|v| v as i32));
         q.bind(reading.signal_id as i32);
         q.bind(reading.raw_value);
         q.bind(physical_value.as_str());
@@ -245,9 +245,9 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         for reading in readings {
             let physical_value = telemetry_value_to_storage(&reading.physical_value);
             let mut q = Query::new(
-                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit) VALUES (@P1, @P2, @P3, @P4, @P5)"
+                "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit) VALUES (@P1, @P2, @P3, @P4, @P5)"
             );
-            q.bind(reading.patient_id.map(|v| v as i32));
+            q.bind(reading.therapy_id.map(|v| v as i32));
             q.bind(reading.signal_id as i32);
             q.bind(reading.raw_value);
             q.bind(physical_value.as_str());
@@ -260,7 +260,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
     async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let query = format!(
-            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.therapy_id, t.signal_id, s.internal_name, \
                 t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
              FROM telemetry t \
              JOIN signals s ON t.signal_id = s.id \
@@ -288,6 +288,25 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         }).collect())
     }
 
+    async fn get_or_create_machine(&self, serial_number: &str, software_version: &str) -> Result<i64, RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+
+        let mut q1 = Query::new(
+            "IF NOT EXISTS (SELECT 1 FROM machines WHERE serial_number = @P1 AND software_version = @P2) INSERT INTO machines (serial_number, software_version) VALUES (@P1, @P2)"
+        );
+        q1.bind(serial_number);
+        q1.bind(software_version);
+        q1.execute(&mut *conn).await.map_err(map_db_err)?;
+
+        let mut q2 = Query::new("SELECT id FROM machines WHERE serial_number = @P1 AND software_version = @P2");
+        q2.bind(serial_number);
+        q2.bind(software_version);
+        let stream = q2.query(&mut *conn).await.map_err(map_db_err)?;
+        let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+        let id = rows.first().and_then(|r: &Row| r.get::<i32, _>(0)).ok_or_else(|| RepositoryError::DatabaseError("Machine not found after insert".into()))?;
+        Ok(id as i64)
+    }
+
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
 
@@ -309,22 +328,35 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         Ok(id as i64)
     }
 
-    async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+
+        let mut q_insert = Query::new("INSERT INTO therapies (started_at, patient_id, machine_id, status) OUTPUT INSERTED.id VALUES (@P1, @P2, @P3, 'active')");
+        q_insert.bind(started_at);
+        q_insert.bind(patient_id as i32);
+        q_insert.bind(machine_id as i32);
+        let stream = q_insert.query(&mut *conn).await.map_err(map_db_err)?;
+        let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+        let id = rows.first().and_then(|r: &Row| r.get::<i32, _>(0)).ok_or_else(|| RepositoryError::DatabaseError("Therapy not created".into()))?;
+        Ok(id as i64)
+    }
+
+    async fn get_therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let query = format!(
-            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.patient_id, t.signal_id, s.internal_name, \
+            "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), t.therapy_id, t.signal_id, s.internal_name, \
                 t.raw_value, CAST(t.physical_value AS NVARCHAR(MAX)), t.unit, e.display_name \
              FROM telemetry t \
-             JOIN patients p ON t.patient_id = p.id \
+             JOIN therapies th ON t.therapy_id = th.id \
              JOIN signals s ON t.signal_id = s.id \
              LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value \
-             WHERE p.patient_id_str = @P1 \
+             WHERE th.id = @P2 \
              ORDER BY t.timestamp DESC",
              MSSQL_NUMERIC_EQ_EXPR
         );
         let mut q = Query::new(query);
         q.bind(limit as i32);
-        q.bind(patient_id_str);
+        q.bind(therapy_id as i32);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
@@ -343,18 +375,10 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         }).collect())
     }
 
-    async fn set_therapy_start(&self, patient_id: i64) -> Result<(), RepositoryError> {
+    async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new("UPDATE patients SET therapy_start = GETUTCDATE() WHERE id = @P1 AND therapy_start IS NULL");
-        q.bind(patient_id as i32);
-        q.execute(&mut *conn).await.map_err(map_db_err)?;
-        Ok(())
-    }
-
-    async fn set_therapy_end(&self, patient_id: i64) -> Result<(), RepositoryError> {
-        let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut q = Query::new("UPDATE patients SET therapy_end = GETUTCDATE() WHERE id = @P1");
-        q.bind(patient_id as i32);
+        let mut q = Query::new("UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' WHERE id = @P1 AND ended_at IS NULL");
+        q.bind(therapy_id as i32);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }

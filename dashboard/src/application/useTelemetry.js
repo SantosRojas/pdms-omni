@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { socketService } from '../infrastructure/socket';
 
-export const useTelemetry = (patientId) => {
+export const useTelemetry = (therapyId, isActive) => {
   const [data, setData] = useState({
     pressures: {
       c_press_ap_act: { value: 0, unit: 'mmHg' },
@@ -32,9 +32,14 @@ export const useTelemetry = (patientId) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!therapyId || !isActive) {
+      socketService.offTelemetry();
+      socketService.disconnect();
+      setConnected(false);
+      return;
+    }
 
-    socketService.connect(patientId);
+    socketService.connect();
 
     socketService.onConnect(() => setConnected(true));
     socketService.onDisconnect(() => setConnected(false));
@@ -52,8 +57,8 @@ export const useTelemetry = (patientId) => {
 
         const now = new Date();
         const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        
-        const newPoint = { 
+
+        const newPoint = {
           time: timeStr,
           c_press_ap_act: prev.pressures.c_press_ap_act.value,
           c_press_vp_act: prev.pressures.c_press_vp_act.value,
@@ -88,7 +93,7 @@ export const useTelemetry = (patientId) => {
       socketService.offTelemetry();
       socketService.disconnect();
     };
-  }, [patientId]);
+  }, [therapyId, isActive]);
 
   return { data, connected };
 };

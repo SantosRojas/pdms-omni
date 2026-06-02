@@ -411,6 +411,19 @@ pub struct PatientDto {
 }
 
 #[derive(Serialize)]
+pub struct TherapyDto {
+    pub id: i64,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub status: String,
+    pub patient_id: i64,
+    pub patient_id_str: String,
+    pub machine_id: i64,
+    pub serial_number: String,
+    pub software_version: String,
+}
+
+#[derive(Serialize)]
 pub struct HistoryRowDto {
     pub id: i64,
     pub timestamp: String,
@@ -436,6 +449,20 @@ pub struct ExportQuery {
 }
 fn default_export_limit() -> u32 { 5000 }
 
+#[derive(Deserialize)]
+pub struct TherapyHistoryQuery {
+    pub therapy_id: i64,
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+}
+
+#[derive(Deserialize)]
+pub struct TherapyExportQuery {
+    pub therapy_id: i64,
+    #[serde(default = "default_export_limit")]
+    pub limit: u32,
+}
+
 /// GET /api/patients
 pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
     match state.db.list_patients().await {
@@ -451,12 +478,62 @@ pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
     }
 }
 
+/// GET /api/therapies
+pub async fn list_therapies(State(state): State<ApiState>) -> impl IntoResponse {
+    match state.db.list_therapies().await {
+        Ok(rows) => {
+            let therapies: Vec<TherapyDto> = rows.into_iter().map(|row| TherapyDto {
+                id: row.get_i64(0),
+                started_at: row.get_string(1),
+                ended_at: row.get_optional_string(2),
+                status: row.get_string(3),
+                patient_id: row.get_i64(4),
+                patient_id_str: row.get_string(5),
+                machine_id: row.get_i64(6),
+                serial_number: row.get_string(7),
+                software_version: row.get_string(8),
+            }).collect();
+            Json(therapies).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
 /// GET /api/history?patient=XYZ&limit=500
 pub async fn patient_history(
     State(state): State<ApiState>,
     Query(params): Query<HistoryQuery>,
 ) -> impl IntoResponse {
     match state.db.patient_history(&params.patient, params.limit).await {
+        Ok(rows) => {
+            let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
+                let phys_str = row.get_string(3);
+                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                    TelemetryValue::Number(n)
+                } else {
+                    TelemetryValue::String(phys_str)
+                };
+                HistoryRowDto {
+                    id: row.get_i64(0),
+                    timestamp: row.get_string(1),
+                    internal_name: row.get_string(2),
+                    physical_value,
+                    display_value: row.get_optional_string(4),
+                    unit: row.get_string(5),
+                }
+            }).collect();
+            Json(data).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
+/// GET /api/therapy-history?therapy_id=123&limit=500
+pub async fn therapy_history(
+    State(state): State<ApiState>,
+    Query(params): Query<TherapyHistoryQuery>,
+) -> impl IntoResponse {
+    match state.db.therapy_history(params.therapy_id, params.limit).await {
         Ok(rows) => {
             let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
                 let phys_str = row.get_string(3);
@@ -500,6 +577,39 @@ pub async fn export_csv(
             }
 
             let filename = format!("omni_report_{}.csv", params.patient);
+            (
+                StatusCode::OK,
+                [
+                    ("Content-Type", "text/csv; charset=utf-8"),
+                    ("Content-Disposition", &format!("attachment; filename=\"{}\"", filename)),
+                ],
+                csv,
+            ).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+/// GET /api/therapy-export?therapy_id=123&limit=5000
+pub async fn export_therapy_csv(
+    State(state): State<ApiState>,
+    Query(params): Query<TherapyExportQuery>,
+) -> impl IntoResponse {
+    match state.db.export_therapy_history(params.therapy_id, params.limit).await {
+        Ok(rows) => {
+            let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
+            for row in rows {
+                let ts = row.get_string(0);
+                let name = row.get_string(1);
+                let val_str = row.get_string(2);
+                let disp = row.get_optional_string(3).unwrap_or_default();
+                let unit = row.get_string(4);
+                csv.push_str(&format!("{},{},{},{},{}\n",
+                    ts.replace(',', ";"), name.replace(',', ";"), val_str, disp.replace(',', ";"), unit.replace(',', ";")
+                ));
+            }
+
+            let filename = format!("omni_therapy_{}_report.csv", params.therapy_id);
             (
                 StatusCode::OK,
                 [

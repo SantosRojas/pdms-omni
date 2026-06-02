@@ -27,37 +27,37 @@ pub struct VersionInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum DataType {
-    InputNumberUnsigned   = 1,
-    InputNumberSigned     = 2,
-    OutputNumberUnsigned  = 3,
-    OutputNumberSigned    = 4,
-    ButtonStatus          = 5,
-    AlarmDid              = 6,
-    WarningDid            = 7,
-    StatusDid             = 8,
-    EventDid              = 9,
-    ServiceDid            = 10,
-    VersionString         = 11,
-    CalibD                = 20,
-    DiaString             = 21,
-    InputTimeHMin         = 22,
-    OutputTimeHMin        = 23,
-    DpsAlarmDid           = 24,
-    Unknown               = 255,
+    InputNumberUnsigned = 1,
+    InputNumberSigned = 2,
+    OutputNumberUnsigned = 3,
+    OutputNumberSigned = 4,
+    ButtonStatus = 5,
+    AlarmDid = 6,
+    WarningDid = 7,
+    StatusDid = 8,
+    EventDid = 9,
+    ServiceDid = 10,
+    VersionString = 11,
+    CalibD = 20,
+    DiaString = 21,
+    InputTimeHMin = 22,
+    OutputTimeHMin = 23,
+    DpsAlarmDid = 24,
+    Unknown = 255,
 }
 
 impl From<u16> for DataType {
     fn from(val: u16) -> Self {
         match val {
-            1  => DataType::InputNumberUnsigned,
-            2  => DataType::InputNumberSigned,
-            3  => DataType::OutputNumberUnsigned,
-            4  => DataType::OutputNumberSigned,
-            5  => DataType::ButtonStatus,
-            6  => DataType::AlarmDid,
-            7  => DataType::WarningDid,
-            8  => DataType::StatusDid,
-            9  => DataType::EventDid,
+            1 => DataType::InputNumberUnsigned,
+            2 => DataType::InputNumberSigned,
+            3 => DataType::OutputNumberUnsigned,
+            4 => DataType::OutputNumberSigned,
+            5 => DataType::ButtonStatus,
+            6 => DataType::AlarmDid,
+            7 => DataType::WarningDid,
+            8 => DataType::StatusDid,
+            9 => DataType::EventDid,
             10 => DataType::ServiceDid,
             11 => DataType::VersionString,
             20 => DataType::CalibD,
@@ -65,7 +65,7 @@ impl From<u16> for DataType {
             22 => DataType::InputTimeHMin,
             23 => DataType::OutputTimeHMin,
             24 => DataType::DpsAlarmDid,
-            _  => DataType::Unknown,
+            _ => DataType::Unknown,
         }
     }
 }
@@ -133,7 +133,7 @@ pub struct Patient {
 pub struct TelemetryReading {
     pub id: Option<i64>,
     pub timestamp: String,
-    pub patient_id: Option<i64>,
+    pub therapy_id: Option<i64>,
     pub signal_id: i64,
     pub internal_name: String, // Will be retrieved via JOIN in repository
     pub raw_value: i64,

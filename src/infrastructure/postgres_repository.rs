@@ -228,10 +228,10 @@ impl TelemetryRepository for PgTelemetryRepository {
         let physical_value = telemetry_value_to_storage(&reading.physical_value);
 
         sqlx::query(
-            "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+            "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
              VALUES ($1, $2, $3, $4, $5)"
         )
-        .bind(reading.patient_id.map(|v| v as i64))
+        .bind(reading.therapy_id.map(|v| v as i64))
         .bind(reading.signal_id as i64)
         .bind(reading.raw_value)
         .bind(physical_value)
@@ -251,10 +251,10 @@ impl TelemetryRepository for PgTelemetryRepository {
         for reading in readings {
             let physical_value = telemetry_value_to_storage(&reading.physical_value);
             sqlx::query(
-                "INSERT INTO telemetry (patient_id, signal_id, raw_value, physical_value, unit)
+                "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
                  VALUES ($1, $2, $3, $4, $5)"
             )
-            .bind(reading.patient_id.map(|v| v as i64))
+            .bind(reading.therapy_id.map(|v| v as i64))
             .bind(reading.signal_id as i64)
             .bind(reading.raw_value)
             .bind(physical_value)
@@ -270,7 +270,7 @@ impl TelemetryRepository for PgTelemetryRepository {
 
     async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let rows = sqlx::query(&format!(
-            "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), t.patient_id, t.signal_id, s.internal_name,
+                "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), t.therapy_id, t.signal_id, s.internal_name,
                     t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
              JOIN signals s ON t.signal_id = s.id
@@ -299,6 +299,24 @@ impl TelemetryRepository for PgTelemetryRepository {
         }).collect())
     }
 
+    async fn get_or_create_machine(&self, serial_number: &str, software_version: &str) -> Result<i64, RepositoryError> {
+        sqlx::query("INSERT INTO machines (serial_number, software_version) VALUES ($1, $2) ON CONFLICT (serial_number, software_version) DO NOTHING")
+            .bind(serial_number)
+            .bind(software_version)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+        let row = sqlx::query("SELECT id FROM machines WHERE serial_number = $1 AND software_version = $2")
+            .bind(serial_number)
+            .bind(software_version)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+        Ok(row.get(0))
+    }
+
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
         sqlx::query("INSERT INTO patients (patient_id_str) VALUES ($1) ON CONFLICT (patient_id_str) DO NOTHING")
             .bind(patient_id_str)
@@ -315,20 +333,32 @@ impl TelemetryRepository for PgTelemetryRepository {
         Ok(row.get::<i64, _>(0))
     }
 
-    async fn get_patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+        let row = sqlx::query_scalar::<_, i64>("INSERT INTO therapies (started_at, patient_id, machine_id, status) VALUES ($1, $2, $3, 'active') RETURNING id")
+            .bind(started_at)
+            .bind(patient_id)
+            .bind(machine_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+        Ok(row)
+    }
+
+    async fn get_therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let rows = sqlx::query(&format!(
-            "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), t.patient_id, t.signal_id, s.internal_name,
+            "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), t.therapy_id, t.signal_id, s.internal_name,
                     t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
-             JOIN patients p ON t.patient_id = p.id
+             JOIN therapies th ON t.therapy_id = th.id
              JOIN signals s ON t.signal_id = s.id
              LEFT JOIN attribute_equivalences e
                ON s.id = e.signal_id AND {} = e.numeric_value
-             WHERE p.patient_id_str = $1
+             WHERE th.id = $1
              ORDER BY t.timestamp DESC LIMIT $2",
             POSTGRES_NUMERIC_EQ_EXPR
         ))
-        .bind(patient_id_str)
+        .bind(therapy_id)
         .bind(limit as i64)
         .fetch_all(&self.pool)
         .await
@@ -349,18 +379,9 @@ impl TelemetryRepository for PgTelemetryRepository {
         }).collect())
     }
 
-    async fn set_therapy_start(&self, patient_id: i64) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE patients SET therapy_start = CURRENT_TIMESTAMP WHERE id = $1 AND therapy_start IS NULL")
-            .bind(patient_id)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_err)?;
-        Ok(())
-    }
-
-    async fn set_therapy_end(&self, patient_id: i64) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE patients SET therapy_end = CURRENT_TIMESTAMP WHERE id = $1")
-            .bind(patient_id)
+    async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE id = $1 AND ended_at IS NULL")
+            .bind(therapy_id)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;

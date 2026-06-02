@@ -8,7 +8,7 @@ use sqlx::{PgPool, Row as SqlxRow, SqlitePool};
 use tiberius::{Query, Row as TibRow};
 
 use crate::infrastructure::persistence_helpers::{
-    build_equivalence_row, build_export_row, build_history_row, build_patient_row,
+    build_equivalence_row, build_export_row, build_history_row, build_patient_row, build_therapy_row,
     build_user_list_row, build_user_row, MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR,
     SQLITE_NUMERIC_EQ_EXPR, GenericRow,
 };
@@ -362,6 +362,76 @@ impl DbPool {
         }
     }
 
+    pub async fn list_therapies(&self) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(
+                    "SELECT th.id, th.started_at, th.ended_at, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                     FROM therapies th
+                     JOIN patients p ON th.patient_id = p.id
+                     JOIN machines m ON th.machine_id = m.id
+                     ORDER BY th.started_at DESC"
+                )
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_therapy_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<Option<String>, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<i64, _>(4),
+                    r.get::<String, _>(5),
+                    r.get::<i64, _>(6),
+                    r.get::<String, _>(7),
+                    r.get::<String, _>(8),
+                )).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    "SELECT th.id, TO_CHAR(th.started_at, 'YYYY-MM-DD HH24:MI:SS'), CASE WHEN th.ended_at IS NULL THEN NULL ELSE TO_CHAR(th.ended_at, 'YYYY-MM-DD HH24:MI:SS') END, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                     FROM therapies th
+                     JOIN patients p ON th.patient_id = p.id
+                     JOIN machines m ON th.machine_id = m.id
+                     ORDER BY th.started_at DESC"
+                )
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_therapy_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<Option<String>, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<i64, _>(4),
+                    r.get::<String, _>(5),
+                    r.get::<i64, _>(6),
+                    r.get::<String, _>(7),
+                    r.get::<String, _>(8),
+                )).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let q = Query::new(
+                    "SELECT th.id, CONVERT(NVARCHAR(30), th.started_at, 120), CONVERT(NVARCHAR(30), th.ended_at, 120), ISNULL(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                     FROM therapies th
+                     JOIN patients p ON th.patient_id = p.id
+                     JOIN machines m ON th.machine_id = m.id
+                     ORDER BY th.started_at DESC"
+                );
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r: TibRow| build_therapy_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("" ).to_string(),
+                    r.get::<&str, _>(2).map(|v| v.to_string()),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<i32, _>(4).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(5).unwrap_or("").to_string(),
+                    r.get::<i32, _>(6).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(7).unwrap_or("").to_string(),
+                    r.get::<&str, _>(8).unwrap_or("").to_string(),
+                )).collect())
+            }
+        }
+    }
+
     pub async fn patient_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<GenericRow>, String> {
         match self {
             DbPool::Sqlite(pool) => {
@@ -414,6 +484,73 @@ impl DbPool {
         }
     }
 
+    pub async fn therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(&format!(
+                    "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = ?1 ORDER BY t.timestamp DESC LIMIT ?2",
+                    SQLITE_NUMERIC_EQ_EXPR
+                )).bind(therapy_id).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_history_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<Option<String>, _>(4),
+                    r.get::<String, _>(5),
+                )).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(&format!(
+                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = $1 ORDER BY t.timestamp DESC LIMIT $2",
+                    POSTGRES_NUMERIC_EQ_EXPR
+                )).bind(therapy_id).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_history_row(
+                    r.get::<i64, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<Option<String>, _>(4),
+                    r.get::<String, _>(5),
+                )).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let query = format!(
+                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = @P2 ORDER BY t.timestamp DESC",
+                    MSSQL_NUMERIC_EQ_EXPR
+                );
+                let mut q = Query::new(query);
+                q.bind(limit as i32); q.bind(therapy_id as i32);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r: TibRow| build_history_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<&str, _>(4).map(|v| v.to_string()),
+                    r.get::<&str, _>(5).unwrap_or("").to_string(),
+                )).collect())
+            }
+        }
+    }
+
     pub async fn export_history(&self, patient_id_str: &str, limit: u32) -> Result<Vec<GenericRow>, String> {
         match self {
             DbPool::Sqlite(pool) => {
@@ -450,6 +587,70 @@ impl DbPool {
                 );
                 let mut q = Query::new(query);
                 q.bind(limit as i32); q.bind(patient_id_str);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r: TibRow| build_export_row(
+                    r.get::<&str, _>(0).unwrap_or("").to_string(),
+                    r.get::<&str, _>(1).unwrap_or("").to_string(),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).map(|v| v.to_string()),
+                    r.get::<&str, _>(4).unwrap_or("").to_string(),
+                )).collect())
+            }
+        }
+    }
+
+    pub async fn export_therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(&format!(
+                    "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = ?1 ORDER BY t.timestamp ASC LIMIT ?2",
+                    SQLITE_NUMERIC_EQ_EXPR
+                )).bind(therapy_id).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_export_row(
+                    r.get::<String, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<Option<String>, _>(3),
+                    r.get::<String, _>(4),
+                )).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(&format!(
+                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = $1 ORDER BY t.timestamp ASC LIMIT $2",
+                    POSTGRES_NUMERIC_EQ_EXPR
+                )).bind(therapy_id).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_export_row(
+                    r.get::<String, _>(0),
+                    r.get::<String, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<Option<String>, _>(3),
+                    r.get::<String, _>(4),
+                )).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let query = format!(
+                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit
+                     FROM telemetry t
+                     JOIN therapies th ON t.therapy_id = th.id
+                     JOIN signals s ON t.signal_id = s.id
+                     LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value
+                     WHERE th.id = @P2 ORDER BY t.timestamp ASC",
+                    MSSQL_NUMERIC_EQ_EXPR
+                );
+                let mut q = Query::new(query);
+                q.bind(limit as i32); q.bind(therapy_id as i32);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
                 Ok(rows.into_iter().map(|r: TibRow| build_export_row(

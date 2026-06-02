@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { Clock, Download, Search, ChevronLeft, ChevronRight, Database } from 'lucide-react';
 
-export const HistoryView = ({ patientId, onBack }) => {
+export const HistoryView = ({ therapy, onBack }) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -11,14 +11,14 @@ export const HistoryView = ({ patientId, onBack }) => {
   const pageSize = 50;
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!therapy?.id) return;
     setLoading(true);
     setError(null);
-    apiService.getPatientHistory(patientId, 2000)
+    apiService.getTherapyHistory(therapy.id, 2000)
       .then(data => { setRows(data); setPage(0); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [patientId]);
+  }, [therapy?.id]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
@@ -35,7 +35,7 @@ export const HistoryView = ({ patientId, onBack }) => {
 
   const handleDownload = async () => {
     try {
-      await apiService.downloadReport(patientId, 5000);
+      await apiService.downloadTherapyReport(therapy.id, 5000);
     } catch (e) {
       setError(`Download failed: ${e.message}`);
     }
@@ -68,7 +68,7 @@ export const HistoryView = ({ patientId, onBack }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Database size={20} color="var(--secondary)" />
             <h2 style={{ fontSize: '1.25rem' }}>Historical Data</h2>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>— Patient: <strong style={{ color: 'var(--primary)' }}>{patientId}</strong></span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>— Therapy: <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong></span>
           </div>
         </div>
 
