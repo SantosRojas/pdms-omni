@@ -1,10 +1,6 @@
 //! HTTP REST API: Auth, Users, Equivalences, Telemetry history.
 //! Uses DbPool abstraction to support both SQLite and SQL Server.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, HeaderMap};
 use axum::response::IntoResponse;
@@ -12,39 +8,23 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::entities::TelemetryValue;
+use crate::infrastructure::auth::{decode_token, hash_password, issue_token, verify_password, JwtClaims};
 use crate::infrastructure::db_pool::DbPool;
 
 // ─── Shared State ───────────────────────────────────────────────
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Session {
-    pub user_id: i64,
-    pub username: String,
-    pub full_name: String,
-    pub email: String,
-    pub role: String,
-}
-
 #[derive(Clone)]
 pub struct ApiState {
     pub db: DbPool,
-    pub sessions: Arc<Mutex<HashMap<String, Session>>>,
+    pub jwt_secret: String,
+    pub jwt_token_ttl_secs: u64,
 }
 
-fn generate_token() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{:x}-{:x}", nanos, nanos.wrapping_mul(2654435761))
-}
-
-/// Extracts the session from the Authorization: Bearer <token> header.
-fn get_session(headers: &HeaderMap, state: &ApiState) -> Option<Session> {
+/// Extracts the authenticated user from the Authorization: Bearer <token> header.
+fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> {
     let auth = headers.get("authorization")?.to_str().ok()?;
     let token = auth.strip_prefix("Bearer ")?;
-    let sessions = state.sessions.lock().ok()?;
-    sessions.get(token).cloned()
+    decode_token(&state.jwt_secret, token).ok()
 }
 
 fn unauthorized() -> impl IntoResponse {
@@ -105,17 +85,36 @@ pub async fn login(
             if !active {
                 return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Account disabled"}))).into_response();
             }
-            if password_hash != body.password {
+            let password_check = verify_password(&password_hash, &body.password);
+            if !password_check.verified {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response();
             }
 
-            let token = generate_token();
-            let user = UserDto { id, username: username.clone(), full_name: full_name.clone(), email: email.clone(), role: role.clone(), active, created_at };
-            let session = Session { user_id: id, username, full_name, email, role };
-
-            if let Ok(mut sessions) = state.sessions.lock() {
-                sessions.insert(token.clone(), session);
+            if password_check.needs_upgrade {
+                if let Ok(new_hash) = hash_password(&body.password) {
+                    let _ = state.db.update_user_field(id, "password", &new_hash).await;
+                }
             }
+
+            let claims = JwtClaims {
+                user_id: id,
+                username: username.clone(),
+                full_name: full_name.clone(),
+                email: email.clone(),
+                role: role.clone(),
+                iat: 0,
+                exp: 0,
+                iss: String::new(),
+            };
+            let token = match issue_token(
+                &state.jwt_secret,
+                &claims,
+                std::time::Duration::from_secs(state.jwt_token_ttl_secs),
+            ) {
+                Ok(token) => token,
+                Err(e) => return db_err(e.to_string()).into_response(),
+            };
+            let user = UserDto { id, username: username.clone(), full_name: full_name.clone(), email: email.clone(), role: role.clone(), active, created_at };
 
             Json(LoginResponse { token, user }).into_response()
         }
@@ -129,13 +128,7 @@ pub async fn logout(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Some(auth) = headers.get("authorization").and_then(|v| v.to_str().ok()) {
-        if let Some(token) = auth.strip_prefix("Bearer ") {
-            if let Ok(mut sessions) = state.sessions.lock() {
-                sessions.remove(token);
-            }
-        }
-    }
+    let _ = (state, headers);
     Json(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -144,7 +137,7 @@ pub async fn get_me(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    match get_session(&headers, &state) {
+    match get_claims(&headers, &state) {
         Some(session) => Json(serde_json::json!({
             "user_id": session.user_id,
             "username": session.username,
@@ -165,7 +158,7 @@ pub async fn list_users(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -205,7 +198,7 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(body): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -220,7 +213,12 @@ pub async fn create_user(
     let full_name = body.full_name.unwrap_or_default();
     let email = body.email.unwrap_or_default();
 
-    match state.db.insert_user(&body.username, &body.password, &full_name, &email, &body.role).await {
+    let password_hash = match hash_password(&body.password) {
+        Ok(hash) => hash,
+        Err(e) => return db_err(e.to_string()).into_response(),
+    };
+
+    match state.db.insert_user(&body.username, &password_hash, &full_name, &email, &body.role).await {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": e}))).into_response(),
     }
@@ -242,7 +240,7 @@ pub async fn update_user(
     Path(user_id): Path<i64>,
     Json(body): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -268,7 +266,11 @@ pub async fn update_user(
     }
 
     if let Some(ref pw) = body.password {
-        let _ = state.db.update_user_field(user_id, "password", pw).await;
+        let password_hash = match hash_password(pw) {
+            Ok(hash) => hash,
+            Err(e) => return db_err(e.to_string()).into_response(),
+        };
+        let _ = state.db.update_user_field(user_id, "password", &password_hash).await;
     }
     if let Some(ref fn_) = body.full_name {
         let _ = state.db.update_user_field(user_id, "full_name", fn_).await;
@@ -292,7 +294,7 @@ pub async fn delete_user(
     headers: HeaderMap,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -325,7 +327,7 @@ pub async fn list_equivalences(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if get_session(&headers, &state).is_none() {
+    if get_claims(&headers, &state).is_none() {
         return unauthorized().into_response();
     }
 
@@ -356,7 +358,7 @@ pub async fn create_equivalence(
     headers: HeaderMap,
     Json(body): Json<CreateEquivalenceRequest>,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -387,7 +389,7 @@ pub async fn delete_equivalence(
     headers: HeaderMap,
     Query(params): Query<DeleteEquivalenceQuery>,
 ) -> impl IntoResponse {
-    let session = match get_session(&headers, &state) {
+    let session = match get_claims(&headers, &state) {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };

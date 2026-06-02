@@ -1,6 +1,6 @@
 use dotenvy;
-use std::env;
 use std::collections::HashSet;
+use std::env;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureMode {
@@ -55,6 +55,8 @@ pub struct AppConfig {
     pub device_init_retry_timeout_secs: u64,
     pub device_init_retry_backoff_step_secs: u64,
     pub device_init_retry_backoff_max_attempts: u32,
+    pub jwt_secret: String,
+    pub jwt_expiration_hours: u64,
     pub capture_mode: CaptureMode,
     pub capture_handles: HashSet<u16>,
     pub capture_names: HashSet<String>,
@@ -83,7 +85,7 @@ impl AppConfig {
         let db_password = env::var("DB_PASSWORD").unwrap_or_default();
         let db_host = env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let db_port = env::var("DB_PORT").unwrap_or_else(|_| "1433".to_string());
-        
+
         let db_raw = env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string());
         // For sqlite, resolve relative to .env directory, else use raw name
         let db_database = if db_connection == "sqlite" {
@@ -145,14 +147,26 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(2),
-            device_init_retry_backoff_max_attempts: env::var("DEVICE_INIT_RETRY_BACKOFF_MAX_ATTEMPTS")
+            device_init_retry_backoff_max_attempts: env::var(
+                "DEVICE_INIT_RETRY_BACKOFF_MAX_ATTEMPTS",
+            )
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or(6),
+            jwt_secret: env::var("JWT_SECRET")
+                .unwrap_or_else(|_| "dev-jwt-secret-change-me".to_string()),
+            jwt_expiration_hours: env::var("JWT_EXPIRATION_HOURS")
                 .unwrap_or_default()
                 .parse()
-                .unwrap_or(6),
+                .unwrap_or(24),
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),
         }
+    }
+
+    pub fn jwt_token_ttl_secs(&self) -> u64 {
+        self.jwt_expiration_hours.max(1) * 60 * 60
     }
 
     pub fn database_config(&self) -> DatabaseConfig {
@@ -179,7 +193,11 @@ impl AppConfig {
             "mysql" => DatabaseConfig::Other {
                 url: format!(
                     "mysql://{}:{}@{}:{}/{}",
-                    self.db_username, self.db_password, self.db_host, self.db_port, self.db_database
+                    self.db_username,
+                    self.db_password,
+                    self.db_host,
+                    self.db_port,
+                    self.db_database
                 ),
             },
             _ => DatabaseConfig::Other {
@@ -212,7 +230,10 @@ fn parse_handles_csv(raw: &str) -> HashSet<u16> {
                 return None;
             }
 
-            let parsed = if let Some(hex) = token.strip_prefix("0x").or_else(|| token.strip_prefix("0X")) {
+            let parsed = if let Some(hex) = token
+                .strip_prefix("0x")
+                .or_else(|| token.strip_prefix("0X"))
+            {
                 u16::from_str_radix(hex, 16).ok()
             } else {
                 token.parse::<u16>().ok()

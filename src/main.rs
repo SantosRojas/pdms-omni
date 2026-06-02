@@ -141,7 +141,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // 3. WebSocket + HTTP API server (shares DB connection)
-    let ws_hub = WebSocketHub::start(ws_addr, repos.db.clone(), persistence_enabled)?;
+    let ws_hub = WebSocketHub::start(
+        ws_addr,
+        repos.db.clone(),
+        persistence_enabled,
+        config.jwt_secret.clone(),
+        config.jwt_token_ttl_secs(),
+    )?;
 
     // 3. Dispositivo serial (intercambiable)
     let serial_config = SerialConfig {

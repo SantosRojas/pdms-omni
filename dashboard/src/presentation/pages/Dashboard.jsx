@@ -4,13 +4,14 @@ import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp, ChevronRight } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp, ChevronRight, Search, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
   const [therapies, setTherapies] = useState([]);
   const [selectedTherapyId, setSelectedTherapyId] = useState('');
   const [therapyError, setTherapyError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const therapiesSorted = useMemo(
     () => [...therapies].sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')) || (b.id - a.id)),
@@ -33,6 +34,65 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
 
     return new Set([...latestOpenByPair.values()].map(therapy => String(therapy.id)));
   }, [therapiesSorted]);
+
+  const machineGroups = useMemo(() => {
+    const groups = new Map();
+
+    for (const therapy of therapiesSorted) {
+      const machineKey = String(therapy.machine_id);
+      const current = groups.get(machineKey);
+      const machineInfo = {
+        machine_id: therapy.machine_id,
+        serial_number: therapy.serial_number,
+        software_version: therapy.software_version,
+      };
+
+      if (current) {
+        current.therapies.push(therapy);
+        continue;
+      }
+
+      groups.set(machineKey, {
+        key: machineKey,
+        ...machineInfo,
+        therapies: [therapy],
+      });
+    }
+
+    return [...groups.values()].sort((left, right) => {
+      const leftTherapy = left.therapies[0];
+      const rightTherapy = right.therapies[0];
+      return String(rightTherapy?.started_at || '').localeCompare(String(leftTherapy?.started_at || '')) || (right.machine_id - left.machine_id);
+    });
+  }, [therapiesSorted]);
+
+  const filteredMachineGroups = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return machineGroups;
+
+    return machineGroups
+      .map(machine => {
+        const therapies = machine.therapies.filter(therapy => {
+          const haystack = [
+            machine.serial_number,
+            machine.software_version,
+            machine.machine_id,
+            therapy.id,
+            therapy.patient_id_str,
+            therapy.started_at,
+            therapy.ended_at || '',
+            therapy.status,
+          ]
+            .map(value => String(value ?? '').toLowerCase())
+            .join(' ');
+
+          return haystack.includes(query);
+        });
+
+        return therapies.length > 0 ? { ...machine, therapies } : null;
+      })
+      .filter(Boolean);
+  }, [machineGroups, searchQuery]);
 
   const selectedTherapy = useMemo(
     () => therapies.find(t => String(t.id) === String(selectedTherapyId)) || null,
@@ -82,57 +142,151 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
             <div style={{ color: 'var(--danger)' }}>No se pudieron cargar las terapias: {therapyError}</div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
-            {therapiesSorted.map(therapy => {
-              const isOpen = !therapy.ended_at && therapy.status !== 'completed';
-              const active = activeTherapyIds.has(String(therapy.id));
-              const badgeLabel = active ? 'Activa' : isOpen ? 'Sin cerrar' : 'Finalizada';
-              return (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 320px', minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar por máquina, paciente, terapia o fecha"
+                style={{
+                  width: '100%',
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '14px',
+                  padding: '12px 42px 12px 38px',
+                  color: 'var(--text-main)',
+                  outline: 'none',
+                  fontSize: '0.95rem',
+                  fontFamily: 'var(--font-family)',
+                }}
+              />
+              {searchQuery && (
                 <button
-                  key={therapy.id}
-                  onClick={() => setSelectedTherapyId(String(therapy.id))}
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Limpiar buscador"
                   style={{
-                    textAlign: 'left',
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              {filteredMachineGroups.length} máquina{filteredMachineGroups.length === 1 ? '' : 's'}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: '14px' }}>
+            {filteredMachineGroups.length > 0 ? filteredMachineGroups.map(machine => {
+              const activeTherapies = machine.therapies.filter(therapy => activeTherapyIds.has(String(therapy.id)));
+              const openTherapies = machine.therapies.filter(therapy => !therapy.ended_at && therapy.status !== 'completed');
+
+              return (
+                <details
+                  key={machine.key}
+                  style={{
                     background: 'var(--btn-bg)',
                     border: '1px solid var(--border)',
                     borderRadius: '18px',
-                    padding: '18px',
-                    color: 'var(--text-main)',
-                    cursor: 'pointer',
-                    transition: 'transform 0.18s, border-color 0.18s',
-                    display: 'grid',
-                    gap: '10px',
-                  }}
-                  onMouseOver={e => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.borderColor = 'var(--primary)';
-                  }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = 'var(--border)';
+                    overflow: 'hidden',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px' }}>
-                    <div>
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Terapia #{therapy.id}</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 700, marginTop: '4px' }}>{therapy.patient_id_str}</div>
+                  <summary style={{
+                    listStyle: 'none',
+                    cursor: 'pointer',
+                    padding: '18px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '14px',
+                    color: 'var(--text-main)',
+                    userSelect: 'none',
+                  }}>
+                    <div style={{ display: 'grid', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '1rem' }}>Máquina {machine.serial_number}</strong>
+                        <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '999px', background: activeTherapies.length ? 'rgba(16,185,129,0.15)' : openTherapies.length ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.15)', color: activeTherapies.length ? '#34d399' : openTherapies.length ? '#f59e0b' : 'var(--text-muted)' }}>
+                          {activeTherapies.length ? `${activeTherapies.length} activa${activeTherapies.length > 1 ? 's' : ''}` : openTherapies.length ? `${openTherapies.length} sin cerrar` : 'Sin actividad'}
+                        </span>
+                      </div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>SW {machine.software_version} · {machine.therapies.length} terapia{machine.therapies.length > 1 ? 's' : ''}</span>
                     </div>
-                    <span style={{ padding: '4px 10px', borderRadius: '999px', fontSize: '0.75rem', background: active ? 'rgba(16,185,129,0.15)' : isOpen ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.15)', color: active ? '#34d399' : isOpen ? '#f59e0b' : 'var(--text-muted)' }}>
-                      {badgeLabel}
-                    </span>
+                    <ChevronRight size={16} style={{ color: 'var(--text-muted)', transition: 'transform 0.18s' }} />
+                  </summary>
+
+                  <div style={{ borderTop: '1px solid var(--border)', padding: '18px', display: 'grid', gap: '12px' }}>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Selecciona una terapia de esta máquina:</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                      {machine.therapies.map(therapy => {
+                        const isOpen = !therapy.ended_at && therapy.status !== 'completed';
+                        const active = activeTherapyIds.has(String(therapy.id));
+                        const badgeLabel = active ? 'Activa' : isOpen ? 'Sin cerrar' : 'Finalizada';
+
+                        return (
+                          <button
+                            key={therapy.id}
+                            onClick={() => setSelectedTherapyId(String(therapy.id))}
+                            style={{
+                              textAlign: 'left',
+                              background: 'var(--panel-bg, rgba(255,255,255,0.04))',
+                              border: '1px solid var(--border)',
+                              borderRadius: '16px',
+                              padding: '16px',
+                              color: 'var(--text-main)',
+                              cursor: 'pointer',
+                              transition: 'transform 0.18s, border-color 0.18s',
+                              display: 'grid',
+                              gap: '10px',
+                            }}
+                            onMouseOver={e => {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.borderColor = 'var(--primary)';
+                            }}
+                            onMouseOut={e => {
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.borderColor = 'var(--border)';
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px' }}>
+                              <div>
+                                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Terapia #{therapy.id}</div>
+                                <div style={{ fontSize: '1rem', fontWeight: 700, marginTop: '4px' }}>{therapy.patient_id_str}</div>
+                              </div>
+                              <span style={{ padding: '4px 10px', borderRadius: '999px', fontSize: '0.75rem', background: active ? 'rgba(16,185,129,0.15)' : isOpen ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.15)', color: active ? '#34d399' : isOpen ? '#f59e0b' : 'var(--text-muted)' }}>
+                                {badgeLabel}
+                              </span>
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                              Inició: {therapy.started_at}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                              {therapy.ended_at || 'Aún sin cierre'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    Máquina {therapy.serial_number} · SW {therapy.software_version}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    <span>{therapy.started_at}</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      Abrir <ChevronRight size={14} />
-                    </span>
-                  </div>
-                </button>
+                </details>
               );
-            })}
+            }) : (
+              <div style={{ padding: '20px', border: '1px dashed var(--border)', borderRadius: '16px', color: 'var(--text-muted)' }}>
+                No se encontraron máquinas ni terapias para esa búsqueda.
+              </div>
+            )}
           </div>
         </div>
       ) : (

@@ -8,6 +8,7 @@ use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{AuthMethod, Config as TibConfig, Row as TibRow, Query as TibQuery};
 use std::str::FromStr;
+use std::io;
 
 use super::db_pool::DbPool;
 use super::config::{DatabaseConfig, MssqlSettings, PostgresSettings};
@@ -19,6 +20,7 @@ use super::repo_dispatch::*;
 use super::sqlx_repository::*;
 use super::postgres_repository::*;
 use super::mssql_repository::*;
+use super::auth::hash_password;
 
 /// All repository instances bundled together for easy injection.
 /// Uses enum dispatch so the same struct works for both SQLite and MSSQL.
@@ -179,9 +181,11 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
     let user_count: i64 = row.get(0);
     if user_count == 0 {
+        let admin_password_hash = hash_password("admin123")
+            .map_err(|e| io::Error::other(e.to_string()))?;
         sqlx::query(
-            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
-        ).execute(&pool).await?;
+            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', ?1, 'Administrator', 'admin')"
+        ).bind(admin_password_hash).execute(&pool).await?;
         println!("  [DB] Default admin user created (username: admin, password: admin123)");
     }
 
@@ -550,8 +554,10 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
         let rows: Vec<TibRow> = stream.into_first_result().await?;
         let user_count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
         if user_count == 0 {
+            let admin_password_hash = hash_password("admin123")
+                .map_err(|e| io::Error::other(e.to_string()))?;
             let mut qi = TibQuery::new("INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)");
-            qi.bind("admin"); qi.bind("admin123"); qi.bind("Administrator"); qi.bind("admin");
+            qi.bind("admin"); qi.bind(admin_password_hash.as_str()); qi.bind("Administrator"); qi.bind("admin");
             qi.execute(&mut *conn).await?;
             println!("  [DB] Default admin user created (username: admin, password: admin123)");
         }

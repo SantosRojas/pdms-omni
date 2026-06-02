@@ -1,6 +1,4 @@
-use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::routing::{get, post, put, delete};
@@ -18,7 +16,13 @@ pub struct WebSocketHub {
 }
 
 impl WebSocketHub {
-    pub fn start(addr: SocketAddr, db: Option<DbPool>, persistence_enabled: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn start(
+        addr: SocketAddr,
+        db: Option<DbPool>,
+        persistence_enabled: bool,
+        jwt_secret: String,
+        jwt_token_ttl_secs: u64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
 
@@ -36,7 +40,8 @@ impl WebSocketHub {
             let app = if let Some(db) = db {
                 let api_state = ApiState {
                     db,
-                    sessions: Arc::new(Mutex::new(HashMap::new())),
+                    jwt_secret,
+                    jwt_token_ttl_secs,
                 };
 
                 Router::new()
