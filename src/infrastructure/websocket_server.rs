@@ -22,6 +22,7 @@ impl WebSocketHub {
         persistence_enabled: bool,
         jwt_secret: String,
         jwt_token_ttl_secs: u64,
+        serial_manager: std::sync::Arc<super::serial_manager::SerialReaderManager>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
@@ -37,11 +38,24 @@ impl WebSocketHub {
                 async move { ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe())) }
             };
 
+            // Build a 503-returning fallback for all API routes when the DB is unavailable.
+            // This ensures the frontend always gets a meaningful response instead of a 404/connection error.
+            fn db_unavailable() -> impl axum::response::IntoResponse {
+                (
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    axum::Json(serde_json::json!({
+                        "error": "Base de datos no disponible. El historial y la autenticación están deshabilitados.",
+                        "persistence_enabled": false
+                    })),
+                )
+            }
+
             let app = if let Some(db) = db {
                 let api_state = ApiState {
                     db,
                     jwt_secret,
                     jwt_token_ttl_secs,
+                    serial_manager,
                 };
 
                 Router::new()
@@ -75,9 +89,15 @@ impl WebSocketHub {
                     .route("/api/export", get(http_api::export_csv))
                     .route("/api/therapy-history", get(http_api::therapy_history))
                     .route("/api/therapy-export", get(http_api::export_therapy_csv))
+                    // Serial Reader Control
+                    .route("/api/serial/status", get(http_api::serial_status))
+                    .route("/api/serial/start", post(http_api::serial_start))
+                    .route("/api/serial/stop", post(http_api::serial_stop))
                     .with_state(api_state)
                     .layer(cors)
             } else {
+                // DB not available: register all API routes but respond with 503 so the
+                // frontend knows the service is degraded (not a network error or 404).
                 Router::new()
                     .route("/ws", get(ws_route))
                     .route("/api/status", get({
@@ -86,10 +106,29 @@ impl WebSocketHub {
                             axum::Json(serde_json::json!({
                                 "ok": true,
                                 "persistence_enabled": persistence_enabled,
-                                "message": "API de persistencia deshabilitada: base de datos no disponible"
+                                "message": "Base de datos no disponible"
                             }))
                         }
                     }))
+                    .route("/api/auth/login",   post(|| async { db_unavailable() }))
+                    .route("/api/auth/logout",  post(|| async { db_unavailable() }))
+                    .route("/api/auth/me",       get(|| async { db_unavailable() }))
+                    .route("/api/users",         get(|| async { db_unavailable() }))
+                    .route("/api/users",        post(|| async { db_unavailable() }))
+                    .route("/api/users/{id}",    put(|| async { db_unavailable() }))
+                    .route("/api/users/{id}", delete(|| async { db_unavailable() }))
+                    .route("/api/equivalences",   get(|| async { db_unavailable() }))
+                    .route("/api/equivalences",  post(|| async { db_unavailable() }))
+                    .route("/api/equivalences", delete(|| async { db_unavailable() }))
+                    .route("/api/patients",       get(|| async { db_unavailable() }))
+                    .route("/api/therapies",      get(|| async { db_unavailable() }))
+                    .route("/api/history",        get(|| async { db_unavailable() }))
+                    .route("/api/export",         get(|| async { db_unavailable() }))
+                    .route("/api/therapy-history",get(|| async { db_unavailable() }))
+                    .route("/api/therapy-export", get(|| async { db_unavailable() }))
+                    .route("/api/serial/status",  get(|| async { db_unavailable() }))
+                    .route("/api/serial/start",  post(|| async { db_unavailable() }))
+                    .route("/api/serial/stop",   post(|| async { db_unavailable() }))
                     .layer(cors)
             };
 

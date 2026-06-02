@@ -593,10 +593,11 @@ where
         patient_id: i64,
         machine_id: i64,
         started_at: &str,
+        force_new: bool,
     ) -> Result<i64, UseCaseError> {
         Ok(self
             .telemetry_repo
-            .get_or_create_therapy(patient_id, machine_id, started_at)
+            .get_or_create_therapy(patient_id, machine_id, started_at, force_new)
             .await?)
     }
 

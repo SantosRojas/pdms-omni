@@ -174,4 +174,36 @@ export const apiService = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+
+  // ─── Serial Reader Control ────────────────────────
+  async getSerialStatus() {
+    const res = await fetch(`${API_BASE}/api/serial/status`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async startSerial(newTherapy = false) {
+    const res = await fetch(`${API_BASE}/api/serial/start`, {
+      method: 'POST',
+      headers: this._headers(),
+      body: JSON.stringify({ new_therapy: newTherapy }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async stopSerial() {
+    const res = await fetch(`${API_BASE}/api/serial/stop`, {
+      method: 'POST',
+      headers: this._headers(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
 };

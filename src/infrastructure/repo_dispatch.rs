@@ -15,6 +15,7 @@ use crate::infrastructure::postgres_repository::*;
 use crate::infrastructure::sqlx_repository::*;
 
 // ─── DataAttributeRepository ─────────────────────────
+#[derive(Clone)]
 pub enum DynAttrRepo {
     Sqlite(SqlxDataAttrRepository),
     Postgres(PgDataAttrRepository),
@@ -58,6 +59,7 @@ impl DataAttributeRepository for DynAttrRepo {
 }
 
 // ─── DictionaryRepository ────────────────────────────
+#[derive(Clone)]
 pub enum DynDictRepo {
     Sqlite(SqlxDictionaryRepository),
     Postgres(PgDictionaryRepository),
@@ -101,6 +103,7 @@ impl DictionaryRepository for DynDictRepo {
 }
 
 // ─── TelemetryRepository ─────────────────────────────
+#[derive(Clone)]
 pub enum DynTelemetryRepo {
     Sqlite(SqlxTelemetryRepository),
     Postgres(PgTelemetryRepository),
@@ -173,22 +176,23 @@ impl TelemetryRepository for DynTelemetryRepo {
         patient_id: i64,
         machine_id: i64,
         started_at: &str,
+        force_new: bool,
     ) -> Result<i64, RepositoryError> {
         match self {
             Self::Sqlite(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
                     .await
             }
             Self::Postgres(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
                     .await
             }
             Self::Mssql(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
                     .await
             }
             Self::Null(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
                     .await
             }
         }
@@ -216,6 +220,7 @@ impl TelemetryRepository for DynTelemetryRepo {
 }
 
 // ─── VersionRepository ───────────────────────────────
+#[derive(Clone)]
 pub enum DynVersionRepo {
     Sqlite(SqlxVersionRepository),
     Postgres(PgVersionRepository),
@@ -243,6 +248,7 @@ impl VersionRepository for DynVersionRepo {
 }
 
 // ─── AttributeEquivalenceRepository ──────────────────
+#[derive(Clone)]
 pub enum DynEquivRepo {
     Sqlite(SqlxAttributeEquivalenceRepository),
     Postgres(PgAttributeEquivalenceRepository),

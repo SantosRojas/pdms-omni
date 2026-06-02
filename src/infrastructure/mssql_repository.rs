@@ -43,6 +43,7 @@ async fn get_or_create_signal_id(pool: &Pool<ConnectionManager>, name: &str) -> 
 // ═══════════════════════════════════════════════
 //  DataAttributeRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct MssqlDataAttrRepository {
     pool: Pool<ConnectionManager>,
 }
@@ -129,6 +130,7 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
 // ═══════════════════════════════════════════════
 //  DictionaryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct MssqlDictionaryRepository {
     pool: Pool<ConnectionManager>,
 }
@@ -209,6 +211,7 @@ impl DictionaryRepository for MssqlDictionaryRepository {
 // ═══════════════════════════════════════════════
 //  TelemetryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct MssqlTelemetryRepository {
     pool: Pool<ConnectionManager>,
 }
@@ -328,8 +331,26 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         Ok(id as i64)
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool) -> Result<i64, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
+
+        if force_new {
+            let mut q_update = Query::new("UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' WHERE patient_id = @P1 AND machine_id = @P2 AND ended_at IS NULL");
+            q_update.bind(patient_id as i32);
+            q_update.bind(machine_id as i32);
+            q_update.execute(&mut *conn).await.map_err(map_db_err)?;
+        } else {
+            let mut q_select = Query::new("SELECT TOP(1) id FROM therapies WHERE patient_id = @P1 AND machine_id = @P2 AND ended_at IS NULL ORDER BY id DESC");
+            q_select.bind(patient_id as i32);
+            q_select.bind(machine_id as i32);
+            let stream = q_select.query(&mut *conn).await.map_err(map_db_err)?;
+            let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+            if let Some(r) = rows.first() {
+                if let Some(id) = r.get::<i32, _>(0) {
+                    return Ok(id as i64);
+                }
+            }
+        }
 
         let mut q_insert = Query::new("INSERT INTO therapies (started_at, patient_id, machine_id, status) OUTPUT INSERTED.id VALUES (@P1, @P2, @P3, 'active')");
         q_insert.bind(started_at);
@@ -387,6 +408,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 // ═══════════════════════════════════════════════
 //  VersionRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct MssqlVersionRepository {
     pool: Pool<ConnectionManager>,
 }
@@ -447,6 +469,7 @@ impl VersionRepository for MssqlVersionRepository {
 // ═══════════════════════════════════════════════
 //  AttributeEquivalenceRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct MssqlAttributeEquivalenceRepository {
     pool: Pool<ConnectionManager>,
 }

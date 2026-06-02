@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTelemetry } from '../../application/useTelemetry';
+import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp, ChevronRight, Search, X } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp, ChevronRight, Search, X, Play, Square, AlertTriangle, Radio } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
@@ -12,6 +13,10 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
   const [selectedTherapyId, setSelectedTherapyId] = useState('');
   const [therapyError, setTherapyError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showStartModal, setShowStartModal] = useState(false);
+  const { serialStatus, loading: serialLoading, error: serialError, startReader, stopReader } = useSerialStatus();
+
+  const canControlSerial = user.role === 'admin' || user.role === 'operator';
 
   const therapiesSorted = useMemo(
     () => [...therapies].sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')) || (b.id - a.id)),
@@ -136,6 +141,132 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
               </p>
             </div>
             <ThemeToggle />
+          </div>
+
+          {/* ── Serial Reader Control Panel ── */}
+          <div style={{
+            background: serialStatus.status === 'FailedLimit' ? 'rgba(239,68,68,0.08)'
+              : serialStatus.status === 'Running' ? 'rgba(16,185,129,0.06)'
+              : 'var(--btn-bg)',
+            border: `1px solid ${serialStatus.status === 'FailedLimit' ? 'rgba(239,68,68,0.3)'
+              : serialStatus.status === 'Running' ? 'rgba(16,185,129,0.25)'
+              : 'var(--border)'}`,
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
+            transition: 'all 0.3s ease',
+          }}>
+            {/* Status indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minWidth: '200px' }}>
+              <div style={{
+                width: '10px', height: '10px', borderRadius: '50%',
+                background: serialStatus.status === 'Running' ? '#10b981'
+                  : serialStatus.status === 'Initializing' ? '#f59e0b'
+                  : serialStatus.status === 'FailedLimit' ? '#ef4444'
+                  : '#64748b',
+                boxShadow: serialStatus.status === 'Running' ? '0 0 8px rgba(16,185,129,0.5)'
+                  : serialStatus.status === 'Initializing' ? '0 0 8px rgba(245,158,11,0.5)'
+                  : 'none',
+                animation: (serialStatus.status === 'Running' || serialStatus.status === 'Initializing') ? 'pulse 2s infinite' : 'none',
+              }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Radio size={14} />
+                  Puerto Serial
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {serialStatus.status === 'Running' && 'Lectura activa'}
+                  {serialStatus.status === 'Initializing' && 'Inicializando dispositivo...'}
+                  {serialStatus.status === 'Stopped' && 'Lectura detenida'}
+                  {serialStatus.status === 'FailedLimit' && `Lectura suspendida tras ${serialStatus.max_failures} fallos consecutivos`}
+                  {serialStatus.status === 'Unknown' && 'Estado desconocido'}
+                </div>
+              </div>
+            </div>
+
+            {/* Failure counter */}
+            {serialStatus.consecutive_failures > 0 && serialStatus.status !== 'FailedLimit' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '4px 12px', borderRadius: '999px',
+                background: 'rgba(245,158,11,0.12)', color: '#f59e0b',
+                fontSize: '0.78rem', fontWeight: 500,
+              }}>
+                <AlertTriangle size={13} />
+                {serialStatus.consecutive_failures}/{serialStatus.max_failures} fallos
+              </div>
+            )}
+
+            {serialStatus.status === 'FailedLimit' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '4px 12px', borderRadius: '999px',
+                background: 'rgba(239,68,68,0.12)', color: '#ef4444',
+                fontSize: '0.78rem', fontWeight: 500,
+              }}>
+                <AlertTriangle size={13} />
+                Límite alcanzado ({serialStatus.max_failures})
+              </div>
+            )}
+
+            {/* Controls */}
+            {canControlSerial && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {(serialStatus.status === 'Stopped' || serialStatus.status === 'FailedLimit' || serialStatus.status === 'Unknown') && (
+                  <button
+                    onClick={() => {
+                      if (therapies.length > 0) {
+                        setShowStartModal(true);
+                      } else {
+                        startReader(true);
+                      }
+                    }}
+                    disabled={serialLoading}
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      border: 'none', color: '#fff',
+                      padding: '8px 18px', borderRadius: '12px',
+                      cursor: serialLoading ? 'wait' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      fontSize: '0.82rem', fontWeight: 600,
+                      opacity: serialLoading ? 0.6 : 1,
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
+                    }}
+                  >
+                    <Play size={14} /> Iniciar
+                  </button>
+                )}
+                {(serialStatus.status === 'Running' || serialStatus.status === 'Initializing') && (
+                  <button
+                    onClick={stopReader}
+                    disabled={serialLoading}
+                    style={{
+                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      border: 'none', color: '#fff',
+                      padding: '8px 18px', borderRadius: '12px',
+                      cursor: serialLoading ? 'wait' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      fontSize: '0.82rem', fontWeight: 600,
+                      opacity: serialLoading ? 0.6 : 1,
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(239,68,68,0.3)',
+                    }}
+                  >
+                    <Square size={14} /> Detener
+                  </button>
+                )}
+              </div>
+            )}
+
+            {serialError && (
+              <div style={{ color: 'var(--danger)', fontSize: '0.8rem', width: '100%' }}>
+                Error: {serialError}
+              </div>
+            )}
           </div>
 
           {therapyError && (
@@ -463,6 +594,133 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Start Serial Modal ── */}
+      {showStartModal && (
+        <div className="modal-fade-in" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <div className="modal-slide-up" style={{
+            background: 'var(--bg-card)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid var(--border)',
+            borderRadius: '24px',
+            padding: '30px',
+            maxWidth: '480px',
+            width: '90%',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+            color: 'var(--text-main)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Radio size={20} color="var(--primary)" />
+                Iniciar lectura serial
+              </h3>
+              <button
+                onClick={() => setShowStartModal(false)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--text-muted)',
+                  cursor: 'pointer', padding: '4px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '20px' }}>
+              El puerto serial está detenido. Selecciona cómo deseas inicializar la sesión de lectura para la máquina conectada:
+            </p>
+
+            {therapiesSorted[0] && (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '16px',
+                marginBottom: '24px',
+              }}>
+                <div style={{ fontSize: '0.78rem', textTransform: 'uppercase', color: 'var(--primary)', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '10px' }}>
+                  Última terapia registrada
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', fontSize: '0.85rem' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Paciente</span>
+                    <span style={{ fontWeight: 500 }}>{therapiesSorted[0].patient_id_str || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Nº Serie Máquina</span>
+                    <span style={{ fontWeight: 500 }}>{therapiesSorted[0].serial_number || 'N/A'}</span>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Inicio</span>
+                    <span style={{ fontWeight: 500 }}>{therapiesSorted[0].started_at || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  startReader(true);
+                  setShowStartModal(false);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, var(--primary, #00d2ff), #00a2cc)',
+                  border: 'none', color: '#0f172a',
+                  padding: '12px 20px', borderRadius: '14px',
+                  cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
+                  transition: 'transform 0.1s, opacity 0.2s',
+                  boxShadow: '0 4px 12px rgba(0, 210, 255, 0.25)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                Crear nueva terapia
+              </button>
+              
+              <button
+                onClick={() => {
+                  startReader(false);
+                  setShowStartModal(false);
+                }}
+                style={{
+                  background: 'var(--btn-bg)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-main)',
+                  padding: '12px 20px', borderRadius: '14px',
+                  cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem',
+                  transition: 'background 0.2s, border-color 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'var(--bg-card-hover)';
+                  e.currentTarget.style.borderColor = 'var(--border-glow)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'var(--btn-bg)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                Continuar terapia actual
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -24,6 +24,7 @@ use super::auth::hash_password;
 
 /// All repository instances bundled together for easy injection.
 /// Uses enum dispatch so the same struct works for both SQLite and MSSQL.
+#[derive(Clone)]
 pub struct Repositories {
     pub attr_repo:      DynAttrRepo,
     pub dict_repo:      DynDictRepo,

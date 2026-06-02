@@ -12,6 +12,7 @@ use crate::domain::repositories::{
     TelemetryRepository, VersionRepository,
 };
 
+#[derive(Clone)]
 pub struct NullDataAttrRepository;
 
 impl NullDataAttrRepository {
@@ -38,6 +39,7 @@ impl DataAttributeRepository for NullDataAttrRepository {
     }
 }
 
+#[derive(Clone)]
 pub struct NullDictionaryRepository;
 
 impl NullDictionaryRepository {
@@ -68,6 +70,7 @@ impl DictionaryRepository for NullDictionaryRepository {
     }
 }
 
+#[derive(Clone)]
 pub struct NullTelemetryRepository {
     patients: Arc<Mutex<HashMap<String, i64>>>,
     next_id: Arc<Mutex<i64>>,
@@ -122,7 +125,7 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(assigned)
     }
 
-    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str, _force_new: bool) -> Result<i64, RepositoryError> {
         let mut next_therapy_id = self
             .next_therapy_id
             .lock()
@@ -141,6 +144,7 @@ impl TelemetryRepository for NullTelemetryRepository {
     }
 }
 
+#[derive(Clone)]
 pub struct NullVersionRepository;
 
 impl NullVersionRepository {
@@ -159,6 +163,7 @@ impl VersionRepository for NullVersionRepository {
     }
 }
 
+#[derive(Clone)]
 pub struct NullAttributeEquivalenceRepository;
 
 impl NullAttributeEquivalenceRepository {

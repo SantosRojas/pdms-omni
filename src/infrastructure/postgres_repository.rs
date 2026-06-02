@@ -37,6 +37,7 @@ async fn get_or_create_signal_id(pool: &PgPool, name: &str) -> Result<i64, Repos
 // ═══════════════════════════════════════════════
 //  DataAttributeRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct PgDataAttrRepository {
     pool: PgPool,
 }
@@ -130,6 +131,7 @@ impl DataAttributeRepository for PgDataAttrRepository {
 // ═══════════════════════════════════════════════
 //  DictionaryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct PgDictionaryRepository {
     pool: PgPool,
 }
@@ -213,6 +215,7 @@ impl DictionaryRepository for PgDictionaryRepository {
 // ═══════════════════════════════════════════════
 //  TelemetryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct PgTelemetryRepository {
     pool: PgPool,
 }
@@ -333,7 +336,29 @@ impl TelemetryRepository for PgTelemetryRepository {
         Ok(row.get::<i64, _>(0))
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool) -> Result<i64, RepositoryError> {
+        if force_new {
+            sqlx::query("UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE patient_id = $1 AND machine_id = $2 AND ended_at IS NULL")
+                .bind(patient_id)
+                .bind(machine_id)
+                .execute(&self.pool)
+                .await
+                .map_err(map_db_err)?;
+        } else {
+            let existing = sqlx::query_scalar::<_, i64>(
+                "SELECT id FROM therapies WHERE patient_id = $1 AND machine_id = $2 AND ended_at IS NULL ORDER BY id DESC LIMIT 1"
+            )
+            .bind(patient_id)
+            .bind(machine_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+            if let Some(id) = existing {
+                return Ok(id);
+            }
+        }
+
         let row = sqlx::query_scalar::<_, i64>("INSERT INTO therapies (started_at, patient_id, machine_id, status) VALUES ($1, $2, $3, 'active') RETURNING id")
             .bind(started_at)
             .bind(patient_id)
@@ -392,6 +417,7 @@ impl TelemetryRepository for PgTelemetryRepository {
 // ═══════════════════════════════════════════════
 //  VersionRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct PgVersionRepository {
     pool: PgPool,
 }
@@ -453,6 +479,7 @@ impl VersionRepository for PgVersionRepository {
 // ═══════════════════════════════════════════════
 //  AttributeEquivalenceRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct PgAttributeEquivalenceRepository {
     pool: PgPool,
 }

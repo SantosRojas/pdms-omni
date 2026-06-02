@@ -63,12 +63,13 @@ pub trait TelemetryRepository: Send + Sync {
     /// Maps a patient string ID to an auto-incrementing integer primary key
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError>;
 
-    /// Creates a new therapy session for a patient/machine start event.
+    /// Creates or retrieves a therapy session for a patient/machine.
     async fn get_or_create_therapy(
         &self,
         patient_id: i64,
         machine_id: i64,
         started_at: &str,
+        force_new: bool,
     ) -> Result<i64, RepositoryError>;
 
     /// Retrieves historical telemetry for a specific therapy

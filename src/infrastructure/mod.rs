@@ -10,5 +10,6 @@ pub mod persistence_helpers;
 pub mod postgres_repository;
 pub mod repo_dispatch;
 pub mod serial_communicator;
+pub mod serial_manager;
 pub mod sqlx_repository;
 pub mod websocket_server;

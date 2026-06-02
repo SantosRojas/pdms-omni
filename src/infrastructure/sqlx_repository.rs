@@ -37,6 +37,7 @@ async fn get_or_create_signal_id(pool: &SqlitePool, name: &str) -> Result<i64, R
 // ═══════════════════════════════════════════════
 //  DataAttributeRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct SqlxDataAttrRepository {
     pool: SqlitePool,
 }
@@ -127,6 +128,7 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
 // ═══════════════════════════════════════════════
 //  DictionaryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct SqlxDictionaryRepository {
     pool: SqlitePool,
 }
@@ -204,6 +206,7 @@ impl DictionaryRepository for SqlxDictionaryRepository {
 // ═══════════════════════════════════════════════
 //  TelemetryRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct SqlxTelemetryRepository {
     pool: SqlitePool,
 }
@@ -323,7 +326,29 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(row.get(0))
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool) -> Result<i64, RepositoryError> {
+        if force_new {
+            sqlx::query("UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE patient_id = ?1 AND machine_id = ?2 AND ended_at IS NULL")
+                .bind(patient_id)
+                .bind(machine_id)
+                .execute(&self.pool)
+                .await
+                .map_err(map_db_err)?;
+        } else {
+            let existing = sqlx::query_scalar::<_, i64>(
+                "SELECT id FROM therapies WHERE patient_id = ?1 AND machine_id = ?2 AND ended_at IS NULL ORDER BY id DESC LIMIT 1"
+            )
+            .bind(patient_id)
+            .bind(machine_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+            if let Some(id) = existing {
+                return Ok(id);
+            }
+        }
+
         let row = sqlx::query_scalar::<_, i64>("INSERT INTO therapies (started_at, patient_id, machine_id, status) VALUES (?1, ?2, ?3, 'active') RETURNING id")
             .bind(started_at)
             .bind(patient_id)
@@ -380,6 +405,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
 // ═══════════════════════════════════════════════
 //  VersionRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct SqlxVersionRepository {
     pool: SqlitePool,
 }
@@ -441,6 +467,7 @@ impl VersionRepository for SqlxVersionRepository {
 // ═══════════════════════════════════════════════
 //  AttributeEquivalenceRepository
 // ═══════════════════════════════════════════════
+#[derive(Clone)]
 pub struct SqlxAttributeEquivalenceRepository {
     pool: SqlitePool,
 }

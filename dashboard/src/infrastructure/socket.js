@@ -3,18 +3,21 @@ const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:9001/ws';
 export const socketService = {
   ws: null,
   _onTelemetry: null,
+  _onSerialStatus: null,
   _onConnect: null,
   _onDisconnect: null,
   _reconnectTimer: null,
-  _patientId: null,
 
-  connect(patientId) {
-    this._patientId = patientId;
+  connect() {
     this._doConnect();
   },
 
   _doConnect() {
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      return; // Already connected or connecting
+    }
     if (this.ws) {
+      this.ws.onclose = null;
       this.ws.close();
     }
 
@@ -44,9 +47,13 @@ export const socketService = {
     this.ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        // Backend sends { type: "telemetry", cycle, readings: [...] }
+
         if (payload.type === 'telemetry' && payload.readings && this._onTelemetry) {
           this._onTelemetry(payload.readings);
+        }
+
+        if (payload.type === 'serial_status' && this._onSerialStatus) {
+          this._onSerialStatus(payload);
         }
       } catch (e) {
         console.warn('[WS] Failed to parse message:', e);
@@ -68,25 +75,17 @@ export const socketService = {
       this._reconnectTimer = null;
     }
     if (this.ws) {
-      this.ws.onclose = null; // prevent reconnect
+      this.ws.onclose = null;
       this.ws.close();
       this.ws = null;
     }
   },
 
-  onTelemetry(callback) {
-    this._onTelemetry = callback;
-  },
+  onTelemetry(callback) { this._onTelemetry = callback; },
+  onSerialStatus(callback) { this._onSerialStatus = callback; },
+  onConnect(callback) { this._onConnect = callback; },
+  onDisconnect(callback) { this._onDisconnect = callback; },
 
-  onConnect(callback) {
-    this._onConnect = callback;
-  },
-
-  onDisconnect(callback) {
-    this._onDisconnect = callback;
-  },
-
-  offTelemetry() {
-    this._onTelemetry = null;
-  },
+  offTelemetry() { this._onTelemetry = null; },
+  offSerialStatus() { this._onSerialStatus = null; },
 };

@@ -18,6 +18,7 @@ pub struct ApiState {
     pub db: DbPool,
     pub jwt_secret: String,
     pub jwt_token_ttl_secs: u64,
+    pub serial_manager: std::sync::Arc<crate::infrastructure::serial_manager::SerialReaderManager>,
 }
 
 /// Extracts the authenticated user from the Authorization: Bearer <token> header.
@@ -624,3 +625,62 @@ pub async fn export_therapy_csv(
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }
+
+// ═══════════════════════════════════════════════
+//  SERIAL READER CONTROL
+// ═══════════════════════════════════════════════
+
+/// GET /api/serial/status
+pub async fn serial_status(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if get_claims(&headers, &state).is_none() {
+        return unauthorized().into_response();
+    }
+
+    let status = state.serial_manager.get_status().await;
+    Json(status).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct StartSerialPayload {
+    new_therapy: Option<bool>,
+}
+
+/// POST /api/serial/start
+pub async fn serial_start(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    payload: Option<Json<StartSerialPayload>>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state) {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" && session.role != "operator" {
+        return forbidden().into_response();
+    }
+
+    let new_therapy = payload.and_then(|Json(p)| p.new_therapy).unwrap_or(false);
+    state.serial_manager.start(new_therapy).await;
+    Json(serde_json::json!({"ok": true})).into_response()
+}
+
+/// POST /api/serial/stop
+pub async fn serial_stop(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state) {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" && session.role != "operator" {
+        return forbidden().into_response();
+    }
+
+    state.serial_manager.stop().await;
+    Json(serde_json::json!({"ok": true})).into_response()
+}
+
