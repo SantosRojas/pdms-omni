@@ -8,7 +8,10 @@ export const socketService = {
   _onDisconnect: null,
   _reconnectTimer: null,
 
-  connect() {
+  _connectors: new Set(),
+
+  connect(key = 'default') {
+    this._connectors.add(key);
     this._doConnect();
   },
 
@@ -69,15 +72,18 @@ export const socketService = {
     }, 3000);
   },
 
-  disconnect() {
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-      this._reconnectTimer = null;
-    }
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
+  disconnect(key = 'default') {
+    this._connectors.delete(key);
+    if (this._connectors.size === 0) {
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      if (this.ws) {
+        this.ws.onclose = null;
+        this.ws.close();
+        this.ws = null;
+      }
     }
   },
 

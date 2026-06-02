@@ -26,7 +26,7 @@ export const useSerialStatus = () => {
 
   // Subscribe to WS serial_status events (always, regardless of therapy)
   useEffect(() => {
-    socketService.connect();
+    socketService.connect('serialStatus');
     socketService.onSerialStatus((payload) => {
       setSerialStatus({
         status: payload.status,
@@ -37,6 +37,7 @@ export const useSerialStatus = () => {
 
     return () => {
       socketService.offSerialStatus();
+      socketService.disconnect('serialStatus');
     };
   }, []);
 

@@ -34,12 +34,12 @@ export const useTelemetry = (therapyId, isActive) => {
   useEffect(() => {
     if (!therapyId || !isActive) {
       socketService.offTelemetry();
-      socketService.disconnect();
+      socketService.disconnect('telemetry');
       setConnected(false);
       return;
     }
 
-    socketService.connect();
+    socketService.connect('telemetry');
 
     socketService.onConnect(() => setConnected(true));
     socketService.onDisconnect(() => setConnected(false));
@@ -91,7 +91,7 @@ export const useTelemetry = (therapyId, isActive) => {
 
     return () => {
       socketService.offTelemetry();
-      socketService.disconnect();
+      socketService.disconnect('telemetry');
     };
   }, [therapyId, isActive]);
 
