@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../../infrastructure/api';
+import { toLocalDatetime } from '../../infrastructure/time';
 import { MessageSquare, Send, Trash2, User, Clock, X } from 'lucide-react';
 
 export const CommentsSection = ({ therapyId }) => {
@@ -114,7 +115,7 @@ export const CommentsSection = ({ therapyId }) => {
                 <User size={14} color="var(--secondary)" />
                 <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{comment.author_name}</span>
                 <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-                  {comment.created_at}
+                  {toLocalDatetime(comment.created_at)}
                 </span>
               </div>
               {canDelete() && (

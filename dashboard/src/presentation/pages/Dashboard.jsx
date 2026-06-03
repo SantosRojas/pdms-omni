@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTelemetry } from '../../application/useTelemetry';
 import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
+import { toLocalTimeOnly, toLocalDate, toLocalDatetime } from '../../infrastructure/time';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, TrendingUp, ChevronRight, Search, X, Play, Square, AlertTriangle, Radio } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, TrendingUp, ChevronRight, Search, X, Play, Square, AlertTriangle, Radio, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export const Dashboard = ({ user, onNavigateHistory }) => {
@@ -84,6 +85,49 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
   const therapyIsActive = !!selectedTherapy && activeTherapyIds.has(String(selectedTherapy.id));
 
   const { data, connected } = useTelemetry(selectedTherapy?.id, therapyIsActive);
+
+  // ── Accumulated therapy chart ──
+  const [accData, setAccData] = useState([]);
+  const [accLoading, setAccLoading] = useState(false);
+  const [accError, setAccError] = useState(null);
+  const [accDate, setAccDate] = useState('');
+
+  const fetchAccData = useCallback(async () => {
+    if (!selectedTherapyId) return;
+    setAccLoading(true);
+    setAccError(null);
+    try {
+      const rows = await apiService.getTherapyHistory(Number(selectedTherapyId), 5000);
+      const byTs = {};
+      rows.forEach(r => {
+        if (typeof r.physical_value !== 'number') return;
+        if (!byTs[r.timestamp]) byTs[r.timestamp] = { time: r.timestamp };
+        byTs[r.timestamp][r.internal_name] = r.physical_value;
+      });
+      const sorted = Object.values(byTs).sort((a, b) => a.time.localeCompare(b.time));
+      const withTimeOnly = sorted.map(p => ({
+        ...p,
+        timeOnly: toLocalTimeOnly(p.time),
+      }));
+      const therapyDate = toLocalDate(sorted[0]?.time);
+      setAccDate(therapyDate);
+      setAccData(withTimeOnly);
+    } catch (e) {
+      setAccError(e.message);
+    } finally {
+      setAccLoading(false);
+    }
+  }, [selectedTherapyId]);
+
+  useEffect(() => {
+    if (selectedTherapyId && therapyIsActive) {
+      fetchAccData();
+    } else {
+      setAccData([]);
+    }
+  }, [selectedTherapyId, therapyIsActive, fetchAccData]);
+
+  const hasAccData = accData.length > 1;
 
   useEffect(() => {
     apiService.getTherapies()
@@ -255,10 +299,10 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                                 </span>
                               </div>
                               <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
-                                Inició: {therapy.started_at}
+                                Inició: {toLocalDatetime(therapy.started_at)}
                               </div>
                               <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                                {therapy.ended_at || 'Aún sin cierre'}
+                                {therapy.ended_at ? toLocalDatetime(therapy.ended_at) : 'Aún sin cierre'}
                               </div>
                             </button>
                           );
@@ -344,8 +388,8 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                 <StatCard title="Machine Serial" value={selectedTherapy.serial_number} iconName="HardDrive" color="#eab308" />
                 <StatCard title="Machine SW" value={selectedTherapy.software_version} iconName="Server" color="var(--secondary)" />
                 <StatCard title="Therapy Status" value={selectedTherapy.status} iconName="Activity" color={therapyIsActive ? '#10b981' : 'var(--text-tertiary)'} />
-                <StatCard title="Therapy Started" value={selectedTherapy.started_at} iconName="Clock" color="var(--primary)" />
-                <StatCard title="Therapy Ended" value={selectedTherapy.ended_at || 'In progress'} iconName="Clock" color="#f97316" />
+                <StatCard title="Therapy Started" value={toLocalDatetime(selectedTherapy.started_at)} iconName="Clock" color="var(--primary)" />
+                <StatCard title="Therapy Ended" value={selectedTherapy.ended_at ? toLocalDatetime(selectedTherapy.ended_at) : 'In progress'} iconName="Clock" color="#f97316" />
                 {therapyIsActive ? (
                   <>
                     <StatCard title="Patient Weight" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
@@ -424,6 +468,91 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                       </div>
                     </div>
                   </div>
+
+                  {/* ── Accumulated Therapy Chart ── */}
+                  <div className="glass-panel animate-slide-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+                        <Database size={20} color="var(--primary)" /> Therapy Accumulated Trends
+                        {accDate && <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>{accDate}</span>}
+                      </h3>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={fetchAccData}
+                        disabled={accLoading}
+                        title="Refresh accumulated data"
+                      >
+                        <RefreshCw size={14} style={{ animation: accLoading ? 'spin 1s linear infinite' : 'none' }} />
+                        Actualizar
+                      </button>
+                    </div>
+
+                    {accError && (
+                      <div className="message-box message-error" style={{ marginBottom: '12px' }}>
+                        {accError}
+                      </div>
+                    )}
+
+                    {accLoading && !hasAccData && (
+                      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                        <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                        Cargando datos acumulados...
+                      </div>
+                    )}
+
+                    {!accLoading && !hasAccData && !accError && (
+                      <div className="empty-state" style={{ padding: '32px' }}>
+                        <Database size={24} style={{ opacity: 0.3 }} />
+                        <span>No hay datos históricos suficientes para esta terapia.</span>
+                      </div>
+                    )}
+
+                    {hasAccData && (
+                      <div style={{ width: '100%', height: '280px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={accData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
+                            <XAxis dataKey="timeOnly" stroke="var(--text-tertiary)" fontSize={11} tickLine={false} axisLine={false} />
+                            <YAxis stroke="var(--text-tertiary)" fontSize={11} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                            <Tooltip
+                              contentStyle={{
+                                borderRadius: '12px',
+                                border: '1px solid var(--border-default)',
+                                boxShadow: 'var(--shadow-lg)',
+                                background: 'var(--bg-elevated)',
+                              }}
+                              labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
+                            />
+                            <Legend />
+                            {accData.some(d => d.c_acc_net_rem_vol_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_acc_net_rem_vol_act" stroke="#22d3ee" name="Acc. Net Removal" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_acc_therapy_time_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_acc_therapy_time_act" stroke="var(--primary)" name="Therapy Time" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.d_renal_dose_act !== undefined) && (
+                              <Line type="monotone" dataKey="d_renal_dose_act" stroke="#a855f7" name="Renal Dose" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_net_rem_flow_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_net_rem_flow_act" stroke="var(--fil-color)" name="Net Removal Flow" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_press_ap_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_press_vp_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_press_vp_act" stroke="var(--ven-color)" name="Venous" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_press_tmp_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_press_tmp_act" stroke="var(--tmp-color)" name="TMP" dot={false} strokeWidth={2} />
+                            )}
+                            {accData.some(d => d.c_press_fp_act !== undefined) && (
+                              <Line type="monotone" dataKey="c_press_fp_act" stroke="var(--fil-color)" name="Filter" dot={false} strokeWidth={2} />
+                            )}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <div className="glass-panel empty-state" style={{ padding: '48px' }}>
@@ -483,7 +612,7 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: '0.75rem' }}>Inicio</span>
-                    <span style={{ fontWeight: 500 }}>{therapiesSorted[0].started_at || 'N/A'}</span>
+                    <span style={{ fontWeight: 500 }}>{toLocalDatetime(therapiesSorted[0].started_at) || 'N/A'}</span>
                   </div>
                 </div>
               </div>

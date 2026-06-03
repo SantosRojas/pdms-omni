@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
+import { toLocalDatetime } from '../../infrastructure/time';
 import { DataTable } from '../components/DataTable';
 import { Download, Clock, ChevronLeft } from 'lucide-react';
 import { CommentsSection } from '../components/CommentsSection';
@@ -33,7 +34,7 @@ export const HistoryView = ({ therapy, onBack }) => {
       label: 'Timestamp',
       render: (r) => (
         <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
-          {r.timestamp}
+          {toLocalDatetime(r.timestamp)}
         </span>
       ),
     },

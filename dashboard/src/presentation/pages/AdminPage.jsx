@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
+import { toLocalDatetime } from '../../infrastructure/time';
 import { Users, Plus, Trash2, Edit3, ShieldCheck, Eye, Settings, ChevronLeft, X, Check } from 'lucide-react';
 
 const ROLE_COLORS = {
@@ -161,7 +162,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
                         </span>
                       )}
                     </td>
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{u.created_at}</td>
+                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{toLocalDatetime(u.created_at)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {isEditing ? (
