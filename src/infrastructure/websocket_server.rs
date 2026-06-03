@@ -8,6 +8,7 @@ use serde::Serialize;
 use tokio::sync::broadcast;
 use tower_http::cors::{CorsLayer, Any};
 use tower_http::services::ServeDir;
+use tracing::{error, info};
 
 use super::db_pool::DbPool;
 use super::http_api::{self, ApiState};
@@ -147,18 +148,18 @@ impl WebSocketHub {
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,
                 Err(e) => {
-                    eprintln!("[WS] No se pudo abrir {}: {}", addr, e);
+                    error!("[WS] No se pudo abrir {}: {}", addr, e);
                     return;
                 }
             };
 
             if let Some(ref dir) = dashboard_dir {
-                println!("[WS] Sirviendo dashboard desde {}", dir.display());
+                info!("[WS] Sirviendo dashboard desde {}", dir.display());
             }
-            println!("[WS] Servidor WS + API activo en http://{}", addr);
+            info!("[WS] Servidor WS + API activo en http://{}", addr);
 
             if let Err(e) = axum::serve(listener, app).await {
-                eprintln!("[WS] Error en servidor: {}", e);
+                error!("[WS] Error en servidor: {}", e);
             }
         });
 

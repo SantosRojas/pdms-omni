@@ -4,7 +4,9 @@
 *.doc
 *.xlsx
 *.db
+*.log
 *.db-shm
 
 /Back
+/logs
 

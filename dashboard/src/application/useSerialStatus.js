@@ -13,6 +13,7 @@ export const useSerialStatus = () => {
     status: 'Unknown',
     consecutive_failures: 0,
     max_failures: 0,
+    data_warnings: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +33,7 @@ export const useSerialStatus = () => {
         status: payload.status,
         consecutive_failures: payload.consecutive_failures,
         max_failures: payload.max_failures,
+        data_warnings: payload.data_warnings || 0,
       });
     });
 
@@ -47,7 +49,7 @@ export const useSerialStatus = () => {
     try {
       await apiService.startSerial(newTherapy);
       // Optimistic update – the WS event will confirm
-      setSerialStatus(prev => ({ ...prev, status: 'Initializing', consecutive_failures: 0 }));
+      setSerialStatus(prev => ({ ...prev, status: 'Initializing', consecutive_failures: 0, data_warnings: 0 }));
     } catch (e) {
       setError(e.message);
     } finally {

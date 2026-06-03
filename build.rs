@@ -13,7 +13,7 @@ fn main() {
     // Directory-level rerun-if-changed doesn't detect file content changes on Windows.
 
     let dist_index = dashboard_dir.join("dist").join("index.html");
-    if dist_index.exists() && !any_source_newer(&dashboard_dir, &dist_index) {
+    if dist_index.exists() && !any_source_newer(dashboard_dir, &dist_index) {
         return;
     }
 
@@ -24,14 +24,14 @@ fn main() {
     let status = Command::new(npm)
         .arg("install")
         .arg("--prefer-offline")
-        .current_dir(&dashboard_dir)
+        .current_dir(dashboard_dir)
         .status()
         .expect("Failed to run npm install");
     assert!(status.success(), "npm install failed");
 
     let status = Command::new(npm)
         .args(["run", "build"])
-        .current_dir(&dashboard_dir)
+        .current_dir(dashboard_dir)
         .status()
         .expect("Failed to run npm run build");
     assert!(status.success(), "npm run build failed");
@@ -70,5 +70,5 @@ fn file_newer(path: &Path, ref_time: SystemTime) -> bool {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()
-        .map_or(true, |t| t > ref_time)
+        .is_none_or(|t| t > ref_time)
 }

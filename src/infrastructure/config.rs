@@ -1,6 +1,7 @@
 use dotenvy;
 use std::collections::HashSet;
 use std::env;
+use tracing::warn;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureMode {
@@ -167,7 +168,7 @@ impl AppConfig {
                     if std::path::Path::new(&dir).exists() {
                         Some(dir)
                     } else {
-                        eprintln!("[Config] DASHBOARD_DIR \"{}\" no existe, ignorando", dir);
+                        warn!("[Config] DASHBOARD_DIR \"{}\" no existe, ignorando", dir);
                         None
                     }
                 } else {
@@ -262,7 +263,7 @@ fn parse_handles_csv(raw: &str) -> HashSet<u16> {
             };
 
             if parsed.is_none() {
-                eprintln!("[Config] CAPTURE_HANDLES ignora valor invalido: {}", token);
+                warn!("[Config] CAPTURE_HANDLES ignora valor invalido: {}", token);
             }
 
             parsed

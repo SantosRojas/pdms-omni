@@ -13,6 +13,7 @@ pub struct SerialReaderStatus {
     pub status: String, // "Stopped", "Initializing", "Running", "FailedLimit"
     pub consecutive_failures: u32,
     pub max_failures: u32,
+    pub data_warnings: u32,
 }
 
 pub struct SerialReaderManager {
@@ -27,6 +28,7 @@ impl SerialReaderManager {
             status: initial_status.to_string(),
             consecutive_failures: 0,
             max_failures,
+            data_warnings: 0,
         }));
         
         let initial_cmd = if start_active {
@@ -52,6 +54,7 @@ impl SerialReaderManager {
         let mut s = self.state.lock().await;
         s.status = "Initializing".to_string();
         s.consecutive_failures = 0;
+        s.data_warnings = 0;
         let id = chrono::Utc::now().timestamp_millis() as u64;
         let _ = self.cmd_tx.send(ReaderCommand::Start { id, new_therapy });
     }
@@ -72,23 +75,29 @@ impl SerialReaderManager {
     pub async fn record_success(&self) {
         let mut s = self.state.lock().await;
         s.consecutive_failures = 0;
-        // Only update status if we are still Running; don't override Stopped/FailedLimit
         if s.status == "Initializing" {
             s.status = "Running".to_string();
         }
     }
 
-    /// Record one read failure; transitions to FailedLimit when threshold is reached.
-    /// Returns true if the limit was just reached.
+    /// Record a data integrity warning (CRC, parse error, NAK, etc.).
+    /// These do NOT count toward the failure limit and will NOT stop the reader.
+    pub async fn record_warning(&self) {
+        let mut s = self.state.lock().await;
+        s.data_warnings += 1;
+        // Keep status as-is; never transition to FailedLimit from warnings.
+    }
+
+    /// Record one connection failure (I/O error, timeout).
+    /// Transitions to FailedLimit when threshold is reached.
     pub async fn record_failure(&self) -> bool {
         let mut s = self.state.lock().await;
         s.consecutive_failures += 1;
         if s.consecutive_failures >= s.max_failures {
             s.status = "FailedLimit".to_string();
-            // Stop the command channel so the worker exits
             let _ = self.cmd_tx.send(ReaderCommand::Stop);
             return true;
         }
-        true // still within limit, keep going
+        true
     }
 }

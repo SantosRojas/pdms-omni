@@ -9,6 +9,7 @@ use bb8_tiberius::ConnectionManager;
 use tiberius::{AuthMethod, Config as TibConfig, Row as TibRow, Query as TibQuery};
 use std::str::FromStr;
 use std::io;
+use tracing::{info, warn};
 
 use super::db_pool::DbPool;
 use super::config::{DatabaseConfig, MssqlSettings, PostgresSettings};
@@ -198,7 +199,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', ?1, 'Administrator', 'admin')"
         ).bind(admin_password_hash).execute(&pool).await?;
-        println!("  [DB] Default admin user created (username: admin, password: admin123)");
+        info!("  [DB] Default admin user created (username: admin, password: admin123)");
     }
 
     // Seed equivalences
@@ -224,7 +225,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
             .execute(&mut *tx).await?;
         }
         tx.commit().await?;
-        println!("  [DB] Embedded equivalences initialized.");
+        info!("  [DB] Embedded equivalences initialized.");
     }
 
     Ok(Repositories {
@@ -238,7 +239,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
 }
 
 async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
-    println!("  [DB] Connecting to PostgreSQL...");
+    info!("  [DB] Connecting to PostgreSQL...");
 
     let url = format!(
         "postgresql://{}:{}@{}:{}/{}",
@@ -368,7 +369,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
         ).execute(&pool).await?;
-        println!("  [DB] Default admin user created (username: admin, password: admin123)");
+        info!("  [DB] Default admin user created (username: admin, password: admin123)");
     }
 
     let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
@@ -394,7 +395,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
             .execute(&mut *tx).await?;
         }
         tx.commit().await?;
-        println!("  [DB] Embedded equivalences initialized.");
+        info!("  [DB] Embedded equivalences initialized.");
     }
 
     Ok(Repositories {
@@ -412,7 +413,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
 // ═══════════════════════════════════════════════════════════════
 
 async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
-    println!("  [DB] Connecting to SQL Server...");
+    info!("  [DB] Connecting to SQL Server...");
 
     // Keep this aligned with the known-good standalone tiberius sample.
     let mut tib_config = TibConfig::new();
@@ -546,10 +547,10 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
         for stmt in index_statements {
             let q = TibQuery::new(stmt);
             if let Err(e) = q.execute(&mut *conn).await {
-                eprintln!("  [DB] Index warning: {}", e);
+                warn!("  [DB] Index warning: {}", e);
             }
         }
-        println!("  [DB] SQL Server schema verified.");
+        info!("  [DB] SQL Server schema verified.");
 
         // Schema migrations to update existing tables
         let migration_statements = vec![
@@ -577,7 +578,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             let q = TibQuery::new(stmt);
             if let Err(e) = q.execute(&mut *conn).await {
                 // Migration errors are not fatal; log and continue
-                eprintln!("  [DB] Migration warning: {}", e);
+                warn!("  [DB] Migration warning: {}", e);
             }
         }
     }
@@ -595,7 +596,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             let mut qi = TibQuery::new("INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)");
             qi.bind("admin"); qi.bind(admin_password_hash.as_str()); qi.bind("Administrator"); qi.bind("admin");
             qi.execute(&mut *conn).await?;
-            println!("  [DB] Default admin user created (username: admin, password: admin123)");
+            info!("  [DB] Default admin user created (username: admin, password: admin123)");
         }
     }
 
@@ -632,7 +633,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                 q3.bind(signal_id); q3.bind(eq.numeric_value); q3.bind(eq.display_name);
                 q3.execute(&mut *c).await?;
             }
-            println!("  [DB] Embedded equivalences initialized.");
+            info!("  [DB] Embedded equivalences initialized.");
         }
     }
 

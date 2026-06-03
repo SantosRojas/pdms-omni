@@ -9,12 +9,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
+use tracing::{debug, error, info, warn};
 
 use crate::application::use_cases::OmniInteractor;
 use crate::domain::entities::TelemetryReading;
 use crate::infrastructure::config::{AppConfig, CaptureMode};
 use crate::infrastructure::database;
 use crate::infrastructure::database::Repositories;
+use crate::infrastructure::logger;
 use crate::infrastructure::serial_communicator::{SerialConfig, SerialDeviceCommunicator};
 use crate::infrastructure::serial_manager::{ReaderCommand, SerialReaderManager};
 use crate::infrastructure::websocket_server::WebSocketHub;
@@ -44,6 +46,7 @@ struct SerialEvent {
     status: String,
     consecutive_failures: u32,
     max_failures: u32,
+    data_warnings: u32,
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -69,9 +72,9 @@ where
         match interactor.initialize().await {
             Ok(version) => return Ok(version),
             Err(e) => {
-                eprintln!("[Device] Inicialización fallida (intento {}/{}): {}", attempt, max_attempts, e);
+                error!("[Device] Inicialización fallida (intento {}/{}): {}", attempt, max_attempts, e);
                 if attempt < max_attempts {
-                    eprintln!("[Device] Reintentando en {}s...", interval_secs);
+                    info!("[Device] Reintentando en {}s...", interval_secs);
                     tokio::time::sleep(Duration::from_secs(interval_secs)).await;
                 }
             }
@@ -122,6 +125,7 @@ async fn broadcast_serial_status(ws_hub: &WebSocketHub, serial_manager: &SerialR
         status: current.status.clone(),
         consecutive_failures: current.consecutive_failures,
         max_failures: current.max_failures,
+        data_warnings: current.data_warnings,
     };
     let _ = ws_hub.broadcast_json(&event);
 }
@@ -146,14 +150,14 @@ async fn run_reader_session(
     let device = match SerialDeviceCommunicator::new(serial_config) {
         Ok(dev) => dev,
         Err(err) => {
-            eprintln!("[Serial] No se pudo abrir el puerto: {}", err);
+            error!("[Serial] No se pudo abrir el puerto: {}", err);
             serial_manager.record_failure().await;
             broadcast_serial_status(ws_hub, &serial_manager).await;
             return;
         }
     };
 
-    println!("[Serial] Puerto {} abierto (19200, 8N1)\n", config.port_name);
+    info!("[Serial] Puerto {} abierto (19200, 8N1)", config.port_name);
 
     // Build interactor
     let mut interactor = OmniInteractor::new(
@@ -178,14 +182,14 @@ async fn run_reader_session(
             v
         }
         Err(e) => {
-            eprintln!("[Device] {}", e);
+            error!("[Device] {}", e);
             serial_manager.record_failure().await;
             broadcast_serial_status(ws_hub, &serial_manager).await;
             return;
         }
     };
 
-    println!("[OK] OMNI inicializado: System SW={}", version.system_sw);
+    info!("[OK] OMNI inicializado: System SW={}", version.system_sw);
     serial_manager.set_running().await;
     broadcast_serial_status(ws_hub, &serial_manager).await;
 
@@ -204,14 +208,14 @@ async fn run_reader_session(
     let mut force_new_session = new_therapy;
     let software_version = version.system_sw.clone();
 
-    println!("\n[Loop] Lectura cíclica de valores (Ctrl+C para detener)...\n");
+    info!("[Loop] Lectura cíclica de valores (Ctrl+C para detener)...");
 
     loop {
         // Check if we should stop
         {
             let status = serial_manager.get_status().await;
             if status.status == "Stopped" || status.status == "FailedLimit" {
-                println!("[Serial] Deteniendo lectura: {}", status.status);
+                info!("[Serial] Deteniendo lectura: {}", status.status);
                 return;
             }
         }
@@ -235,11 +239,14 @@ async fn run_reader_session(
             }).await
         };
 
+        let ctx_patient = current_patient_key.clone().unwrap_or("—".to_string());
+        let ctx_machine = current_serial_number.clone().unwrap_or("—".to_string());
+
         match cycle_result {
             Ok(readings) => {
                 serial_manager.record_success().await;
 
-                println!("── Ciclo {} ── {} lecturas ──", cycle, readings.len());
+                info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] {count} lecturas", count = readings.len());
 
                 let is_in_therapy = readings.iter().any(|r| {
                     (r.internal_name == "c_trmt_main_state"
@@ -256,9 +263,9 @@ async fn run_reader_session(
                     .and_then(|r| r.display_value.clone())
                     .unwrap_or_else(|| "N/A".to_string());
 
-                println!(
-                    "[Estado] Terapia activa: {}, Estado: {}",
-                    is_in_therapy, therapy_state_name
+                info!(
+                    "[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia activa: {act}, Estado: {est}",
+                    act = is_in_therapy, est = therapy_state_name
                 );
 
                 let patient_key = readings
@@ -295,14 +302,14 @@ async fn run_reader_session(
                     was_in_therapy = false;
                     therapy_start_time = None;
                     therapy_end_time = None;
-                    println!("[EVENTO] Cambio de paciente detectado: {:?}", current_patient_key);
+                    info!("[EVENTO] [Máq: {ctx_machine}] Cambio de paciente: {p:?}", p = current_patient_key);
                 }
 
                 if serial_number != current_serial_number {
                     current_serial_number = serial_number.clone();
                     current_machine_id = None;
                     current_therapy_id = None;
-                    println!("[EVENTO] Cambio de máquina detectado: {:?}", current_serial_number);
+                    info!("[EVENTO] Cambio de máquina: {s:?}", s = current_serial_number);
                 }
 
                 if is_in_therapy {
@@ -311,7 +318,7 @@ async fn run_reader_session(
                             if persistence_enabled {
                                 match interactor.get_or_create_machine(serial, &software_version).await {
                                     Ok(machine_id) => current_machine_id = Some(machine_id),
-                                    Err(e) => eprintln!("[DB] No se pudo registrar la máquina: {}", e),
+                                    Err(e) => error!("[DB] [Máq: {ctx_machine}] No se pudo registrar la máquina: {e}"),
                                 }
                             }
                         }
@@ -334,20 +341,20 @@ async fn run_reader_session(
                                                 therapy_end_time = None;
                                                 force_new_session = false;
                                             }
-                                            Err(e) => eprintln!("[DB] No se pudo abrir la terapia: {}", e),
+                                            Err(e) => error!("[DB] [Máq: {ctx_machine}] [Pac: {patient}] No se pudo abrir la terapia: {e}"),
                                         }
                                     }
-                                    Err(e) => eprintln!("[DB] No se pudo registrar el paciente: {}", e),
+                                    Err(e) => error!("[DB] [Pac: {patient}] No se pudo registrar el paciente: {e}"),
                                 }
                             }
                         }
                     }
 
                     if !was_in_therapy && current_therapy_id.is_some() {
-                        println!("[Therapy] Detectado INICIO de terapia!");
+                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] INICIO de terapia detectado");
                     }
                 } else if was_in_therapy {
-                    println!("[Therapy] Detectado FIN de terapia!");
+                    info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] FIN de terapia detectado");
                     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                     therapy_end_time = Some(now);
                     if persistence_enabled {
@@ -363,14 +370,14 @@ async fn run_reader_session(
                     use crate::domain::entities::TelemetryValue;
                     match &r.physical_value {
                         TelemetryValue::Number(n) => {
-                            if let Some(display) = &r.display_value {
-                                println!("  {:30} = {:>10.2} {} ({})", r.internal_name, n, r.unit, display);
+                            if let Some(disp) = &r.display_value {
+                                debug!("  {:<30} = {:>10.2} {} ({})", r.internal_name, n, r.unit, disp);
                             } else {
-                                println!("  {:30} = {:>10.2} {}", r.internal_name, n, r.unit);
+                                debug!("  {:<30} = {:>10.2} {}", r.internal_name, n, r.unit);
                             }
                         }
                         TelemetryValue::String(s) => {
-                            println!("  {:30} = {:>10} {}", r.internal_name, s, r.unit);
+                            debug!("  {:<30} = {:>10} {}", r.internal_name, s, r.unit);
                         }
                     }
                 }
@@ -387,13 +394,13 @@ async fn run_reader_session(
                     persistence_status: if persistence_enabled { "persisting" } else { "not_persisting" },
                 };
                 if let Err(e) = ws_hub.broadcast_json(&event) {
-                    eprintln!("[WS] No se pudo broadcast ciclo {}: {}", cycle, e);
+                    error!("[WS] [Ciclo {cycle}] No se pudo broadcast: {e}");
                 }
 
                 if last_save.elapsed() >= save_interval {
                     if !persistence_enabled {
                         if !persistence_warned {
-                            eprintln!("[Persistencia] DESHABILITADA: los datos se muestran en tiempo real pero no se guardan en base de datos.");
+                            warn!("[Persistencia] DESHABILITADA: datos en tiempo real pero no se guardan en BD.");
                             persistence_warned = true;
                         }
                         last_save = tokio::time::Instant::now();
@@ -405,37 +412,47 @@ async fn run_reader_session(
                         && current_therapy_id.is_some();
 
                     if should_save {
-                        println!("[DB] Guardando snapshot de ciclo {} ({} lecturas)...", cycle, readings.len());
+                        info!("[DB] [Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Guardando snapshot ({count} lecturas)...", count = readings.len());
                         let mut readings_to_save = readings.clone();
                         for reading in &mut readings_to_save {
                             reading.therapy_id = current_therapy_id;
                         }
                         if let Err(e) = interactor.save_telemetry(&readings_to_save).await {
-                            eprintln!("[DB] ERROR al persistir snapshot: {}", e);
+                            error!("[DB] [Ciclo {cycle}] ERROR al persistir snapshot: {e}");
                         } else {
                             last_save = tokio::time::Instant::now();
                         }
                     } else {
-                        println!("[DB] Snapshot omitido (el paciente no está en terapia).");
                         last_save = tokio::time::Instant::now();
                     }
                 }
             }
             Err(e) => {
-                eprintln!("[ERROR] Ciclo {}: {}", cycle, e);
-                // Drop the error BEFORE awaiting to avoid Send issues
-                drop(e);
+                use crate::domain::device::DeviceError;
+                use crate::application::use_cases::UseCaseError;
 
-                serial_manager.record_failure().await;
-                broadcast_serial_status(ws_hub, &serial_manager).await;
+                let is_connection_error = matches!(&e,
+                    UseCaseError::Device(DeviceError::IoError(_))
+                    | UseCaseError::Device(DeviceError::Timeout)
+                );
 
-                let current = serial_manager.get_status().await;
-                if current.status == "FailedLimit" {
-                    eprintln!(
-                        "[Serial] Límite de {} fallos consecutivos alcanzado. Suspendiendo lectura.",
-                        current.max_failures
-                    );
-                    return;
+                if is_connection_error {
+                    error!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ERROR de conexión: {e}");
+                    serial_manager.record_failure().await;
+                    broadcast_serial_status(ws_hub, &serial_manager).await;
+
+                    let current = serial_manager.get_status().await;
+                    if current.status == "FailedLimit" {
+                        error!(
+                            "[Serial] Límite de {max} fallos consecutivos alcanzado. Suspendiendo lectura.",
+                            max = current.max_failures
+                        );
+                        return;
+                    }
+                } else {
+                    warn!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ADVERTENCIA de datos: {e}");
+                    serial_manager.record_warning().await;
+                    broadcast_serial_status(ws_hub, &serial_manager).await;
                 }
             }
         }
@@ -449,28 +466,31 @@ async fn run_reader_session(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("╔══════════════════════════════════════════════╗");
-    println!("║   PDMS-Omni · B.Braun OMNI-ODI Client        ║");
-    println!("╚══════════════════════════════════════════════╝\n");
+    // Initialize logging FIRST (file + console)
+    let _guards = logger::init_logger(None);
+
+    info!("╔══════════════════════════════════════════════╗");
+    info!("║   PDMS-Omni · B.Braun OMNI-ODI Client        ║");
+    info!("╚══════════════════════════════════════════════╝");
 
     // 1. Configuración
     let config = Arc::new(AppConfig::from_env());
-    println!(
-        "[Config] DB={}, Puerto={}, Baudrate={}, Timeout={}s, WS=ws://{}:{}/ws, MaxFallos={}",
-        config.get_database_url_redacted(),
-        config.port_name,
-        config.baudrate,
-        config.serial_timeout_secs,
-        config.ws_host,
-        config.ws_port,
-        config.serial_max_failures,
+    info!(
+        "[Config] DB={url}, Puerto={port}, Baudrate={baud}, Timeout={to}s, WS=ws://{host}:{wport}/ws, MaxFallos={mf}",
+        url = config.get_database_url_redacted(),
+        port = config.port_name,
+        baud = config.baudrate,
+        to = config.serial_timeout_secs,
+        host = config.ws_host,
+        wport = config.ws_port,
+        mf = config.serial_max_failures,
     );
     match config.capture_mode {
-        CaptureMode::All => println!("[Config] Captura: ALL"),
-        CaptureMode::Selected => println!(
-            "[Config] Captura: SELECTED (handles={}, names={})",
-            config.capture_handles.len(),
-            config.capture_names.len()
+        CaptureMode::All => info!("[Config] Captura: ALL"),
+        CaptureMode::Selected => info!(
+            "[Config] Captura: SELECTED (handles={h}, names={n})",
+            h = config.capture_handles.len(),
+            n = config.capture_names.len()
         ),
     }
 
@@ -480,12 +500,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_config = config.database_config();
     let (repos, persistence_enabled) = match database::initialize_db(&db_config).await {
         Ok(repos) => {
-            println!("[DB] Conectada: {}", config.get_database_url_redacted());
+            info!("[DB] Conectada: {url}", url = config.get_database_url_redacted());
             (repos, true)
         }
         Err(e) => {
-            eprintln!("[DB] ERROR de conexión: {}", e);
-            eprintln!("[DB] Persistencia deshabilitada: lectura serial continuará sin guardar datos.");
+            error!("[DB] ERROR de conexión: {}", e);
+            error!("[DB] Persistencia deshabilitada: lectura serial continuará sin guardar datos.");
             (database::initialize_without_persistence(), false)
         }
     };
@@ -576,9 +596,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 6. Wait for Ctrl+C
-    println!("\n[Servidor] Activo. Presiona Ctrl+C para detener.\n");
+    info!("[Servidor] Activo. Presiona Ctrl+C para detener.");
     tokio::signal::ctrl_c().await?;
-    println!("[Servidor] Señal de apagado recibida. Cerrando servicio...");
+    info!("[Servidor] Señal de apagado recibida. Cerrando servicio...");
 
     Ok(())
 }

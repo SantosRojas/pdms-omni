@@ -173,7 +173,7 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
               {serialStatus.consecutive_failures > 0 && serialStatus.status !== 'FailedLimit' && (
                 <span className="badge badge-warning">
                   <AlertTriangle size={13} />
-                  {serialStatus.consecutive_failures}/{serialStatus.max_failures} fallos
+                  {serialStatus.consecutive_failures}/{serialStatus.max_failures} conexión
                 </span>
               )}
 
@@ -181,6 +181,13 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                 <span className="badge badge-error">
                   <AlertTriangle size={13} />
                   Límite alcanzado ({serialStatus.max_failures})
+                </span>
+              )}
+
+              {serialStatus.data_warnings > 0 && (
+                <span className="badge badge-warning" style={{ background: 'rgba(245,158,11,0.08)' }}>
+                  <AlertTriangle size={13} />
+                  {serialStatus.data_warnings} advertencias de datos
                 </span>
               )}
 
