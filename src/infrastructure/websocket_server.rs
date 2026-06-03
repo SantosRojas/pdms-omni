@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::routing::{get, post, put, delete};
@@ -6,6 +7,7 @@ use axum::Router;
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tower_http::cors::{CorsLayer, Any};
+use tower_http::services::ServeDir;
 
 use super::db_pool::DbPool;
 use super::http_api::{self, ApiState};
@@ -23,6 +25,7 @@ impl WebSocketHub {
         jwt_secret: String,
         jwt_token_ttl_secs: u64,
         serial_manager: std::sync::Arc<super::serial_manager::SerialReaderManager>,
+        dashboard_dir: Option<PathBuf>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
@@ -99,6 +102,7 @@ impl WebSocketHub {
                     .route("/api/therapies/comments/{comment_id}", delete(http_api::delete_comment))
                     .with_state(api_state)
                     .layer(cors)
+                    .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
             } else {
                 // DB not available: register all API routes but respond with 503 so the
                 // frontend knows the service is degraded (not a network error or 404).
@@ -137,6 +141,7 @@ impl WebSocketHub {
                     .route("/api/therapies/{id}/comments",             post(|| async { db_unavailable() }))
                     .route("/api/therapies/comments/{comment_id}",     delete(|| async { db_unavailable() }))
                     .layer(cors)
+                    .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
             };
 
             let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -147,6 +152,9 @@ impl WebSocketHub {
                 }
             };
 
+            if let Some(ref dir) = dashboard_dir {
+                println!("[WS] Sirviendo dashboard desde {}", dir.display());
+            }
             println!("[WS] Servidor WS + API activo en http://{}", addr);
 
             if let Err(e) = axum::serve(listener, app).await {
@@ -161,6 +169,21 @@ impl WebSocketHub {
         let msg = serde_json::to_string(payload)?;
         let _ = self.tx.send(msg);
         Ok(())
+    }
+}
+
+/// Creates a fallback router that serves the built dashboard (SPA).
+/// If `dashboard_dir` is `None`, returns a simple 404 handler.
+fn dashboard_fallback(dir: Option<&std::path::Path>) -> Router {
+    if let Some(dir) = dir {
+        Router::new().fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
+    } else {
+        Router::new().fallback(|| async {
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                "Not found. The API is running; serve the dashboard separately or set DASHBOARD_DIR.",
+            )
+        })
     }
 }
 

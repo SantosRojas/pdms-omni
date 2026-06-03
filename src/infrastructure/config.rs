@@ -60,6 +60,7 @@ pub struct AppConfig {
     pub capture_handles: HashSet<u16>,
     pub capture_names: HashSet<String>,
     pub serial_max_failures: u32,
+    pub dashboard_dir: Option<String>,
 }
 
 impl AppConfig {
@@ -160,6 +161,29 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(5),
+            dashboard_dir: {
+                let env_val = env::var("DASHBOARD_DIR").ok();
+                if let Some(dir) = env_val {
+                    if std::path::Path::new(&dir).exists() {
+                        Some(dir)
+                    } else {
+                        eprintln!("[Config] DASHBOARD_DIR \"{}\" no existe, ignorando", dir);
+                        None
+                    }
+                } else {
+                    // Try next to the executable, then cwd/dashboard/dist
+                    std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(|d| d.join("dashboard")))
+                        .filter(|p| p.exists())
+                        .or_else(|| {
+                            let cwd = std::env::current_dir().ok()?;
+                            let from_cwd = cwd.join("dashboard").join("dist");
+                            if from_cwd.exists() { Some(from_cwd) } else { None }
+                        })
+                        .map(|p| p.to_string_lossy().to_string())
+                }
+            },
         }
     }
 

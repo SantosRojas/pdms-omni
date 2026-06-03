@@ -496,6 +496,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let serial_manager = Arc::new(serial_manager);
 
     // 4. WebSocket + HTTP API
+    let dashboard_path = config.dashboard_dir.as_ref().map(std::path::PathBuf::from);
     let ws_hub = WebSocketHub::start(
         ws_addr,
         repos.db.clone(),
@@ -503,6 +504,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.jwt_secret.clone(),
         config.jwt_token_ttl_secs(),
         Arc::clone(&serial_manager),
+        dashboard_path,
     )?;
 
     // 5. Dedicated OS thread for serial reading (avoids Send constraint on SerialPort)

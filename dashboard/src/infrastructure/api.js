@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9001';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 let authToken = localStorage.getItem('authToken') || null;
 
