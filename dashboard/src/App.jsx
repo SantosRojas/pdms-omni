@@ -5,6 +5,7 @@ import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
 import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
+import { Sidebar } from './presentation/components/Sidebar';
 import { apiService } from './infrastructure/api';
 import './index.css';
 
@@ -108,55 +109,62 @@ function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  // Logged in → route by view
-  switch (view) {
-    case 'history':
-      return (
-        <HistoryView
-          therapy={historyTherapy}
-          onBack={() => { window.location.hash = '#/'; }}
-        />
-      );
+  // Logged in → sidebar layout with routed content
+  const renderContent = () => {
+    switch (view) {
+      case 'history':
+        return (
+          <HistoryView
+            therapy={historyTherapy}
+            onBack={() => { window.location.hash = '#/'; }}
+          />
+        );
 
-    case 'admin':
-      return (
-        <AdminPage
-          currentUser={user}
-          onBack={() => { window.location.hash = '#/'; }}
-        />
-      );
+      case 'admin':
+        return (
+          <AdminPage
+            currentUser={user}
+            onBack={() => { window.location.hash = '#/'; }}
+          />
+        );
 
-    case 'equivalences':
-      return (
-        <EquivalencesPage
-          userRole={user.role}
-          onBack={() => { window.location.hash = '#/'; }}
-        />
-      );
+      case 'equivalences':
+        return (
+          <EquivalencesPage
+            userRole={user.role}
+            onBack={() => { window.location.hash = '#/'; }}
+          />
+        );
 
-    case 'profile':
-      return (
-        <ProfilePage
-          currentUser={user}
-          onBack={() => { window.location.hash = '#/'; }}
-          onUpdateUser={setUser}
-        />
-      );
+      case 'profile':
+        return (
+          <ProfilePage
+            currentUser={user}
+            onBack={() => { window.location.hash = '#/'; }}
+            onUpdateUser={setUser}
+          />
+        );
 
-    default:
-      return (
-        <Dashboard
-          user={user}
-          onNavigateHistory={(therapy) => {
-            window.location.hash = `#/history/${therapy.id}`;
-          }}
-          onNavigateAdmin={() => { window.location.hash = '#/admin'; }}
-          onNavigateEquivalences={() => { window.location.hash = '#/equivalences'; }}
-          onNavigateProfile={() => { window.location.hash = '#/profile'; }}
-          onLogout={handleLogout}
-        />
-      );
-  }
+      default:
+        return (
+          <Dashboard
+            user={user}
+            onNavigateHistory={(therapy) => {
+              window.location.hash = `#/history/${therapy.id}`;
+            }}
+          />
+        );
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar user={user} onLogout={handleLogout} />
+      <main style={{ flex: 1, marginLeft: '240px', padding: '20px', minWidth: 0 }}>
+        {renderContent()}
+      </main>
+    </div>
+  );
 }
 
 export default App;

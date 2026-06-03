@@ -5,10 +5,10 @@ import { apiService } from '../../infrastructure/api';
 import { Cylinder } from '../components/Cylinder';
 import { StatCard } from '../components/StatCard';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, Users, Layers, LogOut, Settings, TrendingUp, ChevronRight, Search, X, Play, Square, AlertTriangle, Radio } from 'lucide-react';
+import { Activity, Droplets, Thermometer, Wind, User, Clock, Database, TrendingUp, ChevronRight, Search, X, Play, Square, AlertTriangle, Radio } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigateEquivalences, onNavigateProfile, onLogout }) => {
+export const Dashboard = ({ user, onNavigateHistory }) => {
   const [therapies, setTherapies] = useState([]);
   const [selectedTherapyId, setSelectedTherapyId] = useState('');
   const [therapyError, setTherapyError] = useState(null);
@@ -130,27 +130,24 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
     <div className="app-container">
       {!selectedTherapy ? (
         <div className="glass-panel" style={{ padding: '28px', display: 'grid', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div>
-              <div className="header-title">
-                <Activity color="var(--primary)" size={28} />
-                OMNI Real-Time
-              </div>
-              <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
-                Selecciona una terapia para ver su historial y, si sigue activa, la telemetría en vivo.
-              </p>
+          <div>
+            <div className="header-title">
+              <Activity color="var(--primary)" size={28} />
+              OMNI Real-Time
             </div>
-            <ThemeToggle />
+            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+              Selecciona una terapia para ver su historial y, si sigue activa, la telemetría en vivo.
+            </p>
           </div>
 
           {/* ── Serial Reader Control Panel ── */}
           <div style={{
             background: serialStatus.status === 'FailedLimit' ? 'rgba(239,68,68,0.08)'
               : serialStatus.status === 'Running' ? 'rgba(16,185,129,0.06)'
-              : 'var(--btn-bg)',
+                : 'var(--btn-bg)',
             border: `1px solid ${serialStatus.status === 'FailedLimit' ? 'rgba(239,68,68,0.3)'
               : serialStatus.status === 'Running' ? 'rgba(16,185,129,0.25)'
-              : 'var(--border)'}`,
+                : 'var(--border)'}`,
             borderRadius: '16px',
             padding: '16px 20px',
             display: 'flex',
@@ -165,11 +162,11 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
                 width: '10px', height: '10px', borderRadius: '50%',
                 background: serialStatus.status === 'Running' ? '#10b981'
                   : serialStatus.status === 'Initializing' ? '#f59e0b'
-                  : serialStatus.status === 'FailedLimit' ? '#ef4444'
-                  : '#64748b',
+                    : serialStatus.status === 'FailedLimit' ? '#ef4444'
+                      : '#64748b',
                 boxShadow: serialStatus.status === 'Running' ? '0 0 8px rgba(16,185,129,0.5)'
                   : serialStatus.status === 'Initializing' ? '0 0 8px rgba(245,158,11,0.5)'
-                  : 'none',
+                    : 'none',
                 animation: (serialStatus.status === 'Running' || serialStatus.status === 'Initializing') ? 'pulse 2s infinite' : 'none',
               }} />
               <div>
@@ -434,39 +431,11 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
                 Cambiar terapia
               </button>
 
-              {/* Nav buttons */}
               <button onClick={() => onNavigateHistory(selectedTherapy)} style={navBtnStyle('var(--btn-nav-history)', 'var(--btn-nav-history-text)')}>
                 <Database size={14} /> History
               </button>
-              <button onClick={onNavigateEquivalences} style={navBtnStyle('var(--btn-nav-equiv)', 'var(--btn-nav-equiv-text)')}>
-                <Layers size={14} /> Equivalences
-              </button>
-              {user.role === 'admin' && (
-                <button onClick={onNavigateAdmin} style={navBtnStyle('var(--btn-nav-admin)', 'var(--btn-nav-admin-text)')}>
-                  <Users size={14} /> Users
-                </button>
-              )}
 
-              {/* User info + logout */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  <strong style={{ color: 'var(--text-main)' }}>{user.full_name || user.username}</strong>
-                  <span style={{ marginLeft: '4px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', background: 'var(--btn-bg)' }}>{user.role}</span>
-                </span>
-                <ThemeToggle />
-                <button onClick={onNavigateProfile} title="Profile Settings" style={{
-                  background: 'var(--btn-bg)', border: 'none', color: 'var(--text-main)',
-                  padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',
-                }}>
-                  <Settings size={16} />
-                </button>
-                <button onClick={onLogout} title="Logout" style={{
-                  background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)',
-                  padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex',
-                }}>
-                  <LogOut size={16} />
-                </button>
-              </div>
+              <ThemeToggle />
 
               {/* Status */}
               <div className="connection-status">
@@ -693,7 +662,7 @@ export const Dashboard = ({ user, onNavigateHistory, onNavigateAdmin, onNavigate
               >
                 Crear nueva terapia
               </button>
-              
+
               <button
                 onClick={() => {
                   startReader(false);
