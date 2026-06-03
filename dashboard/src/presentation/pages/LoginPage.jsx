@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { apiService } from '../../infrastructure/api';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export const LoginPage = ({ onLogin }) => {
@@ -29,88 +29,135 @@ export const LoginPage = ({ onLogin }) => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--bg-dark)',
-      backgroundImage: 'radial-gradient(circle at 30% 50%, rgba(0,210,255,0.06), transparent 40%), radial-gradient(circle at 70% 30%, rgba(59,130,246,0.06), transparent 40%)',
+      background: 'var(--bg-base)',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+      {/* Animated background elements */}
+      <div style={{
+        position: 'absolute',
+        width: '600px',
+        height: '600px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(0,210,255,0.08) 0%, transparent 70%)',
+        top: '-200px',
+        right: '-100px',
+        animation: 'float 4s ease-in-out infinite',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '400px',
+        height: '400px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%)',
+        bottom: '-100px',
+        left: '-80px',
+        animation: 'float 5s ease-in-out infinite',
+        animationDelay: '2s',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '300px',
+        height: '300px',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(99,102,241,0.04) 0%, transparent 70%)',
+        bottom: '30%',
+        right: '20%',
+        animation: 'float 6s ease-in-out infinite',
+        animationDelay: '1s',
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{ position: 'absolute', top: 24, right: 24 }}>
         <ThemeToggle />
       </div>
-      <div className="glass-panel" style={{
-        padding: '48px',
+
+      <div className="glass-panel-elevated animate-scale-in" style={{
+        padding: '48px 40px',
         width: '420px',
-        animation: 'slideUp 0.5s ease',
+        maxWidth: '90vw',
+        position: 'relative',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{
-            width: '64px', height: '64px', borderRadius: '16px',
-            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px',
-            boxShadow: '0 8px 25px rgba(0,210,255,0.3)',
+            width: '72px',
+            height: '72px',
+            borderRadius: '18px',
+            background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+            boxShadow: '0 8px 32px rgba(0,210,255,0.3)',
           }}>
-            <LogIn size={28} color="white" />
+            <Activity size={32} color="#0f172a" />
           </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, background: 'linear-gradient(90deg, var(--text-main), var(--primary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+          <h1 style={{
+            fontSize: '1.75rem',
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, var(--text-primary), var(--primary))',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            marginBottom: '4px',
+          }}>
             OMNI PDMS
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>Sign in to continue</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            Inicia sesión para continuar
+          </p>
         </div>
 
         {error && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '10px 14px', borderRadius: '10px',
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-            color: 'var(--danger)', fontSize: '0.875rem', marginBottom: '20px',
-          }}>
+          <div className="message-box message-error" style={{ marginBottom: '24px' }}>
             <AlertCircle size={16} /> {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Username</label>
+            <label htmlFor="username">Usuario</label>
             <input
-              type="text" value={username} onChange={e => setUsername(e.target.value)}
-              autoFocus required
-              style={{
-                width: '100%', padding: '12px 16px', borderRadius: '10px',
-                background: 'var(--input-bg)', border: '1px solid var(--border)',
-                color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
-                transition: 'border-color 0.2s', boxSizing: 'border-box',
-              }}
-              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border)'}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Password</label>
-            <input
-              type="password" value={password} onChange={e => setPassword(e.target.value)}
+              id="username"
+              type="text"
+              className="input"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              autoFocus
               required
-              style={{
-                width: '100%', padding: '12px 16px', borderRadius: '10px',
-                background: 'var(--input-bg)', border: '1px solid var(--border)',
-                color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
-                transition: 'border-color 0.2s', boxSizing: 'border-box',
-              }}
-              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              placeholder="Ingresa tu usuario"
             />
           </div>
-          <button type="submit" disabled={loading} style={{
-            padding: '12px', borderRadius: '10px', border: 'none',
-            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-            color: 'white', fontSize: '1rem', fontWeight: 600, fontFamily: 'var(--font-family)',
-            cursor: loading ? 'wait' : 'pointer',
-            boxShadow: '0 4px 15px rgba(0,210,255,0.3)',
-            transition: 'transform 0.15s, box-shadow 0.15s',
-            marginTop: '8px',
-          }}
-            onMouseOver={e => { if (!loading) e.currentTarget.style.transform = 'scale(1.02)'; }}
-            onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+          <div>
+            <label htmlFor="password">Contraseña</label>
+            <input
+              id="password"
+              type="password"
+              className="input"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              placeholder="Ingresa tu contraseña"
+            />
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading}
+            style={{
+              justifyContent: 'center',
+              padding: '12px',
+              fontSize: '1rem',
+              marginTop: '4px',
+            }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <><div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }} /> Ingresando...</>
+            ) : (
+              'Iniciar Sesión'
+            )}
           </button>
         </form>
       </div>

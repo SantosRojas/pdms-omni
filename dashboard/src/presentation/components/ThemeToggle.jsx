@@ -5,7 +5,6 @@ import { Moon, Sun, Monitor } from 'lucide-react';
 export const ThemeToggle = () => {
   const { theme, setTheme } = useTheme();
 
-  // Cycle through themes: system -> light -> dark -> system
   const handleToggle = () => {
     if (theme === 'system') {
       setTheme('light');
@@ -18,27 +17,21 @@ export const ThemeToggle = () => {
 
   const getIcon = () => {
     switch(theme) {
-      case 'light': return <Sun size={16} />;
-      case 'dark': return <Moon size={16} />;
-      default: return <Monitor size={16} />;
+      case 'light': return <Sun size={15} />;
+      case 'dark': return <Moon size={15} />;
+      default: return <Monitor size={15} />;
     }
   };
 
   return (
     <button 
       onClick={handleToggle}
-      title={`Theme: ${theme}`}
+      title={`Tema: ${theme}`}
+      className="btn-icon btn-ghost"
       style={{
-        background: 'var(--btn-bg, rgba(255,255,255,0.05))',
-        border: 'none',
-        color: 'var(--text-main)',
-        padding: '6px',
+        width: '32px',
+        height: '32px',
         borderRadius: '8px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.2s ease',
       }}
     >
       {getIcon()}

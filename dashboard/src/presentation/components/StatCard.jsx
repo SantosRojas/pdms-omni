@@ -6,32 +6,29 @@ export const StatCard = ({ title, value, unit, iconName, color = 'var(--primary)
 
   return (
     <div className="glass-panel" style={{
-      padding: '20px',
+      padding: '16px 18px',
       display: 'flex',
       alignItems: 'center',
-      gap: '16px'
+      gap: '14px',
     }}>
-      <div style={{
-        width: '48px',
-        height: '48px',
+      <div className="stat-card-icon" style={{
+        width: '44px',
+        height: '44px',
         borderRadius: '12px',
-        backgroundColor: `${color}15`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        backgroundColor: `${color}18`,
         color: color,
-        boxShadow: `0 0 15px ${color}30`
+        boxShadow: `0 0 12px ${color}20`,
       }}>
-        <Icon size={24} />
+        <Icon size={22} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{title}</span>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-          <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
+      <div className="stat-card-body">
+        <span className="stat-card-label">{title}</span>
+        <div className="stat-card-value-row">
+          <span className="stat-card-value">
             {value}
           </span>
-          {unit && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{unit}</span>}
+          {unit && <span className="stat-card-unit">{unit}</span>}
         </div>
       </div>
     </div>

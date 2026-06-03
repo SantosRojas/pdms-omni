@@ -53,163 +53,142 @@ export const AdminPage = ({ currentUser, onBack }) => {
     catch (e) { setError(e.message); }
   };
 
-  const inputStyle = {
-    padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)',
-    background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.875rem',
-    fontFamily: 'var(--font-family)', outline: 'none', boxSizing: 'border-box',
-  };
-
   return (
     <div className="app-container" style={{ gap: '20px' }}>
-      {/* Header */}
-      <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={onBack} style={{
-            background: 'var(--btn-bg)', border: '1px solid var(--border)',
-            color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '0.9rem', fontFamily: 'var(--font-family)',
-          }}>
+      <div className="glass-panel page-header animate-slide-up">
+        <div className="page-header-left">
+          <button onClick={onBack} className="btn btn-ghost">
             <ChevronLeft size={18} /> Back
           </button>
           <Users size={22} color="var(--secondary)" />
           <h2 style={{ fontSize: '1.25rem' }}>User Management</h2>
         </div>
-        <button onClick={() => setShowCreate(true)} style={{
-          background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-          border: 'none', color: 'white', padding: '8px 20px', borderRadius: '10px',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-          fontSize: '0.9rem', fontFamily: 'var(--font-family)', fontWeight: 600,
-          boxShadow: '0 4px 15px rgba(0,210,255,0.3)',
-        }}>
-          <Plus size={16}/> New User
+        <button onClick={() => setShowCreate(true)} className="btn btn-primary">
+          <Plus size={16} /> New User
         </button>
       </div>
 
       {error && (
-        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.875rem' }}>
-          ❌ {error}
-        </div>
+        <div className="message-box message-error">{error}</div>
       )}
 
-      {/* Create Form */}
       {showCreate && (
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="glass-panel animate-slide-down" style={{ padding: '24px' }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
             <Plus size={18} color="var(--primary)" /> Create New User
           </h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Username</label>
-              <input value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} style={{ ...inputStyle, width: '200px' }} placeholder="username" />
+              <label>Username</label>
+              <input className="input" value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} style={{ width: '200px' }} placeholder="username" />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Password</label>
-              <input type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} style={{ ...inputStyle, width: '200px' }} placeholder="password" />
+              <label>Password</label>
+              <input type="password" className="input" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} style={{ width: '200px' }} placeholder="password" />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Role</label>
-              <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} style={{ ...inputStyle, width: '150px' }}>
+              <label>Role</label>
+              <select className="input" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} style={{ width: '150px' }}>
                 <option value="admin">Admin</option>
                 <option value="operator">Operator</option>
                 <option value="viewer">Viewer</option>
               </select>
             </div>
-            <button onClick={handleCreate} style={{ background: 'var(--success)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'var(--font-family)', fontWeight: 600 }}>
+            <button onClick={handleCreate} className="btn btn-success" style={{ marginBottom: '0' }}>
               <Check size={16} /> Create
             </button>
-            <button onClick={() => setShowCreate(false)} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'var(--font-family)' }}>
+            <button onClick={() => setShowCreate(false)} className="btn btn-ghost" style={{ marginBottom: '0' }}>
               <X size={16} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Users Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-          <thead>
-            <tr style={{ backgroundColor: 'var(--input-bg)', borderBottom: '1px solid var(--border)' }}>
-              {['ID', 'Username', 'Role', 'Status', 'Created', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '14px 16px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => {
-              const RoleIcon = ROLE_ICONS[u.role] || Eye;
-              const isEditing = editId === u.id;
-              return (
-                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}
-                  onMouseOver={e => e.currentTarget.style.background = 'var(--primary-glow)'}
-                  onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{u.id}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 500 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {u.username}
-                      {isEditing && (
-                        <input 
-                          type="password" 
-                          placeholder="New password (optional)" 
-                          value={editData.password || ''} 
-                          onChange={e => setEditData({ ...editData, password: e.target.value })} 
-                          style={{ ...inputStyle, width: '100%', padding: '4px 8px', fontSize: '0.8rem' }} 
-                        />
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {isEditing ? (
-                      <select value={editData.role || u.role} onChange={e => setEditData({ ...editData, role: e.target.value })} style={{ ...inputStyle, width: '120px' }}>
-                        <option value="admin">Admin</option>
-                        <option value="operator">Operator</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem', background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] }}>
-                        <RoleIcon size={14} /> {u.role}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {isEditing ? (
-                      <select value={editData.active !== undefined ? editData.active : u.active} onChange={e => setEditData({ ...editData, active: e.target.value === 'true' })} style={{ ...inputStyle, width: '100px' }}>
-                        <option value="true">Active</option>
-                        <option value="false">Disabled</option>
-                      </select>
-                    ) : (
-                      <span style={{ color: u.active ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem' }}>
-                        {u.active ? '● Active' : '○ Disabled'}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{u.created_at}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                {['ID', 'Username', 'Role', 'Status', 'Created', 'Actions'].map(h => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => {
+                const RoleIcon = ROLE_ICONS[u.role] || Eye;
+                const isEditing = editId === u.id;
+                return (
+                  <tr key={u.id}>
+                    <td style={{ color: 'var(--text-tertiary)' }}>{u.id}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {u.username}
+                        {isEditing && (
+                          <input
+                            type="password"
+                            className="input"
+                            placeholder="New password (optional)"
+                            value={editData.password || ''}
+                            onChange={e => setEditData({ ...editData, password: e.target.value })}
+                            style={{ width: '100%', padding: '4px 8px', fontSize: '0.8rem' }}
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td>
                       {isEditing ? (
-                        <>
-                          <button onClick={() => handleUpdate(u.id)} style={{ background: 'var(--success)', border: 'none', color: 'white', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>Save</button>
-                          <button onClick={() => setEditId(null)} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>Cancel</button>
-                        </>
+                        <select className="input" value={editData.role || u.role} onChange={e => setEditData({ ...editData, role: e.target.value })} style={{ width: '120px' }}>
+                          <option value="admin">Admin</option>
+                          <option value="operator">Operator</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
                       ) : (
-                        <>
-                          <button onClick={() => { setEditId(u.id); setEditData({}); }} style={{ background: 'var(--btn-nav-history)', border: 'none', color: 'var(--btn-nav-history-text)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
-                            <Edit3 size={12} /> Edit
-                          </button>
-                          {u.id !== currentUser.id && (
-                            <button onClick={() => handleDelete(u.id)} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: 'var(--danger)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-family)' }}>
-                              <Trash2 size={12} /> Delete
-                            </button>
-                          )}
-                        </>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem', background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] }}>
+                          <RoleIcon size={14} /> {u.role}
+                        </span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select className="input" value={editData.active !== undefined ? editData.active : u.active} onChange={e => setEditData({ ...editData, active: e.target.value === 'true' })} style={{ width: '100px' }}>
+                          <option value="true">Active</option>
+                          <option value="false">Disabled</option>
+                        </select>
+                      ) : (
+                        <span style={{ color: u.active ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem' }}>
+                          {u.active ? '● Active' : '○ Disabled'}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{u.created_at}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => handleUpdate(u.id)} className="btn btn-success btn-sm">Save</button>
+                            <button onClick={() => setEditId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => { setEditId(u.id); setEditData({}); }} className="btn btn-sm" style={{ background: 'var(--btn-nav-history)', color: 'var(--btn-nav-history-text)', border: 'none' }}>
+                              <Edit3 size={12} /> Edit
+                            </button>
+                            {u.id !== currentUser.id && (
+                              <button onClick={() => handleDelete(u.id)} className="btn btn-sm" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: 'none' }}>
+                                <Trash2 size={12} /> Delete
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

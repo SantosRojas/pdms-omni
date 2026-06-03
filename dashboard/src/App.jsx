@@ -7,6 +7,7 @@ import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
 import { Sidebar } from './presentation/components/Sidebar';
 import { apiService } from './infrastructure/api';
+import { Activity } from 'lucide-react';
 import './index.css';
 
 const parseHash = () => {
@@ -27,7 +28,7 @@ const parseHash = () => {
 };
 
 function App() {
-  const [user, setUser] = useState(null);     // { id, username, role, ... }
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(!!apiService.getToken());
   
   const initialRoute = parseHash();
@@ -57,7 +58,6 @@ function App() {
       setView(route.view);
       setHistoryTherapy(route.historyTherapy);
     };
-
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -77,74 +77,42 @@ function App() {
     window.location.hash = '#/';
   };
 
-  // Session restoring/loading state
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-dark)',
-        color: 'var(--text-main)',
-        fontFamily: 'var(--font-family)',
-      }}>
+      <div className="loading-screen">
         <div style={{
-          width: '48px',
-          height: '48px',
-          border: '3px solid rgba(0,210,255,0.1)',
-          borderTop: '3px solid var(--primary)',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          marginBottom: '16px',
-        }} />
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Restoring session...</p>
+          width: '72px',
+          height: '72px',
+          borderRadius: '18px',
+          background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 8px 32px rgba(0,210,255,0.3)',
+          marginBottom: '8px',
+        }}>
+          <Activity size={32} color="#0f172a" />
+        </div>
+        <div className="spinner spinner-lg" style={{ borderColor: 'rgba(0,210,255,0.15)', borderTopColor: 'var(--primary)' }} />
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.95rem' }}>Restoring session...</p>
       </div>
     );
   }
 
-  // Not logged in → show login
   if (!user) {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  // Logged in → sidebar layout with routed content
   const renderContent = () => {
     switch (view) {
       case 'history':
-        return (
-          <HistoryView
-            therapy={historyTherapy}
-            onBack={() => { window.location.hash = '#/'; }}
-          />
-        );
-
+        return <HistoryView therapy={historyTherapy} onBack={() => { window.location.hash = '#/'; }} />;
       case 'admin':
-        return (
-          <AdminPage
-            currentUser={user}
-            onBack={() => { window.location.hash = '#/'; }}
-          />
-        );
-
+        return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':
-        return (
-          <EquivalencesPage
-            userRole={user.role}
-            onBack={() => { window.location.hash = '#/'; }}
-          />
-        );
-
+        return <EquivalencesPage userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
       case 'profile':
-        return (
-          <ProfilePage
-            currentUser={user}
-            onBack={() => { window.location.hash = '#/'; }}
-            onUpdateUser={setUser}
-          />
-        );
-
+        return <ProfilePage currentUser={user} onBack={() => { window.location.hash = '#/'; }} onUpdateUser={setUser} />;
       default:
         return (
           <Dashboard
@@ -160,7 +128,7 @@ function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar user={user} onLogout={handleLogout} />
-      <main style={{ flex: 1, marginLeft: '240px', padding: '20px', minWidth: 0 }}>
+      <main style={{ flex: 1, marginLeft: '240px', padding: '0', minWidth: 0 }}>
         {renderContent()}
       </main>
     </div>

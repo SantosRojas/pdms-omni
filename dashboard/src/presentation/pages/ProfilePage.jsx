@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
-import { ChevronLeft, User, Mail, Shield, Check, X, Key } from 'lucide-react';
+import { ChevronLeft, User, Mail, Shield, Check, Key } from 'lucide-react';
 
 export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
   const [formData, setFormData] = useState({
@@ -12,7 +12,6 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
   const [msg, setMsg] = useState({ text: '', type: '' });
 
   useEffect(() => {
-    // We populate with the current user's info.
     setFormData({
       full_name: currentUser.full_name || '',
       email: currentUser.email || '',
@@ -34,16 +33,8 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
       if (Object.keys(updates).length > 0) {
         await apiService.updateUser(currentUser.id || currentUser.user_id, updates);
         setMsg({ text: 'Profile updated successfully!', type: 'success' });
-        
-        // Pass the updated user info up to App.jsx to keep local state in sync
-        const newUserData = { 
-            ...currentUser, 
-            full_name: formData.full_name, 
-            email: formData.email 
-        };
+        const newUserData = { ...currentUser, full_name: formData.full_name, email: formData.email };
         onUpdateUser(newUserData);
-        
-        // clear password field so it doesn't stay populated
         setFormData(prev => ({ ...prev, password: '' }));
       } else {
         setMsg({ text: 'No changes to save.', type: 'info' });
@@ -55,24 +46,11 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
     }
   };
 
-  const inputStyle = {
-    width: '100%', padding: '12px 16px', borderRadius: '10px',
-    background: 'var(--input-bg)', border: '1px solid var(--border)',
-    color: 'var(--text-main)', fontSize: '1rem', fontFamily: 'var(--font-family)', outline: 'none',
-    transition: 'border-color 0.2s', boxSizing: 'border-box', marginTop: '6px'
-  };
-
   return (
-    <div className="app-container" style={{ gap: '20px', alignItems: 'center' }}>
-      {/* Header */}
-      <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '600px', marginTop: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={onBack} style={{
-            background: 'var(--btn-bg)', border: '1px solid var(--border)',
-            color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '0.9rem', fontFamily: 'var(--font-family)',
-          }}>
+    <div className="app-container app-container-sm" style={{ gap: '20px' }}>
+      <div className="glass-panel page-header animate-slide-up" style={{ marginTop: '20px' }}>
+        <div className="page-header-left">
+          <button onClick={onBack} className="btn btn-ghost">
             <ChevronLeft size={18} /> Back
           </button>
           <User size={22} color="var(--primary)" />
@@ -80,79 +58,96 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
         </div>
       </div>
 
-      <div className="glass-panel" style={{ padding: '32px', width: '100%', maxWidth: '600px' }}>
+      <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px', paddingBottom: '20px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '20px',
+          marginBottom: '32px',
+          paddingBottom: '24px',
+          borderBottom: '1px solid var(--border-default)',
+        }}>
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: 'var(--radius-xl)',
+            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.75rem',
+            fontWeight: 'bold',
+            color: '#fff',
+            boxShadow: '0 8px 24px rgba(0,210,255,0.25)',
+          }}>
             {currentUser.username.charAt(0).toUpperCase()}
           </div>
           <div>
             <h3 style={{ fontSize: '1.5rem', margin: 0 }}>{currentUser.username}</h3>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-              <Shield size={14} color="var(--primary)"/> Role: {currentUser.role}
+            <span style={{
+              fontSize: '0.85rem',
+              color: 'var(--text-tertiary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '4px',
+            }}>
+              <Shield size={14} color="var(--primary)" /> Role: {currentUser.role}
             </span>
           </div>
         </div>
 
         {msg.text && (
-          <div style={{
-            padding: '10px 14px', borderRadius: '10px', marginBottom: '20px', fontSize: '0.875rem',
-            background: msg.type === 'error' ? 'rgba(239,68,68,0.1)' : msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'var(--btn-bg)',
-            border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.2)' : msg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'var(--border)'}`,
-            color: msg.type === 'error' ? 'var(--danger)' : msg.type === 'success' ? 'var(--success)' : 'var(--text-main)',
-          }}>
-            {msg.type === 'error' ? '❌' : msg.type === 'success' ? '✅' : 'ℹ️'} {msg.text}
+          <div className={`message-box ${msg.type === 'error' ? 'message-error' : msg.type === 'success' ? 'message-success' : 'message-info'}`} style={{ marginBottom: '24px' }}>
+            {msg.text}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <User size={14} /> Full Name
             </label>
-            <input 
-              type="text" 
-              value={formData.full_name} 
+            <input
+              type="text"
+              className="input"
+              value={formData.full_name}
               onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-              style={inputStyle}
               placeholder="e.g. John Doe"
             />
           </div>
           <div>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Mail size={14} /> Email Address
             </label>
-            <input 
-              type="email" 
-              value={formData.email} 
+            <input
+              type="email"
+              className="input"
+              value={formData.email}
               onChange={e => setFormData({ ...formData, email: e.target.value })}
-              style={inputStyle}
               placeholder="user@example.com"
             />
           </div>
           
-          <div style={{ marginTop: '10px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ paddingTop: '20px', borderTop: '1px solid var(--border-default)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Key size={14} /> New Password
             </label>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Leave blank to keep current password.</p>
-            <input 
-              type="password" 
-              value={formData.password} 
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
+              Leave blank to keep current password.
+            </p>
+            <input
+              type="password"
+              className="input"
+              value={formData.password}
               onChange={e => setFormData({ ...formData, password: e.target.value })}
-              style={inputStyle}
               placeholder="Enter new password"
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-            <button type="submit" disabled={loading} style={{
-              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-              border: 'none', color: 'white', padding: '10px 24px', borderRadius: '10px',
-              cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-              fontSize: '0.9rem', fontFamily: 'var(--font-family)', fontWeight: 600,
-              boxShadow: '0 4px 15px rgba(0,210,255,0.3)',
-            }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '10px 28px' }}>
               <Check size={16} /> {loading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>

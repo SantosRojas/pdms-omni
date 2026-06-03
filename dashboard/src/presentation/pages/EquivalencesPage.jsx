@@ -35,18 +35,12 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
     catch (e) { setError(e.message); }
   };
 
-  const inputStyle = {
-    padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)',
-    background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.875rem',
-    fontFamily: 'var(--font-family)', outline: 'none', boxSizing: 'border-box',
-  };
-
   const columns = [
     {
       key: 'internal_name',
       label: 'Parameter',
       render: (r) => (
-        <span style={{ fontFamily: 'var(--font-family-mono, monospace)', fontSize: '0.82rem' }}>
+        <span className="font-mono" style={{ fontSize: '0.82rem' }}>
           {r.internal_name}
         </span>
       ),
@@ -65,8 +59,11 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       label: 'Display Name',
       render: (r) => (
         <span style={{
-          background: 'var(--btn-nav-equiv)', color: 'var(--btn-nav-equiv-text)',
-          padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem',
+          background: 'var(--btn-nav-equiv)',
+          color: 'var(--btn-nav-equiv-text)',
+          padding: '2px 10px',
+          borderRadius: '6px',
+          fontSize: '0.8rem',
         }}>
           {r.display_name}
         </span>
@@ -78,12 +75,8 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       filterable: false,
       render: (r) => (
         <button onClick={() => handleDelete(r.signal_id, r.numeric_value)}
-          style={{
-            background: 'rgba(239,68,68,0.15)', border: 'none', color: 'var(--danger)',
-            padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem',
-            fontFamily: 'var(--font-family)',
-          }}>
+          className="btn btn-sm"
+          style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: 'none' }}>
           <Trash2 size={12} /> Delete
         </button>
       ),
@@ -92,27 +85,21 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
 
   return (
     <div className="app-container" style={{ gap: '20px' }}>
-      {/* Header */}
-      <div className="glass-panel" style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={onBack} style={{
-            background: 'var(--btn-bg)', border: '1px solid var(--border)',
-            color: 'var(--text-main)', padding: '8px 16px', borderRadius: '10px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '0.9rem', fontFamily: 'var(--font-family)',
-          }}>
+      <div className="glass-panel page-header animate-slide-up">
+        <div className="page-header-left">
+          <button onClick={onBack} className="btn btn-ghost">
             <X size={18} /> Back
           </button>
           <Layers size={22} color="#a855f7" />
           <h2 style={{ fontSize: '1.25rem' }}>Value Equivalences</h2>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>({rows.length} total)</span>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>({rows.length} total)</span>
         </div>
 
         {canEdit && (
-          <button onClick={() => setShowCreate(true)} style={{
-            background: 'linear-gradient(135deg, #a855f7, #7c3aed)', border: 'none', color: 'white',
-            padding: '8px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '0.9rem', fontFamily: 'var(--font-family)', fontWeight: 600,
+          <button onClick={() => setShowCreate(true)} className="btn" style={{
+            background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+            color: 'white',
+            border: 'none',
             boxShadow: '0 4px 15px rgba(168,85,247,0.3)',
           }}>
             <Plus size={16} /> Add Equivalence
@@ -121,34 +108,31 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       </div>
 
       {error && (
-        <div style={{ padding: '10px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)', fontSize: '0.875rem' }}>
-          {error}
-        </div>
+        <div className="message-box message-error">{error}</div>
       )}
 
-      {/* Create Form */}
       {showCreate && (
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="glass-panel animate-slide-down" style={{ padding: '24px' }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
             <Plus size={18} color="#a855f7" /> Add New Equivalence
           </h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Parameter Name</label>
-              <input value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ ...inputStyle, width: '220px' }} placeholder="e.g. g_therapy_mode_set" />
+              <label>Parameter Name</label>
+              <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '220px' }} placeholder="e.g. g_therapy_mode_set" />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Numeric Value</label>
-              <input type="number" step="any" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ ...inputStyle, width: '140px' }} placeholder="0.0" />
+              <label>Numeric Value</label>
+              <input type="number" step="any" className="input" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ width: '140px' }} placeholder="0.0" />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Display Name</label>
-              <input value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ ...inputStyle, width: '220px' }} placeholder="e.g. Preparation" />
+              <label>Display Name</label>
+              <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '220px' }} placeholder="e.g. Preparation" />
             </div>
-            <button onClick={handleCreate} style={{ background: 'var(--success)', border: 'none', color: 'white', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'var(--font-family)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button onClick={handleCreate} className="btn btn-success">
               <Check size={16} /> Save
             </button>
-            <button onClick={() => setShowCreate(false)} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'var(--font-family)' }}>
+            <button onClick={() => setShowCreate(false)} className="btn btn-ghost">
               <X size={16} />
             </button>
           </div>
