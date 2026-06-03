@@ -151,6 +151,28 @@ pub fn build_history_row(
     }
 }
 
+pub fn build_therapy_comment_row(
+    id: i64,
+    therapy_id: i64,
+    author_name: String,
+    comment: String,
+    created_at: String,
+    deleted_at: Option<String>,
+    deletion_reason: Option<String>,
+) -> GenericRow {
+    GenericRow {
+        values: vec![
+            Some(id.to_string()),
+            Some(therapy_id.to_string()),
+            Some(author_name),
+            Some(comment),
+            Some(created_at),
+            deleted_at,
+            deletion_reason,
+        ],
+    }
+}
+
 pub fn build_therapy_row(
     id: i64,
     started_at: String,

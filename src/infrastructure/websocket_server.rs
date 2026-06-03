@@ -93,6 +93,10 @@ impl WebSocketHub {
                     .route("/api/serial/status", get(http_api::serial_status))
                     .route("/api/serial/start", post(http_api::serial_start))
                     .route("/api/serial/stop", post(http_api::serial_stop))
+                    // Therapy Comments
+                    .route("/api/therapies/{id}/comments", get(http_api::list_comments))
+                    .route("/api/therapies/{id}/comments", post(http_api::create_comment))
+                    .route("/api/therapies/comments/{comment_id}", delete(http_api::delete_comment))
                     .with_state(api_state)
                     .layer(cors)
             } else {
@@ -129,6 +133,9 @@ impl WebSocketHub {
                     .route("/api/serial/status",  get(|| async { db_unavailable() }))
                     .route("/api/serial/start",  post(|| async { db_unavailable() }))
                     .route("/api/serial/stop",   post(|| async { db_unavailable() }))
+                    .route("/api/therapies/{id}/comments",              get(|| async { db_unavailable() }))
+                    .route("/api/therapies/{id}/comments",             post(|| async { db_unavailable() }))
+                    .route("/api/therapies/comments/{comment_id}",     delete(|| async { db_unavailable() }))
                     .layer(cors)
             };
 

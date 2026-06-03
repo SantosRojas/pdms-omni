@@ -127,6 +127,14 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
             FOREIGN KEY(patient_id) REFERENCES patients(id),
             FOREIGN KEY(machine_id) REFERENCES machines(id)
         );
+        CREATE TABLE IF NOT EXISTS therapy_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            therapy_id INTEGER NOT NULL,
+            author_name TEXT NOT NULL DEFAULT '',
+            comment TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(therapy_id) REFERENCES therapies(id)
+        );
         CREATE TABLE IF NOT EXISTS telemetry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -168,6 +176,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id);
         CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value);
+        CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at);
         "
     ).execute(&pool).await?;
 
@@ -177,6 +186,8 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deleted_at DATETIME").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deletion_reason TEXT").execute(&pool).await;
 
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
@@ -286,6 +297,13 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
             status TEXT,
             ended_at TIMESTAMPTZ
         )",
+        "CREATE TABLE IF NOT EXISTS therapy_comments (
+            id BIGSERIAL PRIMARY KEY,
+            therapy_id BIGINT NOT NULL REFERENCES therapies(id),
+            author_name TEXT NOT NULL DEFAULT '',
+            comment TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
         "CREATE TABLE IF NOT EXISTS telemetry (
             id BIGSERIAL PRIMARY KEY,
             timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -326,6 +344,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         "CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
         "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
         "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+        "CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
     ];
 
     for stmt in index_statements {
@@ -335,10 +354,8 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
     let migration_statements = vec![
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_start TIMESTAMPTZ",
-        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_end TIMESTAMPTZ",
-        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS therapy_id BIGINT",
-        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS physical_value TEXT",
+        "ALTER TABLE therapy_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
+        "ALTER TABLE therapy_comments ADD COLUMN IF NOT EXISTS deletion_reason TEXT",
     ];
 
     for stmt in migration_statements {
@@ -473,6 +490,15 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                  FOREIGN KEY(patient_id) REFERENCES patients(id),
                  FOREIGN KEY(machine_id) REFERENCES machines(id)
              )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'therapy_comments')
+             CREATE TABLE therapy_comments (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 therapy_id INT NOT NULL,
+                 author_name NVARCHAR(200) NOT NULL DEFAULT '',
+                 comment NVARCHAR(MAX) NOT NULL,
+                 created_at DATETIME2 DEFAULT GETUTCDATE(),
+                 FOREIGN KEY(therapy_id) REFERENCES therapies(id)
+             )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'telemetry')
              CREATE TABLE telemetry (
                  id INT IDENTITY(1,1) PRIMARY KEY,
@@ -509,6 +535,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_therapy_timestamp' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_signal' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_signal ON telemetry(signal_id)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_signal_numeric' AND object_id = OBJECT_ID('attribute_equivalences')) CREATE INDEX idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_therapy_comments_therapy' AND object_id = OBJECT_ID('therapy_comments')) CREATE INDEX idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
         ];
 
         for stmt in schema_statements {
@@ -535,6 +562,14 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('telemetry') AND name = 'therapy_id')
              BEGIN
                  ALTER TABLE telemetry ADD therapy_id INT NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('therapy_comments') AND name = 'deleted_at')
+             BEGIN
+                 ALTER TABLE therapy_comments ADD deleted_at DATETIME2 NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('therapy_comments') AND name = 'deletion_reason')
+             BEGIN
+                 ALTER TABLE therapy_comments ADD deletion_reason NVARCHAR(MAX) NULL;
              END",
         ];
 

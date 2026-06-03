@@ -684,3 +684,120 @@ pub async fn serial_stop(
     Json(serde_json::json!({"ok": true})).into_response()
 }
 
+// ═══════════════════════════════════════════════
+//  THERAPY COMMENTS
+// ═══════════════════════════════════════════════
+
+#[derive(Serialize)]
+pub struct TherapyCommentDto {
+    pub id: i64,
+    pub therapy_id: i64,
+    pub author_name: String,
+    pub comment: String,
+    pub created_at: String,
+    pub deleted_at: Option<String>,
+    pub deletion_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateCommentRequest {
+    pub author_name: String,
+    pub comment: String,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteCommentRequest {
+    pub reason: String,
+}
+
+/// GET /api/therapies/{id}/comments
+pub async fn list_comments(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(therapy_id): Path<i64>,
+) -> impl IntoResponse {
+    if get_claims(&headers, &state).is_none() {
+        return unauthorized().into_response();
+    }
+
+    match state.db.list_therapy_comments(therapy_id).await {
+        Ok(rows) => {
+            let comments: Vec<TherapyCommentDto> = rows.into_iter().map(|row| TherapyCommentDto {
+                id: row.get_i64(0),
+                therapy_id: row.get_i64(1),
+                author_name: row.get_string(2),
+                comment: row.get_string(3),
+                created_at: row.get_string(4),
+                deleted_at: if row.get_string(5).is_empty() { None } else { Some(row.get_string(5)) },
+                deletion_reason: if row.get_string(6).is_empty() { None } else { Some(row.get_string(6)) },
+            }).collect();
+            Json(comments).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
+/// POST /api/therapies/{id}/comments
+pub async fn create_comment(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(therapy_id): Path<i64>,
+    Json(body): Json<CreateCommentRequest>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state) {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role == "viewer" {
+        return forbidden().into_response();
+    }
+
+    if body.author_name.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Author name cannot be empty"}))).into_response();
+    }
+    if body.comment.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Comment cannot be empty"}))).into_response();
+    }
+
+    match state.db.create_therapy_comment(therapy_id, &body.author_name, &body.comment).await {
+        Ok(id) => {
+            let comment = TherapyCommentDto {
+                id,
+                therapy_id,
+                author_name: body.author_name,
+                comment: body.comment,
+                created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                deleted_at: None,
+                deletion_reason: None,
+            };
+            (StatusCode::CREATED, Json(comment)).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
+/// DELETE /api/therapies/comments/{comment_id}
+pub async fn delete_comment(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(comment_id): Path<i64>,
+    Json(body): Json<DeleteCommentRequest>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state) {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" {
+        return forbidden().into_response();
+    }
+
+    if body.reason.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Deletion reason cannot be empty"}))).into_response();
+    }
+
+    match state.db.soft_delete_therapy_comment(comment_id, &body.reason).await {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => db_err(e).into_response(),
+    }
+}
+

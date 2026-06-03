@@ -128,6 +128,18 @@ pub struct Patient {
     pub therapy_end: Option<String>,
 }
 
+/// A comment left by nursing staff on a therapy session.
+#[derive(Debug, Clone, Serialize)]
+pub struct TherapyComment {
+    pub id: i64,
+    pub therapy_id: i64,
+    pub author_name: String,
+    pub comment: String,
+    pub created_at: String,
+    pub deleted_at: Option<String>,
+    pub deletion_reason: Option<String>,
+}
+
 /// A single telemetry reading extracted from the cyclical data.
 #[derive(Debug, Clone, Serialize)]
 pub struct TelemetryReading {

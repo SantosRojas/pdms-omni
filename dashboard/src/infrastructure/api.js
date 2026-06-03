@@ -175,6 +175,39 @@ export const apiService = {
     URL.revokeObjectURL(url);
   },
 
+  // ─── Therapy Comments ──────────────────────────
+  async getTherapyComments(therapyId) {
+    const res = await fetch(`${API_BASE}/api/therapies/${therapyId}/comments`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async createTherapyComment(therapyId, authorName, comment) {
+    const res = await fetch(`${API_BASE}/api/therapies/${therapyId}/comments`, {
+      method: 'POST',
+      headers: this._headers(),
+      body: JSON.stringify({ author_name: authorName, comment }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async deleteTherapyComment(commentId, reason) {
+    const res = await fetch(`${API_BASE}/api/therapies/comments/${commentId}`, {
+      method: 'DELETE',
+      headers: { ...this._headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   // ─── Serial Reader Control ────────────────────────
   async getSerialStatus() {
     const res = await fetch(`${API_BASE}/api/serial/status`, { headers: this._headers() });

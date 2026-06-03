@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { Clock, Download, Search, ChevronLeft, ChevronRight, Database } from 'lucide-react';
+import { CommentsSection } from '../components/CommentsSection';
 
 export const HistoryView = ({ therapy, onBack }) => {
   const [rows, setRows] = useState([]);
@@ -242,6 +243,9 @@ export const HistoryView = ({ therapy, onBack }) => {
           </>
         )}
       </div>
+
+      {/* Comments / Nursing notes */}
+      <CommentsSection therapyId={therapy?.id} />
     </div>
   );
 };

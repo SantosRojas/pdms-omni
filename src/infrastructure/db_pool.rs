@@ -8,9 +8,9 @@ use sqlx::{PgPool, Row as SqlxRow, SqlitePool};
 use tiberius::{Query, Row as TibRow};
 
 use crate::infrastructure::persistence_helpers::{
-    build_equivalence_row, build_export_row, build_history_row, build_patient_row, build_therapy_row,
-    build_user_list_row, build_user_row, MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR,
-    SQLITE_NUMERIC_EQ_EXPR, GenericRow,
+    build_equivalence_row, build_export_row, build_history_row, build_patient_row,
+    build_therapy_comment_row, build_therapy_row, build_user_list_row, build_user_row,
+    MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR, SQLITE_NUMERIC_EQ_EXPR, GenericRow,
 };
 
 /// A backend-agnostic database connection pool.
@@ -660,6 +660,115 @@ impl DbPool {
                     r.get::<&str, _>(3).map(|v| v.to_string()),
                     r.get::<&str, _>(4).unwrap_or("").to_string(),
                 )).collect())
+            }
+        }
+    }
+
+    // ─── THERAPY COMMENTS ──────────────────────────────────────
+
+    pub async fn list_therapy_comments(&self, therapy_id: i64) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(
+                    "SELECT id, therapy_id, author_name, comment, created_at, deleted_at, deletion_reason FROM therapy_comments WHERE therapy_id = ?1 AND deleted_at IS NULL ORDER BY created_at ASC"
+                ).bind(therapy_id).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_therapy_comment_row(
+                    r.get::<i64, _>(0),
+                    r.get::<i64, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<Option<String>, _>(5),
+                    r.get::<Option<String>, _>(6),
+                )).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    "SELECT id, therapy_id, author_name, comment, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS'), TO_CHAR(deleted_at, 'YYYY-MM-DD HH24:MI:SS'), deletion_reason FROM therapy_comments WHERE therapy_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC"
+                ).bind(therapy_id).fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| build_therapy_comment_row(
+                    r.get::<i64, _>(0),
+                    r.get::<i64, _>(1),
+                    r.get::<String, _>(2),
+                    r.get::<String, _>(3),
+                    r.get::<String, _>(4),
+                    r.get::<Option<String>, _>(5),
+                    r.get::<Option<String>, _>(6),
+                )).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "SELECT id, therapy_id, author_name, comment, CONVERT(NVARCHAR(30), created_at, 120), CONVERT(NVARCHAR(30), deleted_at, 120), deletion_reason FROM therapy_comments WHERE therapy_id = @P1 AND deleted_at IS NULL ORDER BY created_at ASC"
+                );
+                q.bind(therapy_id as i32);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r: TibRow| build_therapy_comment_row(
+                    r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                    r.get::<i32, _>(1).map(|v| v as i64).unwrap_or(0),
+                    r.get::<&str, _>(2).unwrap_or("").to_string(),
+                    r.get::<&str, _>(3).unwrap_or("").to_string(),
+                    r.get::<&str, _>(4).unwrap_or("").to_string(),
+                    r.get::<&str, _>(5).map(|s| s.to_string()),
+                    r.get::<&str, _>(6).map(|s| s.to_string()),
+                )).collect())
+            }
+        }
+    }
+
+    pub async fn create_therapy_comment(&self, therapy_id: i64, author_name: &str, comment: &str) -> Result<i64, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let result = sqlx::query(
+                    "INSERT INTO therapy_comments (therapy_id, author_name, comment) VALUES (?1, ?2, ?3)"
+                ).bind(therapy_id).bind(author_name).bind(comment)
+                    .execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(result.last_insert_rowid())
+            }
+            DbPool::Postgres(pool) => {
+                let row = sqlx::query_scalar::<_, i64>(
+                    "INSERT INTO therapy_comments (therapy_id, author_name, comment) VALUES ($1, $2, $3) RETURNING id"
+                ).bind(therapy_id).bind(author_name).bind(comment)
+                    .fetch_one(pool).await.map_err(|e| e.to_string())?;
+                Ok(row)
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "INSERT INTO therapy_comments (therapy_id, author_name, comment) OUTPUT INSERTED.id VALUES (@P1, @P2, @P3)"
+                );
+                q.bind(therapy_id as i32); q.bind(author_name); q.bind(comment);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                let id = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+                Ok(id as i64)
+            }
+        }
+    }
+
+    pub async fn soft_delete_therapy_comment(&self, comment_id: i64, reason: &str) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE therapy_comments SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = ?1 WHERE id = ?2"
+                ).bind(reason).bind(comment_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE therapy_comments SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = $1 WHERE id = $2"
+                ).bind(reason).bind(comment_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "UPDATE therapy_comments SET deleted_at = GETUTCDATE(), deletion_reason = @P1 WHERE id = @P2"
+                );
+                q.bind(reason); q.bind(comment_id as i32);
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
             }
         }
     }
