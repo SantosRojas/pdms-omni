@@ -1188,19 +1188,27 @@ label {
   flex-direction: column;
   z-index: var(--z-sidebar);
   overflow-y: auto;
+  transform: translateX(-100%);
   transition: transform var(--transition-base);
+}
+
+.sidebar.open {
+  transform: translateX(0);
 }
 
 .main-with-sidebar {
   flex: 1;
-  margin-left: 240px;
+  margin-left: 0;
   padding: 0;
   min-width: 0;
   transition: margin-left var(--transition-base);
 }
 
+.main-with-sidebar.sidebar-pushed {
+  margin-left: 240px;
+}
+
 .sidebar-toggle {
-  display: none;
   position: fixed;
   top: 12px;
   left: 12px;
@@ -1212,13 +1220,18 @@ label {
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
+  display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition-fast);
+  transition: left var(--transition-base), background var(--transition-fast);
 }
 
 .sidebar-toggle:hover {
   background: var(--bg-surface-hover);
+}
+
+.sidebar-toggle.shifted {
+  left: 252px;
 }
 
 .sidebar-overlay {
@@ -1269,14 +1282,6 @@ label {
   }
 
   /* ── Sidebar responsive ── */
-  .sidebar {
-    transform: translateX(-100%);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
   .sidebar-overlay {
     display: block;
     position: fixed;
@@ -1287,12 +1292,12 @@ label {
     animation: fadeIn 0.2s ease forwards;
   }
 
-  .main-with-sidebar {
+  .main-with-sidebar.sidebar-pushed {
     margin-left: 0;
   }
 
-  .sidebar-toggle {
-    display: flex;
+  .sidebar-toggle.shifted {
+    left: 12px;
   }
 
   /* ── Dashboard grid ── */

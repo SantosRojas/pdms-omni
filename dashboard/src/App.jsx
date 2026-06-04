@@ -35,6 +35,13 @@ function App() {
   const [view, setView] = useState(initialRoute.view);
   const [historyTherapy, setHistoryTherapy] = useState(initialRoute.historyTherapy);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth > 768);
+
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth > 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -65,13 +72,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (sidebarOpen) {
+    if (sidebarOpen && !isDesktop) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [sidebarOpen]);
+  }, [sidebarOpen, isDesktop]);
 
   const handleLogin = (userData, token) => {
     apiService.setToken(token);
@@ -139,11 +146,18 @@ function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} />
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-      <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu">
+      {sidebarOpen && !isDesktop && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      <button
+        className={`sidebar-toggle${sidebarOpen && isDesktop ? ' shifted' : ''}`}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle menu"
+      >
         {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
-      <main className="main-with-sidebar" onClick={() => { if (sidebarOpen) setSidebarOpen(false); }}>
+      <main
+        className={`main-with-sidebar${sidebarOpen && isDesktop ? ' sidebar-pushed' : ''}`}
+        onClick={() => { if (sidebarOpen && !isDesktop) setSidebarOpen(false); }}
+      >
         {renderContent()}
       </main>
     </div>
