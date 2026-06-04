@@ -7,7 +7,7 @@ import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
 import { Sidebar } from './presentation/components/Sidebar';
 import { apiService } from './infrastructure/api';
-import { Activity } from 'lucide-react';
+import { Activity, Menu, X } from 'lucide-react';
 import './index.css';
 
 const parseHash = () => {
@@ -34,6 +34,7 @@ function App() {
   const initialRoute = parseHash();
   const [view, setView] = useState(initialRoute.view);
   const [historyTherapy, setHistoryTherapy] = useState(initialRoute.historyTherapy);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -57,10 +58,20 @@ function App() {
       const route = parseHash();
       setView(route.view);
       setHistoryTherapy(route.historyTherapy);
+      setSidebarOpen(false);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [sidebarOpen]);
 
   const handleLogin = (userData, token) => {
     apiService.setToken(token);
@@ -127,8 +138,12 @@ function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar user={user} onLogout={handleLogout} />
-      <main style={{ flex: 1, marginLeft: '240px', padding: '0', minWidth: 0 }}>
+      <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} />
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu">
+        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+      <main className="main-with-sidebar" onClick={() => { if (sidebarOpen) setSidebarOpen(false); }}>
         {renderContent()}
       </main>
     </div>

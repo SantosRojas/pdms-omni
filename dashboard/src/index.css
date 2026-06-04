@@ -1169,3 +1169,299 @@ label {
   align-items: baseline;
   gap: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Responsive Design
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  z-index: var(--z-sidebar);
+  overflow-y: auto;
+  transition: transform var(--transition-base);
+}
+
+.main-with-sidebar {
+  flex: 1;
+  margin-left: 240px;
+  padding: 0;
+  min-width: 0;
+  transition: margin-left var(--transition-base);
+}
+
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: calc(var(--z-sidebar) + 1);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-surface-hover);
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+/* ── App container ────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .app-container {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  .app-container-sm {
+    max-width: 100%;
+  }
+
+  .header-title {
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: var(--space-3);
+    gap: var(--space-3);
+  }
+
+  .page-header {
+    padding: var(--space-3) var(--space-4);
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .page-header-left {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .page-header-right {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .header-title {
+    font-size: 1rem;
+  }
+
+  /* ── Sidebar responsive ── */
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 13, 18, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: calc(var(--z-sidebar) - 1);
+    animation: fadeIn 0.2s ease forwards;
+  }
+
+  .main-with-sidebar {
+    margin-left: 0;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  /* ── Dashboard grid ── */
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    order: 2;
+  }
+
+  .main-panel {
+    order: 1;
+  }
+
+  /* ── Card grid ── */
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Machine details ── */
+  .machine-details summary {
+    padding: var(--space-3);
+  }
+
+  .machine-details > div {
+    padding: var(--space-3) !important;
+  }
+
+  /* ── Serial panel ── */
+  .serial-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .serial-panel > div:first-child {
+    min-width: 0;
+  }
+
+  /* ── Cylinder gauges ── */
+  .cylinder-gauges {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    justify-items: center;
+    margin-bottom: 24px;
+  }
+
+  .cylinder-visual {
+    height: 160px;
+    width: 36px;
+  }
+
+  .cylinder-value {
+    font-size: 1.1rem;
+  }
+
+  /* ── Modals ── */
+  .modal-content {
+    padding: var(--space-5);
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .modal-header h3 {
+    font-size: 1rem;
+  }
+
+  /* ── Tables ── */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .table-toolbar-left,
+  .table-toolbar-right {
+    justify-content: center;
+  }
+
+  /* ── Connection status ── */
+  .connection-status {
+    justify-content: center;
+  }
+
+  /* ── Stat cards ── */
+  .stat-card {
+    gap: var(--space-3);
+  }
+
+  .stat-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-card-value {
+    font-size: 1rem;
+  }
+
+  /* ── Search ── */
+  .search-container {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    padding: var(--space-8) var(--space-4);
+  }
+
+  /* ── Section title ── */
+  .section-title {
+    font-size: 0.9rem;
+  }
+
+  /* ── Serial notification ── */
+  .serial-notification {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-container {
+    padding: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .page-header {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .header-title {
+    font-size: 0.9rem;
+  }
+
+  .cylinder-gauges {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .cylinder-visual {
+    height: 120px;
+    width: 32px;
+  }
+
+  .cylinder-value {
+    font-size: 0.9rem;
+  }
+
+  .cylinder-header h4 {
+    font-size: 0.7rem;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+    padding: 1px 8px;
+  }
+
+  .btn {
+    font-size: 0.8rem;
+    padding: var(--space-1) var(--space-3);
+  }
+}

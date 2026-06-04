@@ -23,7 +23,7 @@ export const PressurePanel = ({ data }) => {
           <Thermometer size={20} color="var(--accent)" /> Presiones en Tiempo Real
         </h3>
 
-        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: '40px', minHeight: '200px', paddingTop: '16px' }}>
+        <div className="cylinder-gauges">
           <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
           <Cylinder label="Venoso (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={300} min={-400} colorVar="--ven-color" />
           <Cylinder label="TMP (PTM)" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} max={80} min={0} colorVar="--tmp-color" />

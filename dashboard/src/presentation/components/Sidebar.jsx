@@ -9,24 +9,11 @@ const NAV_ITEMS = [
   { hash: '#/profile', label: 'Configuración', icon: Settings, roles: null },
 ];
 
-export const Sidebar = ({ user, onLogout }) => {
+export const Sidebar = ({ user, onLogout, open }) => {
   const currentHash = window.location.hash || '#/';
 
   return (
-    <aside style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      bottom: 0,
-      width: '240px',
-      background: 'var(--bg-surface)',
-      backdropFilter: 'blur(20px)',
-      borderRight: '1px solid var(--border-default)',
-      display: 'flex',
-      flexDirection: 'column',
-      zIndex: 'var(--z-sidebar)',
-      overflowY: 'auto',
-    }}>
+    <aside className={`sidebar${open ? ' open' : ''}`}>
       {/* Logo / Brand */}
       <div style={{
         padding: '24px 20px 20px',
@@ -89,7 +76,6 @@ export const Sidebar = ({ user, onLogout }) => {
                 transition: 'all 0.15s cubic-bezier(0.4,0,0.2,1)',
                 cursor: 'pointer',
                 borderLeft: active ? '2px solid var(--primary)' : '2px solid transparent',
-                position: 'relative',
               }}
               onMouseOver={e => {
                 if (!active) {
@@ -174,7 +160,6 @@ export const Sidebar = ({ user, onLogout }) => {
             fontSize: '0.82rem',
             fontWeight: 500,
             fontFamily: 'var(--font-family)',
-            transition: 'all 0.15s cubic-bezier(0.4,0,0.2,1)',
           }}
           onMouseOver={e => {
             e.currentTarget.style.background = 'rgba(239,68,68,0.15)';
