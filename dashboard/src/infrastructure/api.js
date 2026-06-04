@@ -108,13 +108,30 @@ export const apiService = {
     return res.json();
   },
 
-  async deleteEquivalence(signal_id, numeric_value) {
+  async updateEquivalence(signal_id, numeric_value, display_name) {
+    const res = await fetch(`${API_BASE}/api/equivalences`, {
+      method: 'PUT',
+      headers: this._headers(),
+      body: JSON.stringify({ signal_id, numeric_value: parseFloat(numeric_value), display_name }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async deleteEquivalence(signal_id, numeric_value, deleted_by, deletion_reason) {
     const params = new URLSearchParams({ signal_id: String(signal_id), numeric_value: String(numeric_value) });
     const res = await fetch(`${API_BASE}/api/equivalences?${params}`, {
       method: 'DELETE',
       headers: this._headers(),
+      body: JSON.stringify({ deleted_by, deletion_reason }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
     return res.json();
   },
 

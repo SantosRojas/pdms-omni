@@ -154,6 +154,15 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
             PRIMARY KEY (signal_id, numeric_value),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
+        CREATE TABLE IF NOT EXISTS equivalence_deletion_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id INTEGER NOT NULL,
+            numeric_value REAL NOT NULL,
+            deleted_by TEXT NOT NULL,
+            deletion_reason TEXT NOT NULL,
+            deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(signal_id) REFERENCES signals(id)
+        );
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -177,6 +186,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id);
         CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value);
+        CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id);
         CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at);
         "
     ).execute(&pool).await?;
@@ -320,6 +330,14 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
             display_name TEXT,
             PRIMARY KEY (signal_id, numeric_value)
         )",
+        "CREATE TABLE IF NOT EXISTS equivalence_deletion_log (
+            id BIGSERIAL PRIMARY KEY,
+            signal_id BIGINT NOT NULL REFERENCES signals(id),
+            numeric_value DOUBLE PRECISION NOT NULL,
+            deleted_by TEXT NOT NULL,
+            deletion_reason TEXT NOT NULL,
+            deleted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
         "CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
@@ -345,6 +363,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         "CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
         "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
         "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+        "CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
         "CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
     ];
 
@@ -515,6 +534,16 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                  PRIMARY KEY (signal_id, numeric_value),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'equivalence_deletion_log')
+             CREATE TABLE equivalence_deletion_log (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 signal_id INT NOT NULL,
+                 numeric_value FLOAT NOT NULL,
+                 deleted_by NVARCHAR(200) NOT NULL,
+                 deletion_reason NVARCHAR(MAX) NOT NULL,
+                 deleted_at DATETIME2 DEFAULT GETUTCDATE(),
+                 FOREIGN KEY(signal_id) REFERENCES signals(id)
+             )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'users')
              CREATE TABLE users (
                  id INT IDENTITY(1,1) PRIMARY KEY,
@@ -536,6 +565,7 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_therapy_timestamp' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_telemetry_signal' AND object_id = OBJECT_ID('telemetry')) CREATE INDEX idx_telemetry_signal ON telemetry(signal_id)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_signal_numeric' AND object_id = OBJECT_ID('attribute_equivalences')) CREATE INDEX idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_deletion_log_signal' AND object_id = OBJECT_ID('equivalence_deletion_log')) CREATE INDEX idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_therapy_comments_therapy' AND object_id = OBJECT_ID('therapy_comments')) CREATE INDEX idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
         ];
 

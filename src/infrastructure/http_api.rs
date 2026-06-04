@@ -384,11 +384,49 @@ pub struct DeleteEquivalenceQuery {
     pub numeric_value: f64,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateEquivalenceRequest {
+    pub signal_id: i64,
+    pub numeric_value: f64,
+    pub display_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteEquivalenceBody {
+    pub deleted_by: String,
+    pub deletion_reason: String,
+}
+
+/// PUT /api/equivalences
+pub async fn update_equivalence(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateEquivalenceRequest>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state) {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role == "viewer" {
+        return forbidden().into_response();
+    }
+
+    if body.display_name.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El nombre mostrado no puede estar vacío"}))).into_response();
+    }
+
+    match state.db.update_equivalence(body.signal_id, body.numeric_value, &body.display_name).await {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
 /// DELETE /api/equivalences
 pub async fn delete_equivalence(
     State(state): State<ApiState>,
     headers: HeaderMap,
     Query(params): Query<DeleteEquivalenceQuery>,
+    Json(body): Json<DeleteEquivalenceBody>,
 ) -> impl IntoResponse {
     let session = match get_claims(&headers, &state) {
         Some(s) => s,
@@ -398,8 +436,17 @@ pub async fn delete_equivalence(
         return forbidden().into_response();
     }
 
-    let _ = state.db.delete_equivalence(params.signal_id, params.numeric_value).await;
-    Json(serde_json::json!({"ok": true})).into_response()
+    if body.deleted_by.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El nombre del usuario no puede estar vacío"}))).into_response();
+    }
+    if body.deletion_reason.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El motivo de eliminación no puede estar vacío"}))).into_response();
+    }
+
+    match state.db.delete_equivalence_with_log(params.signal_id, params.numeric_value, &body.deleted_by, &body.deletion_reason).await {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => db_err(e).into_response(),
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════

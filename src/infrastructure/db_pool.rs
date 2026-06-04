@@ -304,23 +304,52 @@ impl DbPool {
         }
     }
 
-    pub async fn delete_equivalence(&self, signal_id: i64, numeric_value: f64) -> Result<(), String> {
+    pub async fn update_equivalence(&self, signal_id: i64, numeric_value: f64, display_name: &str) -> Result<(), String> {
         match self {
             DbPool::Sqlite(pool) => {
+                sqlx::query("UPDATE attribute_equivalences SET display_name = ?1 WHERE signal_id = ?2 AND numeric_value = ?3")
+                    .bind(display_name).bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query("UPDATE attribute_equivalences SET display_name = $1 WHERE signal_id = $2 AND numeric_value = $3")
+                    .bind(display_name).bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new("UPDATE attribute_equivalences SET display_name = @P1 WHERE signal_id = @P2 AND numeric_value = @P3");
+                q.bind(display_name); q.bind(signal_id as i32); q.bind(numeric_value);
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn delete_equivalence_with_log(&self, signal_id: i64, numeric_value: f64, deleted_by: &str, deletion_reason: &str) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query("INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES (?1, ?2, ?3, ?4)")
+                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(pool).await.map_err(|e| e.to_string())?;
                 sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = ?1 AND numeric_value = ?2")
                     .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Postgres(pool) => {
+                sqlx::query("INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES ($1, $2, $3, $4)")
+                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(pool).await.map_err(|e| e.to_string())?;
                 sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = $1 AND numeric_value = $2")
                     .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let mut q = Query::new("DELETE FROM attribute_equivalences WHERE signal_id = @P1 AND numeric_value = @P2");
-                q.bind(signal_id as i32); q.bind(numeric_value);
-                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                let mut q1 = Query::new("INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES (@P1, @P2, @P3, @P4)");
+                q1.bind(signal_id as i32); q1.bind(numeric_value); q1.bind(deleted_by); q1.bind(deletion_reason);
+                q1.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                let mut q2 = Query::new("DELETE FROM attribute_equivalences WHERE signal_id = @P1 AND numeric_value = @P2");
+                q2.bind(signal_id as i32); q2.bind(numeric_value);
+                q2.execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
         }

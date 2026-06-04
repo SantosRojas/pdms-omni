@@ -85,6 +85,7 @@ impl WebSocketHub {
                     // Equivalences CRUD
                     .route("/api/equivalences", get(http_api::list_equivalences))
                     .route("/api/equivalences", post(http_api::create_equivalence))
+                    .route("/api/equivalences", put(http_api::update_equivalence))
                     .route("/api/equivalences", delete(http_api::delete_equivalence))
                     // Telemetry
                     .route("/api/patients", get(http_api::list_patients))
@@ -128,6 +129,7 @@ impl WebSocketHub {
                     .route("/api/users/{id}", delete(|| async { db_unavailable() }))
                     .route("/api/equivalences",   get(|| async { db_unavailable() }))
                     .route("/api/equivalences",  post(|| async { db_unavailable() }))
+                    .route("/api/equivalences",   put(|| async { db_unavailable() }))
                     .route("/api/equivalences", delete(|| async { db_unavailable() }))
                     .route("/api/patients",       get(|| async { db_unavailable() }))
                     .route("/api/therapies",      get(|| async { db_unavailable() }))
