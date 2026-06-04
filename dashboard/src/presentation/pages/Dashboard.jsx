@@ -289,7 +289,7 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                             <button
                               key={therapy.id}
                               className="detail-card animate-fade-in"
-                              onClick={() => setSelectedTherapyId(String(therapy.id))}
+                              onClick={() => active ? setSelectedTherapyId(String(therapy.id)) : onNavigateHistory(therapy)}
                               style={{ textAlign: 'left', display: 'grid', gap: '10px' }}
                             >
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px' }}>

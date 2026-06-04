@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { DataTable } from '../components/DataTable';
-import { Plus, Layers, X, Check, Trash2 } from 'lucide-react';
+import { Plus, Layers, X, Check, Trash2, ChevronLeft } from 'lucide-react';
 
 export const EquivalencesPage = ({ userRole, onBack }) => {
   const [rows, setRows] = useState([]);
@@ -88,7 +88,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <div className="glass-panel page-header animate-slide-up">
         <div className="page-header-left">
           <button onClick={onBack} className="btn btn-ghost">
-            <X size={18} /> Back
+            <ChevronLeft size={18} /> Back
           </button>
           <Layers size={22} color="#a855f7" />
           <h2 style={{ fontSize: '1.25rem' }}>Value Equivalences</h2>
