@@ -357,8 +357,6 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
                 <Database size={14} /> History
               </button>
 
-              <ThemeToggle />
-
               <div className="connection-status">
                 <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
                 {therapyIsActive && connected ? 'LIVE' : 'HISTORY'}
@@ -379,7 +377,7 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
             <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
               {therapyIsActive ? 'Terapia en curso: se muestran datos en tiempo real y el historial.'
                 : selectedTherapyIsOpen ? 'Sesión abierta sin cierre: solo se muestra historial.'
-                : 'Terapia finalizada: sólo historial disponible.'}
+                  : 'Terapia finalizada: sólo historial disponible.'}
             </div>
           </div>
 

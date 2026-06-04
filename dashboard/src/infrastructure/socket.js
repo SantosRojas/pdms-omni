@@ -16,8 +16,12 @@ export const socketService = {
   },
 
   _doConnect() {
-    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
-      return; // Already connected or connecting
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (this._onConnect) this._onConnect();
+      return;
+    }
+    if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+      return;
     }
     if (this.ws) {
       this.ws.onclose = null;
