@@ -1120,6 +1120,15 @@ label {
   font-weight: 500;
 }
 
+.cylinder-gauges {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  margin-bottom: 40px;
+  min-height: 200px;
+  padding-top: 16px;
+}
+
 /* ── Stat Card ──────────────────────────────────────────────── */
 .stat-card {
   display: flex;
