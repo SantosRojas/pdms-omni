@@ -32,12 +32,12 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
 
       if (Object.keys(updates).length > 0) {
         await apiService.updateUser(currentUser.id || currentUser.user_id, updates);
-        setMsg({ text: 'Profile updated successfully!', type: 'success' });
+        setMsg({ text: '¡Perfil actualizado exitosamente!', type: 'success' });
         const newUserData = { ...currentUser, full_name: formData.full_name, email: formData.email };
         onUpdateUser(newUserData);
         setFormData(prev => ({ ...prev, password: '' }));
       } else {
-        setMsg({ text: 'No changes to save.', type: 'info' });
+        setMsg({ text: 'No hay cambios para guardar.', type: 'info' });
       }
     } catch (err) {
       setMsg({ text: err.message, type: 'error' });
@@ -51,10 +51,10 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
       <div className="glass-panel page-header animate-slide-up" style={{ marginTop: '20px' }}>
         <div className="page-header-left">
           <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Back
+            <ChevronLeft size={18} /> Volver
           </button>
           <User size={22} color="var(--primary)" />
-          <h2 style={{ fontSize: '1.25rem' }}>My Profile</h2>
+          <h2 style={{ fontSize: '1.25rem' }}>Mi Perfil</h2>
         </div>
       </div>
 
@@ -93,7 +93,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
               gap: '6px',
               marginTop: '4px',
             }}>
-              <Shield size={14} color="var(--primary)" /> Role: {currentUser.role}
+              <Shield size={14} color="var(--primary)" /> Rol: {currentUser.role}
             </span>
           </div>
         </div>
@@ -107,48 +107,48 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <User size={14} /> Full Name
+              <User size={14} /> Nombre Completo
             </label>
             <input
               type="text"
               className="input"
               value={formData.full_name}
               onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-              placeholder="e.g. John Doe"
+              placeholder="ej. Juan Pérez"
             />
           </div>
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Mail size={14} /> Email Address
+              <Mail size={14} /> Correo Electrónico
             </label>
             <input
               type="email"
               className="input"
               value={formData.email}
               onChange={e => setFormData({ ...formData, email: e.target.value })}
-              placeholder="user@example.com"
+              placeholder="usuario@ejemplo.com"
             />
           </div>
           
           <div style={{ paddingTop: '20px', borderTop: '1px solid var(--border-default)' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Key size={14} /> New Password
+              <Key size={14} /> Nueva Contraseña
             </label>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
-              Leave blank to keep current password.
+              Déjelo en blanco para mantener la contraseña actual.
             </p>
             <input
               type="password"
               className="input"
               value={formData.password}
               onChange={e => setFormData({ ...formData, password: e.target.value })}
-              placeholder="Enter new password"
+              placeholder="Ingrese nueva contraseña"
             />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '10px 28px' }}>
-              <Check size={16} /> {loading ? 'Saving...' : 'Save Changes'}
+              <Check size={16} /> {loading ? 'Guardando...' : 'Guardar Cambios'}
             </button>
           </div>
         </form>

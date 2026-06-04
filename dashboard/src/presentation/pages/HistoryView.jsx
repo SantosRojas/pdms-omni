@@ -24,14 +24,14 @@ export const HistoryView = ({ therapy, onBack }) => {
     try {
       await apiService.downloadTherapyReport(therapy.id, 5000);
     } catch (e) {
-      setError(`Download failed: ${e.message}`);
+      setError(`Error al descargar: ${e.message}`);
     }
   };
 
   const columns = [
     {
       key: 'timestamp',
-      label: 'Timestamp',
+      label: 'Fecha/Hora',
       render: (r) => (
         <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
           {toLocalDatetime(r.timestamp)}
@@ -40,7 +40,7 @@ export const HistoryView = ({ therapy, onBack }) => {
     },
     {
       key: 'internal_name',
-      label: 'Parameter',
+      label: 'Parámetro',
       render: (r) => (
         <span className="font-mono" style={{ fontSize: '0.82rem', fontWeight: 500 }}>
           {r.internal_name}
@@ -49,7 +49,7 @@ export const HistoryView = ({ therapy, onBack }) => {
     },
     {
       key: 'physical_value',
-      label: 'Value',
+      label: 'Valor',
       render: (r) => (
         <span style={{ color: 'var(--primary)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
           {typeof r.physical_value === 'number' ? r.physical_value.toFixed(2) : r.physical_value}
@@ -75,7 +75,7 @@ export const HistoryView = ({ therapy, onBack }) => {
     },
     {
       key: 'unit',
-      label: 'Unit',
+      label: 'Unidad',
       render: (r) => (
         <span style={{ color: 'var(--text-tertiary)' }}>{r.unit}</span>
       ),
@@ -87,15 +87,15 @@ export const HistoryView = ({ therapy, onBack }) => {
       <div className="glass-panel page-header animate-slide-up">
         <div className="page-header-left">
           <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Back
+            <ChevronLeft size={18} /> Volver
           </button>
           <h2 style={{ fontSize: '1.25rem' }}>
-            Historical Data — Therapy <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong>
+            Datos Históricos — Terapia <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong>
           </h2>
         </div>
 
         <button onClick={handleDownload} className="btn btn-success">
-          <Download size={16} /> Export Excel (CSV)
+          <Download size={16} /> Exportar Excel (CSV)
         </button>
       </div>
 
@@ -106,7 +106,7 @@ export const HistoryView = ({ therapy, onBack }) => {
       {loading ? (
         <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
           <div className="spinner spinner-lg" style={{ margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--text-tertiary)' }}>Loading history...</p>
+          <p style={{ color: 'var(--text-tertiary)' }}>Cargando historial...</p>
         </div>
       ) : (
         <DataTable
@@ -115,7 +115,7 @@ export const HistoryView = ({ therapy, onBack }) => {
           keyExtractor={(r, i) => r.id || i}
           defaultPageSize={50}
           pageSizeOptions={[25, 50, 100, 200]}
-          emptyMessage="No data found."
+          emptyMessage="No se encontraron datos."
         />
       )}
 

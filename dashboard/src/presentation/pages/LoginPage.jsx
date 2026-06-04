@@ -17,7 +17,7 @@ export const LoginPage = ({ onLogin }) => {
       const data = await apiService.login(username, password);
       onLogin(data.user, data.token);
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }

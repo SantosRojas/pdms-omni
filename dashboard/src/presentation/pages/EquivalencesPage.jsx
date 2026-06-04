@@ -30,7 +30,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
   };
 
   const handleDelete = async (signal_id, numeric_value) => {
-    if (!confirm(`Delete equivalence ${numeric_value}?`)) return;
+    if (!confirm(`¿Eliminar equivalencia ${numeric_value}?`)) return;
     try { await apiService.deleteEquivalence(signal_id, numeric_value); loadData(); }
     catch (e) { setError(e.message); }
   };
@@ -38,7 +38,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
   const columns = [
     {
       key: 'internal_name',
-      label: 'Parameter',
+      label: 'Parámetro',
       render: (r) => (
         <span className="font-mono" style={{ fontSize: '0.82rem' }}>
           {r.internal_name}
@@ -47,7 +47,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
     },
     {
       key: 'numeric_value',
-      label: 'Numeric Value',
+      label: 'Valor Numérico',
       render: (r) => (
         <span style={{ color: 'var(--primary)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
           {r.numeric_value}
@@ -56,7 +56,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
     },
     {
       key: 'display_name',
-      label: 'Display Name',
+      label: 'Nombre Mostrado',
       render: (r) => (
         <span style={{
           background: 'var(--btn-nav-equiv)',
@@ -71,13 +71,13 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
     },
     ...(canDelete ? [{
       key: 'actions',
-      label: 'Actions',
+      label: 'Acciones',
       filterable: false,
       render: (r) => (
         <button onClick={() => handleDelete(r.signal_id, r.numeric_value)}
           className="btn btn-sm"
           style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: 'none' }}>
-          <Trash2 size={12} /> Delete
+          <Trash2 size={12} /> Eliminar
         </button>
       ),
     }] : []),
@@ -88,10 +88,10 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <div className="glass-panel page-header animate-slide-up">
         <div className="page-header-left">
           <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Back
+            <ChevronLeft size={18} /> Volver
           </button>
           <Layers size={22} color="#a855f7" />
-          <h2 style={{ fontSize: '1.25rem' }}>Value Equivalences</h2>
+          <h2 style={{ fontSize: '1.25rem' }}>Equivalencias de Valores</h2>
           <span style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>({rows.length} total)</span>
         </div>
 
@@ -102,7 +102,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
             border: 'none',
             boxShadow: '0 4px 15px rgba(168,85,247,0.3)',
           }}>
-            <Plus size={16} /> Add Equivalence
+            <Plus size={16} /> Añadir Equivalencia
           </button>
         )}
       </div>
@@ -114,23 +114,23 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       {showCreate && (
         <div className="glass-panel animate-slide-down" style={{ padding: '24px' }}>
           <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
-            <Plus size={18} color="#a855f7" /> Add New Equivalence
+            <Plus size={18} color="#a855f7" /> Añadir Nueva Equivalencia
           </h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label>Parameter Name</label>
-              <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '220px' }} placeholder="e.g. g_therapy_mode_set" />
+              <label>Nombre del Parámetro</label>
+              <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '220px' }} placeholder="ej. g_therapy_mode_set" />
             </div>
             <div>
-              <label>Numeric Value</label>
+              <label>Valor Numérico</label>
               <input type="number" step="any" className="input" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ width: '140px' }} placeholder="0.0" />
             </div>
             <div>
-              <label>Display Name</label>
-              <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '220px' }} placeholder="e.g. Preparation" />
+              <label>Nombre Mostrado</label>
+              <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '220px' }} placeholder="ej. Preparación" />
             </div>
             <button onClick={handleCreate} className="btn btn-success">
-              <Check size={16} /> Save
+              <Check size={16} /> Guardar
             </button>
             <button onClick={() => setShowCreate(false)} className="btn btn-ghost">
               <X size={16} />
@@ -144,7 +144,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
         data={rows}
         keyExtractor={r => `${r.signal_id}-${r.numeric_value}`}
         defaultPageSize={30}
-        emptyMessage="No equivalences found."
+        emptyMessage="No se encontraron equivalencias."
       />
     </div>
   );

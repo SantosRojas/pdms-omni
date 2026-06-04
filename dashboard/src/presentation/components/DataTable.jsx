@@ -23,7 +23,7 @@ export const DataTable = ({
   keyExtractor = (_, i) => i,
   defaultPageSize = 30,
   pageSizeOptions = [15, 30, 50, 100],
-  emptyMessage = 'No records found.',
+  emptyMessage = 'No se encontraron registros.',
 }) => {
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(0);
