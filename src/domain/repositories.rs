@@ -36,7 +36,7 @@ pub trait DictionaryRepository: Send + Sync {
     async fn delete_all(&self) -> Result<(), RepositoryError>;
 }
 
-/// Persists telemetry readings.
+/// Persists telemetry readings and manages serial sessions.
 pub trait TelemetryRepository: Send + Sync {
     async fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError>;
 
@@ -70,6 +70,7 @@ pub trait TelemetryRepository: Send + Sync {
         machine_id: i64,
         started_at: &str,
         force_new: bool,
+        serial_session_id: Option<i64>,
     ) -> Result<i64, RepositoryError>;
 
     /// Retrieves historical telemetry for a specific therapy
@@ -81,6 +82,18 @@ pub trait TelemetryRepository: Send + Sync {
 
     /// Updates the therapy end timestamp for a therapy
     async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError>;
+
+    /// Creates a new serial session record.
+    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError>;
+
+    /// Marks a serial session as ended.
+    async fn end_serial_session(&self, session_id: i64) -> Result<(), RepositoryError>;
+
+    /// Saves a batch of session (non-therapy) readings to session_readings table.
+    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError>;
+
+    /// Retrieves session readings for a given serial session.
+    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.

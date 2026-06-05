@@ -125,7 +125,7 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(assigned)
     }
 
-    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str, _force_new: bool) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str, _force_new: bool, _serial_session_id: Option<i64>) -> Result<i64, RepositoryError> {
         let mut next_therapy_id = self
             .next_therapy_id
             .lock()
@@ -141,6 +141,22 @@ impl TelemetryRepository for NullTelemetryRepository {
 
     async fn set_therapy_end(&self, _therapy_id: i64) -> Result<(), RepositoryError> {
         Ok(())
+    }
+
+    async fn create_serial_session(&self, _machine_id: i64, _patient_id_str: &str) -> Result<i64, RepositoryError> {
+        Ok(1)
+    }
+
+    async fn end_serial_session(&self, _session_id: i64) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+
+    async fn save_session_readings(&self, _session_id: i64, _readings: &[TelemetryReading], _phase: &str) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+
+    async fn get_session_readings(&self, _session_id: i64, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        Ok(Vec::new())
     }
 }
 

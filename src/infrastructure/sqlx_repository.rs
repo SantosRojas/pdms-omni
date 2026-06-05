@@ -288,6 +288,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
                 row.get::<String, _>(6),
                 row.get(7),
                 row.get(8),
+                None,
             )
         }).collect())
     }
@@ -326,7 +327,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(row.get(0))
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool, serial_session_id: Option<i64>) -> Result<i64, RepositoryError> {
         if force_new {
             sqlx::query("UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE patient_id = ?1 AND machine_id = ?2 AND ended_at IS NULL")
                 .bind(patient_id)
@@ -349,10 +350,11 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             }
         }
 
-        let row = sqlx::query_scalar::<_, i64>("INSERT INTO therapies (started_at, patient_id, machine_id, status) VALUES (?1, ?2, ?3, 'active') RETURNING id")
+        let row = sqlx::query_scalar::<_, i64>("INSERT INTO therapies (started_at, patient_id, machine_id, status, serial_session_id) VALUES (?1, ?2, ?3, 'active', ?4) RETURNING id")
             .bind(started_at)
             .bind(patient_id)
             .bind(machine_id)
+            .bind(serial_session_id)
             .fetch_one(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -388,6 +390,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
                 row.get::<String, _>(6),
                 row.get(7),
                 row.get(8),
+                None,
             )
         }).collect())
     }
@@ -399,6 +402,81 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             .await
             .map_err(map_db_err)?;
         Ok(())
+    }
+
+    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
+        sqlx::query("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (?1, ?2)")
+            .bind(machine_id)
+            .bind(patient_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+
+        let row = sqlx::query_scalar::<_, i64>("SELECT MAX(id) FROM serial_sessions")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+        Ok(row)
+    }
+
+    async fn end_serial_session(&self, session_id: i64) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE serial_sessions SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE id = ?1 AND ended_at IS NULL")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+        Ok(())
+    }
+
+    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError> {
+        for reading in readings {
+            let physical_value = telemetry_value_to_storage(&reading.physical_value);
+            sqlx::query(
+                "INSERT INTO session_readings (serial_session_id, signal_id, raw_value, physical_value, unit, display_value, phase)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            )
+            .bind(session_id)
+            .bind(reading.signal_id)
+            .bind(reading.raw_value)
+            .bind(physical_value)
+            .bind(&reading.unit)
+            .bind(&reading.display_value)
+            .bind(phase)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_err)?;
+        }
+        Ok(())
+    }
+
+    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        let rows = sqlx::query(
+            "SELECT sr.id, sr.timestamp, NULL, sr.serial_session_id, s.internal_name, sr.raw_value, CAST(sr.physical_value AS TEXT), sr.unit, sr.display_value
+             FROM session_readings sr
+             JOIN signals s ON sr.signal_id = s.id
+             WHERE sr.serial_session_id = ?1
+             ORDER BY sr.timestamp DESC LIMIT ?2"
+        )
+        .bind(session_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_db_err)?;
+
+        Ok(rows.into_iter().map(|row| {
+            build_telemetry_reading(
+                Some(row.get(0)),
+                row.get(1),
+                row.get::<Option<i64>, _>(2),
+                row.get::<i64, _>(3),
+                row.get::<String, _>(4),
+                row.get::<i64, _>(5),
+                row.get::<String, _>(6),
+                row.get::<String, _>(7),
+                row.get::<Option<String>, _>(8),
+                Some(session_id),
+            )
+        }).collect())
     }
 }
 

@@ -471,6 +471,7 @@ pub struct TherapyDto {
     pub machine_id: i64,
     pub serial_number: String,
     pub software_version: String,
+    pub serial_session_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -542,6 +543,7 @@ pub async fn list_therapies(State(state): State<ApiState>) -> impl IntoResponse 
                 machine_id: row.get_i64(6),
                 serial_number: row.get_string(7),
                 software_version: row.get_string(8),
+                serial_session_id: row.get_optional_i64(9),
             }).collect();
             Json(therapies).into_response()
         }
@@ -637,6 +639,56 @@ pub async fn export_csv(
             ).into_response()
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+#[derive(Serialize)]
+pub struct SessionReadingDto {
+    pub id: i64,
+    pub timestamp: String,
+    pub internal_name: String,
+    pub raw_value: i64,
+    pub physical_value: TelemetryValue,
+    pub unit: String,
+    pub display_value: Option<String>,
+    pub phase: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SessionReadingsQuery {
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+}
+
+/// GET /api/sessions/{id}/readings?limit=500
+pub async fn get_session_readings(
+    State(state): State<ApiState>,
+    Path(session_id): Path<i64>,
+    Query(params): Query<SessionReadingsQuery>,
+) -> impl IntoResponse {
+    match state.db.list_session_readings(session_id, params.limit).await {
+        Ok(rows) => {
+            let data: Vec<SessionReadingDto> = rows.into_iter().map(|row| {
+                let phys_str = row.get_string(3);
+                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                    TelemetryValue::Number(n)
+                } else {
+                    TelemetryValue::String(phys_str)
+                };
+                SessionReadingDto {
+                    id: row.get_i64(0),
+                    timestamp: row.get_string(1),
+                    internal_name: row.get_string(2),
+                    raw_value: row.get_i64(4),
+                    physical_value,
+                    unit: row.get_string(5),
+                    display_value: row.get_optional_string(6),
+                    phase: row.get_optional_string(7),
+                }
+            }).collect();
+            Json(data).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
     }
 }
 

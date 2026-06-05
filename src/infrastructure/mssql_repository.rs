@@ -287,6 +287,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
                 row.get::<&str, _>(6).unwrap_or("0").to_string(),
                 row.get::<&str, _>(7).unwrap_or("").to_string(),
                 row.get::<&str, _>(8).map(|v: &str| v.to_string()),
+                None,
             )
         }).collect())
     }
@@ -331,7 +332,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         Ok(id as i64)
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool, serial_session_id: Option<i64>) -> Result<i64, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
 
         if force_new {
@@ -352,10 +353,11 @@ impl TelemetryRepository for MssqlTelemetryRepository {
             }
         }
 
-        let mut q_insert = Query::new("INSERT INTO therapies (started_at, patient_id, machine_id, status) OUTPUT INSERTED.id VALUES (@P1, @P2, @P3, 'active')");
+        let mut q_insert = Query::new("INSERT INTO therapies (started_at, patient_id, machine_id, status, serial_session_id) OUTPUT INSERTED.id VALUES (@P1, @P2, @P3, 'active', @P4)");
         q_insert.bind(started_at);
         q_insert.bind(patient_id as i32);
         q_insert.bind(machine_id as i32);
+        q_insert.bind(serial_session_id.map(|v| v as i32));
         let stream = q_insert.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
         let id = rows.first().and_then(|r: &Row| r.get::<i32, _>(0)).ok_or_else(|| RepositoryError::DatabaseError("Therapy not created".into()))?;
@@ -392,6 +394,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
                 row.get::<&str, _>(6).unwrap_or("0").to_string(),
                 row.get::<&str, _>(7).unwrap_or("").to_string(),
                 row.get::<&str, _>(8).map(|v: &str| v.to_string()),
+                None,
             )
         }).collect())
     }
@@ -402,6 +405,78 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         q.bind(therapy_id as i32);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
+    }
+
+    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        let mut qi = Query::new("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (@P1, @P2)");
+        qi.bind(machine_id as i32);
+        qi.bind(patient_id_str);
+        qi.execute(&mut *conn).await.map_err(map_db_err)?;
+
+        let qs = Query::new("SELECT MAX(id) FROM serial_sessions");
+        let stream = qs.query(&mut *conn).await.map_err(map_db_err)?;
+        let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+        let id = rows.first().and_then(|r: &Row| r.get::<i32, _>(0)).unwrap_or(0);
+        Ok(id as i64)
+    }
+
+    async fn end_serial_session(&self, session_id: i64) -> Result<(), RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        let mut q = Query::new("UPDATE serial_sessions SET ended_at = GETUTCDATE(), status = 'completed' WHERE id = @P1 AND ended_at IS NULL");
+        q.bind(session_id as i32);
+        q.execute(&mut *conn).await.map_err(map_db_err)?;
+        Ok(())
+    }
+
+    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        for reading in readings {
+            let physical_value = telemetry_value_to_storage(&reading.physical_value);
+            let mut q = Query::new(
+                "INSERT INTO session_readings (serial_session_id, signal_id, raw_value, physical_value, unit, display_value, phase)
+                 VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7)"
+            );
+            q.bind(session_id as i32);
+            q.bind(reading.signal_id as i32);
+            q.bind(reading.raw_value);
+            q.bind(physical_value.as_str());
+            q.bind(reading.unit.as_str());
+            q.bind(reading.display_value.as_deref().unwrap_or(""));
+            q.bind(phase);
+            q.execute(&mut *conn).await.map_err(map_db_err)?;
+        }
+        Ok(())
+    }
+
+    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        let query = "SELECT TOP(@P1) sr.id, CONVERT(NVARCHAR(30), sr.timestamp, 120), NULL, sr.serial_session_id, s.internal_name,
+                            sr.raw_value, CAST(sr.physical_value AS NVARCHAR(MAX)), sr.unit, sr.display_value
+                     FROM session_readings sr
+                     JOIN signals s ON sr.signal_id = s.id
+                     WHERE sr.serial_session_id = @P2
+                     ORDER BY sr.timestamp DESC".to_string();
+        let mut q = Query::new(query);
+        q.bind(limit as i32);
+        q.bind(session_id as i32);
+        let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
+        let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+
+        Ok(rows.into_iter().map(|row: Row| {
+            build_telemetry_reading(
+                row.get::<i32, _>(0).map(|v| v as i64),
+                row.get::<&str, _>(1).unwrap_or("").to_string(),
+                row.get::<i32, _>(2).map(|v| v as i64),
+                row.get::<i32, _>(3).unwrap_or(0) as i64,
+                row.get::<&str, _>(4).unwrap_or("").to_string(),
+                row.get::<i64, _>(5).unwrap_or(0),
+                row.get::<&str, _>(6).unwrap_or("0").to_string(),
+                row.get::<&str, _>(7).unwrap_or("").to_string(),
+                row.get::<&str, _>(8).map(|v: &str| v.to_string()),
+                Some(session_id),
+            )
+        }).collect())
     }
 }
 

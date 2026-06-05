@@ -52,7 +52,7 @@ pub struct AppConfig {
     pub ws_port: u16,
     pub cycle_interval_secs: u64,
     pub db_save_interval_secs: u64,
-    pub db_save_only_on_therapy: bool,
+
     pub device_init_retry_max_attempts: u32,
     pub device_init_retry_interval_secs: u64,
     pub jwt_secret: String,
@@ -137,10 +137,6 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(60),
-            db_save_only_on_therapy: env::var("DB_SAVE_ONLY_ON_THERAPY")
-                .unwrap_or_default()
-                .to_ascii_lowercase()
-                == "true",
             device_init_retry_max_attempts: env::var("DEVICE_INIT_RETRY_MAX_ATTEMPTS")
                 .unwrap_or_default()
                 .parse()

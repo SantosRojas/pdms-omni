@@ -13,18 +13,21 @@ import './index.css';
 const parseHash = () => {
   const hash = window.location.hash || '#/';
   if (hash.startsWith('#/history/')) {
-    const therapyId = parseInt(hash.replace('#/history/', ''), 10);
-    if (!isNaN(therapyId)) {
-      return { view: 'history', historyTherapy: { id: therapyId } };
+    const id = parseInt(hash.replace('#/history/', ''), 10);
+    if (!isNaN(id)) {
+      return { view: 'history', historyTherapy: { id }, dashboardTherapyId: null };
     }
+  } else if (hash.startsWith('#/therapy/')) {
+    const id = hash.replace('#/therapy/', '');
+    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: id };
   } else if (hash === '#/admin') {
-    return { view: 'admin', historyTherapy: null };
+    return { view: 'admin', historyTherapy: null, dashboardTherapyId: null };
   } else if (hash === '#/equivalences') {
-    return { view: 'equivalences', historyTherapy: null };
+    return { view: 'equivalences', historyTherapy: null, dashboardTherapyId: null };
   } else if (hash === '#/profile') {
-    return { view: 'profile', historyTherapy: null };
+    return { view: 'profile', historyTherapy: null, dashboardTherapyId: null };
   }
-  return { view: 'dashboard', historyTherapy: null };
+  return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
 };
 
 function App() {
@@ -34,6 +37,7 @@ function App() {
   const initialRoute = parseHash();
   const [view, setView] = useState(initialRoute.view);
   const [historyTherapy, setHistoryTherapy] = useState(initialRoute.historyTherapy);
+  const [dashboardTherapyId, setDashboardTherapyId] = useState(initialRoute.dashboardTherapyId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth > 768);
 
@@ -65,6 +69,7 @@ function App() {
       const route = parseHash();
       setView(route.view);
       setHistoryTherapy(route.historyTherapy);
+      setDashboardTherapyId(route.dashboardTherapyId);
       setSidebarOpen(false);
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -135,6 +140,7 @@ function App() {
         return (
           <Dashboard
             user={user}
+            therapyId={dashboardTherapyId}
             onNavigateHistory={(therapy) => {
               window.location.hash = `#/history/${therapy.id}`;
             }}

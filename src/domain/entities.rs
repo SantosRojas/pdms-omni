@@ -146,10 +146,12 @@ pub struct TelemetryReading {
     pub id: Option<i64>,
     pub timestamp: String,
     pub therapy_id: Option<i64>,
+    pub serial_session_id: Option<i64>,
     pub signal_id: i64,
-    pub internal_name: String, // Will be retrieved via JOIN in repository
+    pub internal_name: String,
     pub raw_value: i64,
     pub physical_value: TelemetryValue,
     pub unit: String,
     pub display_value: Option<String>,
+    pub phase: Option<String>,
 }

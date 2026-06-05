@@ -173,6 +173,28 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
             active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS serial_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine_id INTEGER,
+            patient_id_str TEXT,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ended_at DATETIME,
+            status TEXT DEFAULT 'active',
+            FOREIGN KEY(machine_id) REFERENCES machines(id)
+        );
+        CREATE TABLE IF NOT EXISTS session_readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            serial_session_id INTEGER NOT NULL,
+            signal_id INTEGER,
+            raw_value INTEGER,
+            physical_value NUMERIC,
+            unit TEXT,
+            display_value TEXT,
+            phase TEXT,
+            FOREIGN KEY(serial_session_id) REFERENCES serial_sessions(id),
+            FOREIGN KEY(signal_id) REFERENCES signals(id)
+        );
         "
     ).execute(&pool).await?;
 
@@ -188,6 +210,8 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
         CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value);
         CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id);
         CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_serial_sessions_status ON serial_sessions(status);
+        CREATE INDEX IF NOT EXISTS idx_session_readings_session ON session_readings(serial_session_id, timestamp DESC);
         "
     ).execute(&pool).await?;
 
@@ -199,6 +223,8 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deleted_at DATETIME").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deletion_reason TEXT").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE therapies ADD COLUMN serial_session_id INTEGER").execute(&pool).await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_therapies_serial_session ON therapies(serial_session_id)").execute(&pool).await;
 
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
@@ -348,6 +374,25 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
             active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
+        "CREATE TABLE IF NOT EXISTS serial_sessions (
+            id BIGSERIAL PRIMARY KEY,
+            machine_id BIGINT REFERENCES machines(id),
+            patient_id_str TEXT,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ended_at TIMESTAMPTZ,
+            status TEXT DEFAULT 'active'
+        )",
+        "CREATE TABLE IF NOT EXISTS session_readings (
+            id BIGSERIAL PRIMARY KEY,
+            timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            serial_session_id BIGINT NOT NULL REFERENCES serial_sessions(id),
+            signal_id BIGINT REFERENCES signals(id),
+            raw_value BIGINT,
+            physical_value TEXT,
+            unit TEXT,
+            display_value TEXT,
+            phase TEXT
+        )",
     ];
 
     for stmt in schema_statements {
@@ -365,6 +410,8 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
         "CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
         "CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_serial_sessions_status ON serial_sessions(status)",
+        "CREATE INDEX IF NOT EXISTS idx_session_readings_session ON session_readings(serial_session_id, timestamp DESC)",
     ];
 
     for stmt in index_statements {
@@ -376,6 +423,8 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE therapy_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
         "ALTER TABLE therapy_comments ADD COLUMN IF NOT EXISTS deletion_reason TEXT",
+        "ALTER TABLE therapies ADD COLUMN IF NOT EXISTS serial_session_id BIGINT",
+        "CREATE INDEX IF NOT EXISTS idx_therapies_serial_session ON therapies(serial_session_id)",
     ];
 
     for stmt in migration_statements {
@@ -555,6 +604,30 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
                  active BIT NOT NULL DEFAULT 1,
                  created_at DATETIME2 DEFAULT GETUTCDATE()
              )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'serial_sessions')
+             CREATE TABLE serial_sessions (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 machine_id INT,
+                 patient_id_str NVARCHAR(200),
+                 started_at DATETIME2 DEFAULT GETUTCDATE(),
+                 ended_at DATETIME2 NULL,
+                 status NVARCHAR(50) DEFAULT 'active',
+                 FOREIGN KEY(machine_id) REFERENCES machines(id)
+             )",
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'session_readings')
+             CREATE TABLE session_readings (
+                 id INT IDENTITY(1,1) PRIMARY KEY,
+                 timestamp DATETIME2 DEFAULT GETUTCDATE(),
+                 serial_session_id INT NOT NULL,
+                 signal_id INT,
+                 raw_value BIGINT,
+                 physical_value NVARCHAR(MAX),
+                 unit NVARCHAR(100),
+                 display_value NVARCHAR(500),
+                 phase NVARCHAR(50),
+                 FOREIGN KEY(serial_session_id) REFERENCES serial_sessions(id),
+                 FOREIGN KEY(signal_id) REFERENCES signals(id)
+             )",
         ];
 
         let index_statements = vec![
@@ -567,6 +640,8 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_signal_numeric' AND object_id = OBJECT_ID('attribute_equivalences')) CREATE INDEX idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_equiv_deletion_log_signal' AND object_id = OBJECT_ID('equivalence_deletion_log')) CREATE INDEX idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
             "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_therapy_comments_therapy' AND object_id = OBJECT_ID('therapy_comments')) CREATE INDEX idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_serial_sessions_status' AND object_id = OBJECT_ID('serial_sessions')) CREATE INDEX idx_serial_sessions_status ON serial_sessions(status)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_session_readings_session' AND object_id = OBJECT_ID('session_readings')) CREATE INDEX idx_session_readings_session ON session_readings(serial_session_id, timestamp DESC)",
         ];
 
         for stmt in schema_statements {
@@ -601,6 +676,10 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
             "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('therapy_comments') AND name = 'deletion_reason')
              BEGIN
                  ALTER TABLE therapy_comments ADD deletion_reason NVARCHAR(MAX) NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('therapies') AND name = 'serial_session_id')
+             BEGIN
+                 ALTER TABLE therapies ADD serial_session_id INT NULL;
              END",
         ];
 

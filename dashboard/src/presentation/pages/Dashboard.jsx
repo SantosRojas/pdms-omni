@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTelemetry } from '../../application/useTelemetry';
 import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
@@ -11,9 +11,8 @@ import { GeneralInfo } from '../components/GeneralInfo';
 import { PressurePanel } from '../components/PressurePanel';
 import { AccumulatedChart } from '../components/AccumulatedChart';
 
-export const Dashboard = ({ user, onNavigateHistory }) => {
+export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   const [therapies, setTherapies] = useState([]);
-  const [selectedTherapyId, setSelectedTherapyId] = useState('');
   const [therapyError, setTherapyError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showStartModal, setShowStartModal] = useState(false);
@@ -80,27 +79,78 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
   }, [machineGroups, searchQuery]);
 
   const selectedTherapy = useMemo(
-    () => therapies.find(t => String(t.id) === String(selectedTherapyId)) || null,
-    [therapies, selectedTherapyId]
+    () => therapies.find(t => String(t.id) === String(therapyId)) || null,
+    [therapies, therapyId]
   );
   const selectedTherapyIsOpen = !!selectedTherapy && !selectedTherapy.ended_at && selectedTherapy.status !== 'completed';
   const therapyIsActive = !!selectedTherapy && activeTherapyIds.has(String(selectedTherapy.id));
+  const serialIsRunning = serialStatus.status === 'Running' || serialStatus.status === 'Initializing';
+  const shouldConnectTelemetry = serialIsRunning || therapyIsActive;
+  const { data, connected } = useTelemetry(shouldConnectTelemetry);
+  const liveAvailable = connected;
+  const isPreTherapy = serialIsRunning && !therapyIsActive && connected;
+  const showDashboard = !!therapyId;
 
-  const { data, connected } = useTelemetry(selectedTherapy?.id, therapyIsActive);
-
-  useEffect(() => {
+  const fetchTherapies = useCallback(() => {
     apiService.getTherapies()
       .then(list => setTherapies(list))
       .catch(e => setTherapyError(e.message));
   }, []);
 
+  useEffect(() => {
+    fetchTherapies();
+  }, [fetchTherapies]);
+
+  // Auto-refresh therapy list while serial is running
+  useEffect(() => {
+    if (serialStatus.status !== 'Running' && serialStatus.status !== 'Initializing') return;
+    const interval = setInterval(fetchTherapies, 5000);
+    return () => clearInterval(interval);
+  }, [serialStatus.status, fetchTherapies]);
+
+  // Auto-select: when serial transitions to Running, navigate to latest open therapy
+  const prevSerialStatus = useRef(serialStatus.status);
+  const browsingRef = useRef(false);
+  useEffect(() => {
+    const prev = prevSerialStatus.current;
+    prevSerialStatus.current = serialStatus.status;
+    if (prev !== 'Running' && serialStatus.status === 'Running' && !therapyId) {
+      browsingRef.current = false;
+      const openTherapies = therapies
+        .filter(t => !t.ended_at && t.status !== 'completed')
+        .sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')));
+      const latest = openTherapies[0];
+      if (latest) {
+        window.location.hash = `#/therapy/${latest.id}`;
+      }
+    }
+  }, [serialStatus.status, therapyId, therapies]);
+
+  // When a new open therapy appears while serial is running and user is not browsing
+  useEffect(() => {
+    if (!serialIsRunning || therapyId || browsingRef.current) return;
+    const openTherapies = therapies
+      .filter(t => !t.ended_at && t.status !== 'completed')
+      .sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')));
+    const latest = openTherapies[0];
+    if (latest) {
+      window.location.hash = `#/therapy/${latest.id}`;
+    }
+  }, [therapies, serialIsRunning, therapyId]);
+
   const handleBackToSelection = useCallback(() => {
-    setSelectedTherapyId('');
+    browsingRef.current = true;
+    window.location.hash = '#/';
+  }, []);
+
+  const handleSelectTherapy = useCallback((id) => {
+    browsingRef.current = false;
+    window.location.hash = `#/therapy/${id}`;
   }, []);
 
   return (
     <div className="app-container">
-      {!selectedTherapy ? (
+      {!showDashboard ? (
         <>
           <div className="glass-panel animate-slide-up" style={{ padding: '28px', display: 'grid', gap: '24px' }}>
             <div>
@@ -129,7 +179,7 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
               onSearchChange={setSearchQuery}
               filteredMachineGroups={filteredMachineGroups}
               activeTherapyIds={activeTherapyIds}
-              onSelectTherapy={setSelectedTherapyId}
+              onSelectTherapy={handleSelectTherapy}
               onNavigateHistory={onNavigateHistory}
               therapyError={therapyError}
             />
@@ -146,25 +196,29 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
             </div>
 
             <div className="page-header-right">
-              <button className="btn btn-ghost btn-sm" onClick={handleBackToSelection}>
-                Cambiar terapia
-              </button>
+              {selectedTherapy && (
+                <button className="btn btn-ghost btn-sm" onClick={handleBackToSelection}>
+                  Cambiar terapia
+                </button>
+              )}
 
-              <button
-                className="btn btn-sm"
-                style={{
-                  background: 'var(--btn-nav-history)',
-                  border: '1px solid rgba(59,130,246,0.2)',
-                  color: 'var(--btn-nav-history-text)',
-                }}
-                onClick={() => onNavigateHistory(selectedTherapy)}
-              >
-                <Database size={14} /> Historial
-              </button>
+              {selectedTherapy && (
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    background: 'var(--btn-nav-history)',
+                    border: '1px solid rgba(59,130,246,0.2)',
+                    color: 'var(--btn-nav-history-text)',
+                  }}
+                  onClick={() => onNavigateHistory(selectedTherapy)}
+                >
+                  <Database size={14} /> Historial
+                </button>
+              )}
 
               <div className="connection-status">
                 <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
-                {therapyIsActive && connected ? 'EN VIVO' : 'HISTORIAL'}
+                {connected && (therapyIsActive || isPreTherapy) ? 'EN VIVO' : connected ? 'CONECTADO' : 'HISTORIAL'}
               </div>
 
             </div>
@@ -173,16 +227,20 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
           <div className="glass-panel animate-fade-in" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Terapia seleccionada
+                {isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
               </div>
               <div style={{ fontSize: '1rem', fontWeight: 700 }}>
-                {selectedTherapy.patient_id_str} · Máquina {selectedTherapy.serial_number}
+                {selectedTherapy
+                  ? `${selectedTherapy.patient_id_str} · Máquina ${selectedTherapy.serial_number}`
+                  : `Paciente ${data.info.g_patient_id_str.value} · Máquina ${data.info.d_serial_number_to_odi.value}`
+                }
               </div>
             </div>
             <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
-              {therapyIsActive ? 'Terapia en curso: se muestran datos en tiempo real y el historial.'
-                : selectedTherapyIsOpen ? 'Sesión abierta sin cierre: solo se muestra historial.'
-                  : 'Terapia finalizada: sólo historial disponible.'}
+              {isPreTherapy ? 'Monitorizando en tiempo real — esperando inicio de terapia.'
+                : therapyIsActive ? 'Terapia en curso: se muestran datos en tiempo real y el historial.'
+                  : selectedTherapyIsOpen ? 'Sesión abierta sin cierre: solo se muestra historial.'
+                    : 'Terapia finalizada: sólo historial disponible.'}
             </div>
           </div>
 
@@ -191,16 +249,22 @@ export const Dashboard = ({ user, onNavigateHistory }) => {
               <GeneralInfo
                 selectedTherapy={selectedTherapy}
                 therapyIsActive={therapyIsActive}
+                isPreTherapy={isPreTherapy}
                 data={data}
               />
             </div>
 
             <div className="main-panel">
-              {therapyIsActive ? (
+              {liveAvailable ? (
                 <>
                   <PressurePanel data={data} />
-                  <AccumulatedChart therapyId={selectedTherapyId} isActive={therapyIsActive} />
+                  {!isPreTherapy && <AccumulatedChart therapyId={therapyId} isActive={true} />}
                 </>
+              ) : selectedTherapyIsOpen ? (
+                <div className="glass-panel empty-state" style={{ padding: '48px' }}>
+                  <Database size={32} style={{ opacity: 0.3 }} />
+                  <span>La sesión está abierta pero no se reciben datos en vivo. Esperando telemetría...</span>
+                </div>
               ) : (
                 <div className="glass-panel empty-state" style={{ padding: '48px' }}>
                   <Database size={32} style={{ opacity: 0.3 }} />

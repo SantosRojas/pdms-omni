@@ -225,6 +225,14 @@ export const apiService = {
     return res.json();
   },
 
+  // ─── Session Readings ─────────────────────────
+  async getSessionReadings(sessionId, limit = 500) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/readings?${params}`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
   // ─── Serial Reader Control ────────────────────────
   async getSerialStatus() {
     const res = await fetch(`${API_BASE}/api/serial/status`, { headers: this._headers() });

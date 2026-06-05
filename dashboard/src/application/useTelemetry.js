@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { socketService } from '../infrastructure/socket';
 
-export const useTelemetry = (therapyId, isActive) => {
+export const useTelemetry = (connect) => {
   const [data, setData] = useState({
     pressures: {
       c_press_ap_act: { value: 0, unit: 'mmHg' },
@@ -21,6 +21,7 @@ export const useTelemetry = (therapyId, isActive) => {
       d_kit_type_str: { value: 'N/A' },
       c_acc_therapy_time_act: { value: 0, unit: 'min' },
       g_patient_id_str: { value: 'N/A' },
+      d_serial_number_to_odi: { value: 'N/A' },
       d_renal_dose_act: { value: 0, unit: 'ml/kg/h' },
       c_acc_net_rem_vol_act: { value: 0, unit: 'ml' },
       g_trmt_main_state_set: { value: 'N/A' },
@@ -32,14 +33,12 @@ export const useTelemetry = (therapyId, isActive) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    if (!therapyId || !isActive) {
+    if (!connect) {
       socketService.offTelemetry();
       socketService.disconnect('telemetry');
       setConnected(false);
       return;
     }
-
-    socketService.connect('telemetry');
 
     socketService.onConnect(() => setConnected(true));
     socketService.onDisconnect(() => setConnected(false));
@@ -89,11 +88,13 @@ export const useTelemetry = (therapyId, isActive) => {
       });
     });
 
+    socketService.connect('telemetry');
+
     return () => {
       socketService.offTelemetry();
       socketService.disconnect('telemetry');
     };
-  }, [therapyId, isActive]);
+  }, [connect]);
 
   return { data, connected };
 };

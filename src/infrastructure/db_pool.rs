@@ -395,7 +395,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(
-                    "SELECT th.id, th.started_at, th.ended_at, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                    "SELECT th.id, th.started_at, th.ended_at, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
                      FROM therapies th
                      JOIN patients p ON th.patient_id = p.id
                      JOIN machines m ON th.machine_id = m.id
@@ -412,11 +412,12 @@ impl DbPool {
                     r.get::<i64, _>(6),
                     r.get::<String, _>(7),
                     r.get::<String, _>(8),
+                    r.get::<Option<i64>, _>(9),
                 )).collect())
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(
-                    "SELECT th.id, TO_CHAR(th.started_at, 'YYYY-MM-DD HH24:MI:SS'), CASE WHEN th.ended_at IS NULL THEN NULL ELSE TO_CHAR(th.ended_at, 'YYYY-MM-DD HH24:MI:SS') END, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                    "SELECT th.id, TO_CHAR(th.started_at, 'YYYY-MM-DD HH24:MI:SS'), CASE WHEN th.ended_at IS NULL THEN NULL ELSE TO_CHAR(th.ended_at, 'YYYY-MM-DD HH24:MI:SS') END, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
                      FROM therapies th
                      JOIN patients p ON th.patient_id = p.id
                      JOIN machines m ON th.machine_id = m.id
@@ -433,12 +434,13 @@ impl DbPool {
                     r.get::<i64, _>(6),
                     r.get::<String, _>(7),
                     r.get::<String, _>(8),
+                    r.get::<Option<i64>, _>(9),
                 )).collect())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let q = Query::new(
-                    "SELECT th.id, CONVERT(NVARCHAR(30), th.started_at, 120), CONVERT(NVARCHAR(30), th.ended_at, 120), ISNULL(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version
+                    "SELECT th.id, CONVERT(NVARCHAR(30), th.started_at, 120), CONVERT(NVARCHAR(30), th.ended_at, 120), ISNULL(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
                      FROM therapies th
                      JOIN patients p ON th.patient_id = p.id
                      JOIN machines m ON th.machine_id = m.id
@@ -456,7 +458,90 @@ impl DbPool {
                     r.get::<i32, _>(6).map(|v| v as i64).unwrap_or(0),
                     r.get::<&str, _>(7).unwrap_or("").to_string(),
                     r.get::<&str, _>(8).unwrap_or("").to_string(),
+                    r.get::<i32, _>(9).map(|v| v as i64),
                 )).collect())
+            }
+        }
+    }
+
+    pub async fn list_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(
+                    "SELECT sr.id, sr.timestamp, s.internal_name, CAST(sr.physical_value AS TEXT), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                     FROM session_readings sr
+                     JOIN signals s ON sr.signal_id = s.id
+                     WHERE sr.serial_session_id = ?1
+                     ORDER BY sr.timestamp DESC LIMIT ?2"
+                )
+                .bind(session_id).bind(limit)
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| {
+                    GenericRow {
+                        values: vec![
+                            Some(r.get::<i64, _>(0).to_string()),
+                            Some(r.get::<String, _>(1)),
+                            Some(r.get::<String, _>(2)),
+                            Some(r.get::<String, _>(3)),
+                            Some(r.get::<i64, _>(4).to_string()),
+                            Some(r.get::<String, _>(5)),
+                            r.get::<Option<String>, _>(6),
+                            r.get::<Option<String>, _>(7),
+                        ],
+                    }
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    "SELECT sr.id, TO_CHAR(sr.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(sr.physical_value AS TEXT), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                     FROM session_readings sr
+                     JOIN signals s ON sr.signal_id = s.id
+                     WHERE sr.serial_session_id = $1
+                     ORDER BY sr.timestamp DESC LIMIT $2"
+                )
+                .bind(session_id).bind(limit as i64)
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| {
+                    GenericRow {
+                        values: vec![
+                            Some(r.get::<i64, _>(0).to_string()),
+                            Some(r.get::<String, _>(1)),
+                            Some(r.get::<String, _>(2)),
+                            Some(r.get::<String, _>(3)),
+                            Some(r.get::<i64, _>(4).to_string()),
+                            Some(r.get::<String, _>(5)),
+                            r.get::<Option<String>, _>(6),
+                            r.get::<Option<String>, _>(7),
+                        ],
+                    }
+                }).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "SELECT TOP(@P1) sr.id, CONVERT(NVARCHAR(30), sr.timestamp, 120), s.internal_name, CAST(sr.physical_value AS NVARCHAR(MAX)), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                     FROM session_readings sr
+                     JOIN signals s ON sr.signal_id = s.id
+                     WHERE sr.serial_session_id = @P2
+                     ORDER BY sr.timestamp DESC"
+                );
+                q.bind(limit as i32); q.bind(session_id as i32);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r: TibRow| {
+                    GenericRow {
+                        values: vec![
+                            r.get::<i32, _>(0).map(|v| v.to_string()),
+                            r.get::<&str, _>(1).map(|v| v.to_string()),
+                            r.get::<&str, _>(2).map(|v| v.to_string()),
+                            r.get::<&str, _>(3).map(|v| v.to_string()),
+                            r.get::<i64, _>(4).map(|v| v.to_string()),
+                            r.get::<&str, _>(5).map(|v| v.to_string()),
+                            r.get::<&str, _>(6).map(|v| v.to_string()),
+                            r.get::<&str, _>(7).map(|v| v.to_string()),
+                        ],
+                    }
+                }).collect())
             }
         }
     }

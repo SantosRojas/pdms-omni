@@ -539,12 +539,14 @@ where
                     id: None,
                     timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
                     therapy_id: None,
+                    serial_session_id: None,
                     signal_id: attr.signal_id,
                     internal_name: attr.internal_name.clone(),
                     raw_value,
                     physical_value,
                     unit,
                     display_value,
+                    phase: None,
                 });
             }
 
@@ -594,16 +596,36 @@ where
         machine_id: i64,
         started_at: &str,
         force_new: bool,
+        serial_session_id: Option<i64>,
     ) -> Result<i64, UseCaseError> {
         Ok(self
             .telemetry_repo
-            .get_or_create_therapy(patient_id, machine_id, started_at, force_new)
+            .get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
             .await?)
     }
 
     pub async fn end_therapy(&self, therapy_id: i64) -> Result<(), UseCaseError> {
         self.telemetry_repo.set_therapy_end(therapy_id).await?;
         Ok(())
+    }
+
+    pub async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, UseCaseError> {
+        Ok(self.telemetry_repo.create_serial_session(machine_id, patient_id_str).await?)
+    }
+
+    pub async fn end_serial_session(&self, session_id: i64) -> Result<(), UseCaseError> {
+        self.telemetry_repo.end_serial_session(session_id).await?;
+        Ok(())
+    }
+
+    pub async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), UseCaseError> {
+        self.telemetry_repo.save_session_readings(session_id, readings, phase).await?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, UseCaseError> {
+        Ok(self.telemetry_repo.get_session_readings(session_id, limit).await?)
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -38,6 +38,13 @@ impl GenericRow {
     pub fn get_optional_string(&self, idx: usize) -> Option<String> {
         self.values.get(idx).and_then(|v| v.clone())
     }
+
+    pub fn get_optional_i64(&self, idx: usize) -> Option<i64> {
+        self.values
+            .get(idx)
+            .and_then(|v| v.as_ref())
+            .and_then(|s| s.parse().ok())
+    }
 }
 
 pub const SQLITE_NUMERIC_EQ_EXPR: &str = "CAST(t.physical_value AS REAL)";
@@ -183,6 +190,7 @@ pub fn build_therapy_row(
     machine_id: i64,
     serial_number: String,
     software_version: String,
+    serial_session_id: Option<i64>,
 ) -> GenericRow {
     GenericRow {
         values: vec![
@@ -195,6 +203,7 @@ pub fn build_therapy_row(
             Some(machine_id.to_string()),
             Some(serial_number),
             Some(software_version),
+            serial_session_id.map(|v| v.to_string()),
         ],
     }
 }
@@ -227,16 +236,19 @@ pub fn build_telemetry_reading(
     physical_value: String,
     unit: String,
     display_value: Option<String>,
+    serial_session_id: Option<i64>,
 ) -> TelemetryReading {
     TelemetryReading {
         id,
         timestamp,
         therapy_id,
+        serial_session_id,
         signal_id,
         internal_name,
         raw_value,
         physical_value: telemetry_value_from_storage(physical_value),
         unit,
         display_value,
+        phase: None,
     }
 }

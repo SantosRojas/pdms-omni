@@ -177,22 +177,23 @@ impl TelemetryRepository for DynTelemetryRepo {
         machine_id: i64,
         started_at: &str,
         force_new: bool,
+        serial_session_id: Option<i64>,
     ) -> Result<i64, RepositoryError> {
         match self {
             Self::Sqlite(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
                     .await
             }
             Self::Postgres(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
                     .await
             }
             Self::Mssql(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
                     .await
             }
             Self::Null(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new)
+                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
                     .await
             }
         }
@@ -215,6 +216,42 @@ impl TelemetryRepository for DynTelemetryRepo {
             Self::Postgres(r) => r.set_therapy_end(therapy_id).await,
             Self::Mssql(r) => r.set_therapy_end(therapy_id).await,
             Self::Null(r) => r.set_therapy_end(therapy_id).await,
+        }
+    }
+
+    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.create_serial_session(machine_id, patient_id_str).await,
+            Self::Postgres(r) => r.create_serial_session(machine_id, patient_id_str).await,
+            Self::Mssql(r) => r.create_serial_session(machine_id, patient_id_str).await,
+            Self::Null(r) => r.create_serial_session(machine_id, patient_id_str).await,
+        }
+    }
+
+    async fn end_serial_session(&self, session_id: i64) -> Result<(), RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.end_serial_session(session_id).await,
+            Self::Postgres(r) => r.end_serial_session(session_id).await,
+            Self::Mssql(r) => r.end_serial_session(session_id).await,
+            Self::Null(r) => r.end_serial_session(session_id).await,
+        }
+    }
+
+    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.save_session_readings(session_id, readings, phase).await,
+            Self::Postgres(r) => r.save_session_readings(session_id, readings, phase).await,
+            Self::Mssql(r) => r.save_session_readings(session_id, readings, phase).await,
+            Self::Null(r) => r.save_session_readings(session_id, readings, phase).await,
+        }
+    }
+
+    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.get_session_readings(session_id, limit).await,
+            Self::Postgres(r) => r.get_session_readings(session_id, limit).await,
+            Self::Mssql(r) => r.get_session_readings(session_id, limit).await,
+            Self::Null(r) => r.get_session_readings(session_id, limit).await,
         }
     }
 }
