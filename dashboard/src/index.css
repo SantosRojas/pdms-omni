@@ -1179,6 +1179,79 @@ label {
   gap: 2px;
 }
 
+/* ── Sidebar Nav Link ───────────────────────────────────── */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  font-size: 0.85rem;
+  transition: all 0.15s cubic-bezier(0.4,0,0.2,1);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.nav-link:hover {
+  background: var(--btn-bg);
+  color: var(--text-primary);
+}
+
+.nav-link.active {
+  color: var(--primary);
+  background: rgba(0,210,255,0.08);
+  font-weight: 600;
+  border-left-color: var(--primary);
+}
+
+/* ── Logout Button ──────────────────────────────────────── */
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(239,68,68,0.15);
+  background: rgba(239,68,68,0.05);
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: var(--font-family);
+  transition: all var(--transition-fast);
+}
+
+.btn-logout:hover {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.3);
+}
+
+/* ── Form Validation ──────────────────────────────────────── */
+.input.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 1px var(--danger) !important;
+}
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--danger);
+}
+
+/* ── Comment Card ──────────────────────────────────────── */
+.comment-card {
+  transition: border-color 0.15s;
+}
+
+.comment-card:hover {
+  border-color: var(--border-hover) !important;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Responsive Design
    ═══════════════════════════════════════════════════════════════ */

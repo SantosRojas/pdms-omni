@@ -13,6 +13,7 @@ export const CommentsSection = ({ therapyId }) => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
 
   const fetchComments = useCallback(async () => {
     if (!therapyId) return;
@@ -31,6 +32,12 @@ export const CommentsSection = ({ therapyId }) => {
   useEffect(() => {
     fetchComments();
   }, [fetchComments]);
+
+  useEffect(() => {
+    apiService.getMe()
+      .then(user => setCanDelete(user.role === 'admin'))
+      .catch(() => setCanDelete(false));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,11 +69,7 @@ export const CommentsSection = ({ therapyId }) => {
     }
   };
 
-  const canDelete = () => {
-    const user = apiService.getToken();
-    const payload = user ? JSON.parse(atob(user.split('.')[1])) : null;
-    return payload?.role === 'admin';
-  };
+  // canDelete is now set via getMe() on mount
 
   return (
     <div className="glass-panel animate-fade-in" style={{ padding: '20px 24px', marginTop: '8px' }}>
@@ -99,17 +102,13 @@ export const CommentsSection = ({ therapyId }) => {
           </div>
         )}
         {!loading && comments.map(comment => (
-          <div key={comment.id} style={{
+          <div key={comment.id} className="comment-card" style={{
             background: 'var(--bg-inset)',
             borderRadius: '12px',
             padding: '14px 16px',
             border: '1px solid var(--border-default)',
             position: 'relative',
-            transition: 'border-color 0.15s',
-          }}
-            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
-            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
-          >
+          }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <User size={14} color="var(--secondary)" />
@@ -118,7 +117,7 @@ export const CommentsSection = ({ therapyId }) => {
                   {toLocalDatetime(comment.created_at)}
                 </span>
               </div>
-              {canDelete() && (
+              {canDelete && (
                 <button
                   onClick={() => setDeleteTarget(comment.id)}
                   className="btn-icon btn-ghost"

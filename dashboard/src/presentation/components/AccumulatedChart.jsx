@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { memo, useState, useEffect, useCallback } from 'react';
 import { Database, RefreshCw } from 'lucide-react';
 import { apiService } from '../../infrastructure/api';
 import { toLocalTimeOnly, toLocalDate } from '../../infrastructure/time';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export const AccumulatedChart = ({ therapyId, isActive }) => {
+export const AccumulatedChart = memo(({ therapyId, isActive }) => {
   const [accData, setAccData] = useState([]);
   const [accLoading, setAccLoading] = useState(false);
   const [accError, setAccError] = useState(null);
@@ -132,4 +132,4 @@ export const AccumulatedChart = ({ therapyId, isActive }) => {
       )}
     </div>
   );
-};
+});

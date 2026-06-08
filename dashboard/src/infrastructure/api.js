@@ -1,3 +1,5 @@
+import { setWsToken } from './socket';
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 let authToken = localStorage.getItem('authToken') || null;
@@ -10,6 +12,7 @@ export const apiService = {
     } else {
       localStorage.removeItem('authToken');
     }
+    setWsToken(token);
   },
   getToken() { return authToken; },
 

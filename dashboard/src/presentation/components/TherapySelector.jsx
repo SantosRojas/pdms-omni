@@ -1,6 +1,15 @@
-import React from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Search, X, ChevronRight } from 'lucide-react';
 import { toLocalDatetime } from '../../infrastructure/time';
+
+function useDebouncedValue(value, delay = 200) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory }) => {
   const isOpen = !therapy.ended_at && therapy.status !== 'completed';
@@ -88,6 +97,24 @@ export const TherapySelector = ({
   onNavigateHistory,
   therapyError,
 }) => {
+  const [localQuery, setLocalQuery] = useState(searchQuery);
+  const debouncedQuery = useDebouncedValue(localQuery, 200);
+
+  useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (debouncedQuery !== searchQuery) {
+      onSearchChange(debouncedQuery);
+    }
+  }, [debouncedQuery, searchQuery, onSearchChange]);
+
+  const handleClear = useCallback(() => {
+    setLocalQuery('');
+    onSearchChange('');
+  }, [onSearchChange]);
+
   return (
     <>
       {therapyError && (
@@ -102,13 +129,13 @@ export const TherapySelector = ({
           <input
             type="text"
             className="search-input"
-            value={searchQuery}
-            onChange={e => onSearchChange(e.target.value)}
+            value={localQuery}
+            onChange={e => setLocalQuery(e.target.value)}
             placeholder="Buscar por máquina, paciente, terapia o fecha"
             style={{ paddingLeft: '38px' }}
           />
-          {searchQuery && (
-            <button type="button" onClick={() => onSearchChange('')} className="search-clear" aria-label="Limpiar">
+          {localQuery && (
+            <button type="button" onClick={handleClear} className="search-clear" aria-label="Limpiar">
               <X size={16} />
             </button>
           )}

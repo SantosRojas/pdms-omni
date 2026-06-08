@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { User, Clock } from 'lucide-react';
 import { StatCard } from './StatCard';
 import { toLocalDatetime } from '../../infrastructure/time';
 
-export const GeneralInfo = ({ selectedTherapy, therapyIsActive, isPreTherapy, data }) => {
+export const GeneralInfo = memo(({ selectedTherapy, therapyIsActive, isPreTherapy, data }) => {
   return (
     <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <h3 className="section-title">
@@ -41,4 +41,4 @@ export const GeneralInfo = ({ selectedTherapy, therapyIsActive, isPreTherapy, da
       )}
     </div>
   );
-};
+});

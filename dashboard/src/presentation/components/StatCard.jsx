@@ -1,8 +1,12 @@
 import React from 'react';
-import * as Icons from 'lucide-react';
+import { Activity, Beaker, Clock, Contact, Droplets, HeartPulse, HelpCircle, Wind, Zap } from 'lucide-react';
+
+const ICON_MAP = {
+  Activity, Beaker, Clock, Contact, Droplets, HeartPulse, Wind, Zap,
+};
 
 export const StatCard = ({ title, value, unit, iconName, color = 'var(--primary)' }) => {
-  const Icon = Icons[iconName] || Icons.HelpCircle;
+  const Icon = ICON_MAP[iconName] || HelpCircle;
 
   return (
     <div className="glass-panel" style={{

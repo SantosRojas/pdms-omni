@@ -3,18 +3,10 @@ import { apiService } from '../../infrastructure/api';
 import { DataTable } from '../components/DataTable';
 import { Plus, Layers, X, Check, Trash2, ChevronLeft, Edit3 } from 'lucide-react';
 
-const decodeTokenUsername = () => {
-  try {
-    const token = apiService.getToken();
-    if (!token) return '';
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.username || payload.sub || '';
-  } catch { return ''; }
-};
-
 export const EquivalencesPage = ({ userRole, onBack }) => {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Create state
   const [showCreate, setShowCreate] = useState(false);
@@ -26,11 +18,17 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
 
   // Delete confirmation state
   const [deletingRow, setDeletingRow] = useState(null);
-  const [deleteUser, setDeleteUser] = useState(decodeTokenUsername());
+  const [deleteUser, setDeleteUser] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
 
   const canEdit = userRole === 'admin' || userRole === 'operator';
   const canDelete = userRole === 'admin';
+
+  useEffect(() => {
+    apiService.getMe()
+      .then(user => setCurrentUser(user))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     apiService.getEquivalences()
@@ -76,7 +74,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
 
   const handleDeleteStart = (row) => {
     setDeletingRow(row);
-    setDeleteUser(decodeTokenUsername());
+    setDeleteUser(currentUser?.username ?? '');
     setDeleteReason('');
   };
 

@@ -3,21 +3,44 @@ import { apiService } from '../../infrastructure/api';
 import { Activity, AlertCircle } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
+const MIN_USERNAME = 3;
+const MIN_PASSWORD = 6;
+
+const validate = (username, password) => {
+  const errors = {};
+  if (!username.trim()) errors.username = 'El usuario es obligatorio';
+  else if (username.trim().length < MIN_USERNAME) errors.username = `Mínimo ${MIN_USERNAME} caracteres`;
+  if (!password) errors.password = 'La contraseña es obligatoria';
+  else if (password.length < MIN_PASSWORD) errors.password = `Mínimo ${MIN_PASSWORD} caracteres`;
+  return errors;
+};
+
 export const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+  const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleBlur = (field) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    setErrors(validate(username, password));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    const v = validate(username, password);
+    setErrors(v);
+    setTouched({ username: true, password: true });
+    if (v.username || v.password) return;
+    setServerError('');
     setLoading(true);
     try {
       const data = await apiService.login(username, password);
       onLogin(data.user, data.token);
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión');
+      setServerError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }
@@ -110,37 +133,43 @@ export const LoginPage = ({ onLogin }) => {
           </p>
         </div>
 
-        {error && (
+        {serverError && (
           <div className="message-box message-error" style={{ marginBottom: '24px' }}>
-            <AlertCircle size={16} /> {error}
+            <AlertCircle size={16} /> {serverError}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} noValidate>
           <div>
             <label htmlFor="username">Usuario</label>
             <input
               id="username"
               type="text"
-              className="input"
+              className={`input${touched.username && errors.username ? ' input-error' : ''}`}
               value={username}
-              onChange={e => setUsername(e.target.value)}
+              onChange={e => { setUsername(e.target.value); if (touched.username) setErrors(validate(e.target.value, password)); }}
+              onBlur={() => handleBlur('username')}
               autoFocus
-              required
               placeholder="Ingresa tu usuario"
             />
+            {touched.username && errors.username && (
+              <span className="field-error">{errors.username}</span>
+            )}
           </div>
           <div>
             <label htmlFor="password">Contraseña</label>
             <input
               id="password"
               type="password"
-              className="input"
+              className={`input${touched.password && errors.password ? ' input-error' : ''}`}
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
+              onChange={e => { setPassword(e.target.value); if (touched.password) setErrors(validate(username, e.target.value)); }}
+              onBlur={() => handleBlur('password')}
               placeholder="Ingresa tu contraseña"
             />
+            {touched.password && errors.password && (
+              <span className="field-error">{errors.password}</span>
+            )}
           </div>
           <button
             type="submit"

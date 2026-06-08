@@ -1,4 +1,17 @@
-const WS_URL = import.meta.env.VITE_WS_URL || '/ws';
+let _token = null;
+
+export function setWsToken(token) {
+  _token = token;
+}
+
+function buildWsUrl() {
+  const base = import.meta.env.VITE_WS_URL || '/ws';
+  if (_token) {
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}token=${encodeURIComponent(_token)}`;
+  }
+  return base;
+}
 
 export const socketService = {
   ws: null,
@@ -29,7 +42,7 @@ export const socketService = {
     }
 
     try {
-      this.ws = new WebSocket(WS_URL);
+      this.ws = new WebSocket(buildWsUrl());
     } catch (e) {
       console.error('[WS] Failed to create WebSocket:', e);
       this._scheduleReconnect();

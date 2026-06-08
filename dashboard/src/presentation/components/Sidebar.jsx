@@ -62,33 +62,7 @@ export const Sidebar = ({ user, onLogout, open }) => {
                 e.preventDefault();
                 window.location.hash = item.hash;
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                textDecoration: 'none',
-                color: active ? 'var(--primary)' : 'var(--text-tertiary)',
-                background: active ? 'rgba(0,210,255,0.08)' : 'transparent',
-                fontWeight: active ? 600 : 400,
-                fontSize: '0.85rem',
-                transition: 'all 0.15s cubic-bezier(0.4,0,0.2,1)',
-                cursor: 'pointer',
-                borderLeft: active ? '2px solid var(--primary)' : '2px solid transparent',
-              }}
-              onMouseOver={e => {
-                if (!active) {
-                  e.currentTarget.style.background = 'var(--btn-bg)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }
-              }}
-              onMouseOut={e => {
-                if (!active) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-tertiary)';
-                }
-              }}
+              className={`nav-link${active ? ' active' : ''}`}
             >
               <Icon size={18} />
               {item.label}
@@ -146,29 +120,7 @@ export const Sidebar = ({ user, onLogout, open }) => {
         </div>
         <button
           onClick={onLogout}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            width: '100%',
-            padding: '8px 14px',
-            borderRadius: '10px',
-            border: '1px solid rgba(239,68,68,0.15)',
-            background: 'rgba(239,68,68,0.05)',
-            color: 'var(--danger)',
-            cursor: 'pointer',
-            fontSize: '0.82rem',
-            fontWeight: 500,
-            fontFamily: 'var(--font-family)',
-          }}
-          onMouseOver={e => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.15)';
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)';
-          }}
-          onMouseOut={e => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.05)';
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.15)';
-          }}
+          className="btn-logout"
         >
           <LogOut size={16} />
           Cerrar sesión

@@ -188,10 +188,22 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
       ) : (
         <>
           <header className="glass-panel page-header animate-slide-up">
-            <div className="page-header-left">
+            {/* <div className="page-header-left">
               <div className="header-title">
                 <Activity color="var(--primary)" size={28} />
                 OMNI Tiempo Real
+              </div>
+            </div> */}
+
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: 700 }}>
+                {selectedTherapy
+                  ? `${selectedTherapy.patient_id_str} · Máquina ${selectedTherapy.serial_number}`
+                  : `Paciente ${data.info.g_patient_id_str.value} · Máquina ${data.info.d_serial_number_to_odi.value}`
+                }
               </div>
             </div>
 
@@ -224,7 +236,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
             </div>
           </header>
 
-          <div className="glass-panel animate-fade-in" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* <div className="glass-panel animate-fade-in" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
@@ -242,7 +254,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
                   : selectedTherapyIsOpen ? 'Sesión abierta sin cierre: solo se muestra historial.'
                     : 'Terapia finalizada: sólo historial disponible.'}
             </div>
-          </div>
+          </div> */}
 
           <div className="dashboard-grid">
             <div className="side-panel">

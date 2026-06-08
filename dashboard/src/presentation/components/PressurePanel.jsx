@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Droplets, Thermometer, TrendingUp } from 'lucide-react';
 import { Cylinder } from './Cylinder';
 import { StatCard } from './StatCard';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export const PressurePanel = ({ data }) => {
+const areEqual = (prev, next) => prev.data.history === next.data.history
+  && prev.data.pressures === next.data.pressures
+  && prev.data.flows === next.data.flows;
+
+export const PressurePanel = memo(({ data }) => {
   return (
     <>
       <div className="glass-panel animate-slide-up" style={{ padding: '24px' }}>
@@ -50,10 +54,10 @@ export const PressurePanel = ({ data }) => {
                   labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
                 />
                 <Legend />
-                <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={3} animationDuration={300} />
-                <Line type="monotone" dataKey="c_press_vp_act" stroke="var(--ven-color)" name="Venoso" dot={false} strokeWidth={3} animationDuration={300} />
-                <Line type="monotone" dataKey="c_press_tmp_act" stroke="var(--tmp-color)" name="TMP" dot={false} strokeWidth={3} animationDuration={300} />
-                <Line type="monotone" dataKey="c_press_fp_act" stroke="var(--fil-color)" name="Filtro" dot={false} strokeWidth={3} animationDuration={300} />
+                <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={3} isAnimationActive={false} />
+                <Line type="monotone" dataKey="c_press_vp_act" stroke="var(--ven-color)" name="Venoso" dot={false} strokeWidth={3} isAnimationActive={false} />
+                <Line type="monotone" dataKey="c_press_tmp_act" stroke="var(--tmp-color)" name="TMP" dot={false} strokeWidth={3} isAnimationActive={false} />
+                <Line type="monotone" dataKey="c_press_fp_act" stroke="var(--fil-color)" name="Filtro" dot={false} strokeWidth={3} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -61,4 +65,4 @@ export const PressurePanel = ({ data }) => {
       </div>
     </>
   );
-};
+});
