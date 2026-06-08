@@ -6,7 +6,7 @@ use axum::routing::{get, post, put, delete};
 use axum::Router;
 use serde::Serialize;
 use tokio::sync::broadcast;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{CorsLayer, Any, AllowOrigin};
 use tower_http::services::ServeDir;
 use tracing::{error, info};
 
@@ -27,15 +27,26 @@ impl WebSocketHub {
         jwt_token_ttl_secs: u64,
         serial_manager: std::sync::Arc<super::serial_manager::SerialReaderManager>,
         dashboard_dir: Option<PathBuf>,
+        cors_origins: Vec<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (tx, _) = broadcast::channel::<String>(512);
         let app_tx = tx.clone();
 
         tokio::spawn(async move {
-            let cors = CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any);
+            let cors = if cors_origins.iter().any(|o| o == "*") {
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any)
+            } else {
+                let origins: Vec<_> = cors_origins.iter()
+                    .filter_map(|o| o.parse::<axum::http::HeaderValue>().ok())
+                    .collect();
+                CorsLayer::new()
+                    .allow_origin(AllowOrigin::list(origins))
+                    .allow_methods(Any)
+                    .allow_headers(Any)
+            };
 
             let ws_route = move |ws: WebSocketUpgrade| {
                 let tx = app_tx.clone();

@@ -148,22 +148,62 @@ impl DbPool {
         }
     }
 
-    pub async fn update_user_field(&self, user_id: i64, field: &str, value: &str) -> Result<(), String> {
-        let allowed = ["password", "full_name", "email", "role"];
-        if !allowed.contains(&field) { return Err(format!("Field '{}' not allowed", field)); }
+    pub async fn is_user_active(&self, user_id: i64) -> Result<bool, String> {
         match self {
             DbPool::Sqlite(pool) => {
-                let sql = format!("UPDATE users SET {} = ?1 WHERE id = ?2", field);
-                sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                let row = sqlx::query("SELECT active FROM users WHERE id = ?1")
+                    .bind(user_id).fetch_optional(pool).await.map_err(|e| e.to_string())?;
+                Ok(row.map(|r| r.get::<bool, _>(0)).unwrap_or(false))
+            }
+            DbPool::Postgres(pool) => {
+                let row = sqlx::query("SELECT active FROM users WHERE id = $1")
+                    .bind(user_id).fetch_optional(pool).await.map_err(|e| e.to_string())?;
+                Ok(row.map(|r| r.get::<bool, _>(0)).unwrap_or(false))
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = tiberius::Query::new("SELECT active FROM users WHERE id = @P1");
+                q.bind(user_id as i32);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<tiberius::Row> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                Ok(rows.first().and_then(|r| r.get::<bool, _>(0)).unwrap_or(false))
+            }
+        }
+    }
+
+    pub async fn update_user_password(&self, user_id: i64, value: &str) -> Result<(), String> {
+        self.exec_update_field("password", user_id, value).await
+    }
+
+    pub async fn update_user_full_name(&self, user_id: i64, value: &str) -> Result<(), String> {
+        self.exec_update_field("full_name", user_id, value).await
+    }
+
+    pub async fn update_user_email(&self, user_id: i64, value: &str) -> Result<(), String> {
+        self.exec_update_field("email", user_id, value).await
+    }
+
+    pub async fn update_user_role(&self, user_id: i64, value: &str) -> Result<(), String> {
+        self.exec_update_field("role", user_id, value).await
+    }
+
+    async fn exec_update_field(&self, field: &str, user_id: i64, value: &str) -> Result<(), String> {
+        let sql_suffix = match field {
+            "password" | "full_name" | "email" | "role" => field,
+            _ => return Err(format!("Field '{}' not allowed", field)),
+        };
+        let sql_lhs = |param: &str| format!("UPDATE users SET {} = {}", sql_suffix, param);
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(&sql_lhs("?1")).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Postgres(pool) => {
-                let sql = format!("UPDATE users SET {} = $1 WHERE id = $2", field);
-                sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                sqlx::query(&sql_lhs("$1")).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Mssql(pool) => {
-                let sql = format!("UPDATE users SET {} = @P1 WHERE id = @P2", field);
+                let sql = sql_lhs("@P1");
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(sql);
                 q.bind(value); q.bind(user_id as i32);

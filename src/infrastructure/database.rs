@@ -38,11 +38,11 @@ pub struct Repositories {
 
 /// Initializes the database: opens connection, creates schema,
 /// and returns all repository instances ready for injection.
-pub async fn initialize_db(db_config: &DatabaseConfig) -> Result<Repositories, Box<dyn std::error::Error>> {
+pub async fn initialize_db(db_config: &DatabaseConfig, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
     match db_config {
-        DatabaseConfig::Sqlite { url } => initialize_sqlite(url).await,
-        DatabaseConfig::Postgres(cfg) => initialize_postgres(cfg).await,
-        DatabaseConfig::Mssql(cfg) => initialize_mssql(cfg).await,
+        DatabaseConfig::Sqlite { url } => initialize_sqlite(url, admin_password).await,
+        DatabaseConfig::Postgres(cfg) => initialize_postgres(cfg, admin_password).await,
+        DatabaseConfig::Mssql(cfg) => initialize_mssql(cfg, admin_password).await,
         DatabaseConfig::Other { url } => {
             Err(format!("DB backend not implemented yet for URL: {}", url).into())
         }
@@ -65,7 +65,7 @@ pub fn initialize_without_persistence() -> Repositories {
 //  SQLite backend (existing)
 // ═══════════════════════════════════════════════════════════════
 
-async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
     let options = SqliteConnectOptions::from_str(db_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal);
@@ -230,12 +230,12 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
     let user_count: i64 = row.get(0);
     if user_count == 0 {
-        let admin_password_hash = hash_password("admin123")
+        let admin_password_hash = hash_password(admin_password)
             .map_err(|e| io::Error::other(e.to_string()))?;
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', ?1, 'Administrator', 'admin')"
         ).bind(admin_password_hash).execute(&pool).await?;
-        info!("  [DB] Default admin user created (username: admin, password: admin123)");
+        info!("  [DB] Default admin user created (username: admin)");
     }
 
     // Seed equivalences
@@ -274,7 +274,7 @@ async fn initialize_sqlite(db_url: &str) -> Result<Repositories, Box<dyn std::er
     })
 }
 
-async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
     info!("  [DB] Connecting to PostgreSQL...");
 
     let url = format!(
@@ -434,10 +434,12 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
     let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
     let user_count: i64 = row.get(0);
     if user_count == 0 {
+        let admin_password_hash = hash_password(admin_password)
+            .map_err(|e| io::Error::other(e.to_string()))?;
         sqlx::query(
-            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', 'admin123', 'Administrator', 'admin')"
-        ).execute(&pool).await?;
-        info!("  [DB] Default admin user created (username: admin, password: admin123)");
+            "INSERT INTO users (username, password, full_name, role) VALUES ('admin', $1, 'Administrator', 'admin')"
+        ).bind(&admin_password_hash).execute(&pool).await?;
+        info!("  [DB] Default admin user created (username: admin)");
     }
 
     let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
@@ -480,7 +482,7 @@ async fn initialize_postgres(settings: &PostgresSettings) -> Result<Repositories
 //  MSSQL backend (new)
 // ═══════════════════════════════════════════════════════════════
 
-async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
     info!("  [DB] Connecting to SQL Server...");
 
     // Keep this aligned with the known-good standalone tiberius sample.
@@ -700,12 +702,12 @@ async fn initialize_mssql(settings: &MssqlSettings) -> Result<Repositories, Box<
         let rows: Vec<TibRow> = stream.into_first_result().await?;
         let user_count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
         if user_count == 0 {
-            let admin_password_hash = hash_password("admin123")
+            let admin_password_hash = hash_password(admin_password)
                 .map_err(|e| io::Error::other(e.to_string()))?;
             let mut qi = TibQuery::new("INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)");
             qi.bind("admin"); qi.bind(admin_password_hash.as_str()); qi.bind("Administrator"); qi.bind("admin");
             qi.execute(&mut *conn).await?;
-            info!("  [DB] Default admin user created (username: admin, password: admin123)");
+            info!("  [DB] Default admin user created (username: admin)");
         }
     }
 

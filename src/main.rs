@@ -536,7 +536,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Base de datos
     let db_config = config.database_config();
-    let (repos, persistence_enabled) = match database::initialize_db(&db_config).await {
+    let (repos, persistence_enabled) = match database::initialize_db(&db_config, &config.admin_password).await {
         Ok(repos) => {
             info!("[DB] Conectada: {url}", url = config.get_database_url_redacted());
             (repos, true)
@@ -563,6 +563,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.jwt_token_ttl_secs(),
         Arc::clone(&serial_manager),
         dashboard_path,
+        config.cors_origins.clone(),
     )?;
 
     // 5. Dedicated OS thread for serial reading (avoids Send constraint on SerialPort)
@@ -574,29 +575,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         std::thread::spawn(move || {
             let mut current_session_id: Option<u64> = None;
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("rt for serial thread");
+
+            let wait_for_command = |rx: &mut tokio::sync::watch::Receiver<ReaderCommand>| -> bool {
+                rt.block_on(rx.changed()).is_ok()
+            };
 
             loop {
-                // Read the current command without blocking on the watch channel from a thread
                 let cmd = *cmd_rx.borrow_and_update();
 
                 match cmd {
                     ReaderCommand::Start { id, new_therapy } => {
                         if current_session_id == Some(id) {
-                            // Same session already running — wait for next command
-                            // Use a blocking wait: create a tiny rt just for the wait
-                            let rt = tokio::runtime::Builder::new_current_thread()
-                                .enable_all()
-                                .build()
-                                .expect("rt for wait");
-                            let changed = rt.block_on(async { cmd_rx.changed().await });
-                            if changed.is_err() {
+                            if !wait_for_command(&mut cmd_rx) {
                                 break;
                             }
                             continue;
                         }
                         current_session_id = Some(id);
 
-                        // Run reader session (blocks until stopped or failed)
                         run_reader_session_blocking(
                             Arc::clone(&config_thread),
                             repos_thread.clone(),
@@ -606,25 +606,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             new_therapy,
                         );
 
-                        // After session ends, wait for next command
-                        let rt = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .expect("rt for wait");
-                        let changed = rt.block_on(async { cmd_rx.changed().await });
-                        if changed.is_err() {
+                        if !wait_for_command(&mut cmd_rx) {
                             break;
                         }
                     }
                     ReaderCommand::Stop => {
                         current_session_id = None;
-                        // Wait for next command
-                        let rt = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .expect("rt for wait");
-                        let changed = rt.block_on(async { cmd_rx.changed().await });
-                        if changed.is_err() {
+                        if !wait_for_command(&mut cmd_rx) {
                             break;
                         }
                     }

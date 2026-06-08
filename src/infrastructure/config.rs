@@ -62,6 +62,8 @@ pub struct AppConfig {
     pub capture_names: HashSet<String>,
     pub serial_max_failures: u32,
     pub dashboard_dir: Option<String>,
+    pub admin_password: String,
+    pub cors_origins: Vec<String>,
 }
 
 impl AppConfig {
@@ -124,7 +126,7 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(1),
-            ws_host: env::var("WS_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
+            ws_host: env::var("WS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             ws_port: env::var("WS_PORT")
                 .unwrap_or_default()
                 .parse()
@@ -146,11 +148,14 @@ impl AppConfig {
                 .parse()
                 .unwrap_or(5),
             jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "dev-jwt-secret-change-me".to_string()),
+                .expect("JWT_SECRET must be set in .env"),
             jwt_expiration_hours: env::var("JWT_EXPIRATION_HOURS")
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(24),
+            admin_password: env::var("ADMIN_PASSWORD")
+                .expect("ADMIN_PASSWORD must be set in .env"),
+            cors_origins: parse_cors_origins(&env::var("CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:5173,http://localhost:9001".to_string())),
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),
@@ -263,6 +268,15 @@ fn parse_handles_csv(raw: &str) -> HashSet<u16> {
             }
 
             parsed
+        })
+        .collect()
+}
+
+fn parse_cors_origins(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .filter_map(|s| {
+            let token = s.trim();
+            if token.is_empty() { None } else { Some(token.to_string()) }
         })
         .collect()
 }

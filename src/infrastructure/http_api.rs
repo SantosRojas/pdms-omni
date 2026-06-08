@@ -22,10 +22,14 @@ pub struct ApiState {
 }
 
 /// Extracts the authenticated user from the Authorization: Bearer <token> header.
-fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> {
+/// Also verifies the user account is active in the database.
+async fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> {
     let auth = headers.get("authorization")?.to_str().ok()?;
     let token = auth.strip_prefix("Bearer ")?;
-    decode_token(&state.jwt_secret, token).ok()
+    let claims = decode_token(&state.jwt_secret, token).ok()?;
+    let active = state.db.is_user_active(claims.user_id).await.ok()?;
+    if !active { return None; }
+    Some(claims)
 }
 
 fn unauthorized() -> impl IntoResponse {
@@ -37,7 +41,8 @@ fn forbidden() -> impl IntoResponse {
 }
 
 fn db_err(msg: String) -> impl IntoResponse {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": msg}))).into_response()
+    tracing::error!("[API] Internal error: {}", msg);
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Internal server error"}))).into_response()
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -93,7 +98,7 @@ pub async fn login(
 
             if password_check.needs_upgrade {
                 if let Ok(new_hash) = hash_password(&body.password) {
-                    let _ = state.db.update_user_field(id, "password", &new_hash).await;
+                    let _ = state.db.update_user_password(id, &new_hash).await;
                 }
             }
 
@@ -138,7 +143,7 @@ pub async fn get_me(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    match get_claims(&headers, &state) {
+    match get_claims(&headers, &state).await {
         Some(session) => Json(serde_json::json!({
             "user_id": session.user_id,
             "username": session.username,
@@ -159,7 +164,7 @@ pub async fn list_users(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -199,7 +204,7 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(body): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -241,7 +246,7 @@ pub async fn update_user(
     Path(user_id): Path<i64>,
     Json(body): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -271,16 +276,16 @@ pub async fn update_user(
             Ok(hash) => hash,
             Err(e) => return db_err(e.to_string()).into_response(),
         };
-        let _ = state.db.update_user_field(user_id, "password", &password_hash).await;
+        let _ = state.db.update_user_password(user_id, &password_hash).await;
     }
     if let Some(ref fn_) = body.full_name {
-        let _ = state.db.update_user_field(user_id, "full_name", fn_).await;
+        let _ = state.db.update_user_full_name(user_id, fn_).await;
     }
     if let Some(ref e) = body.email {
-        let _ = state.db.update_user_field(user_id, "email", e).await;
+        let _ = state.db.update_user_email(user_id, e).await;
     }
     if let Some(ref role) = body.role {
-        let _ = state.db.update_user_field(user_id, "role", role).await;
+        let _ = state.db.update_user_role(user_id, role).await;
     }
     if let Some(active) = body.active {
         let _ = state.db.update_user_active(user_id, active).await;
@@ -295,7 +300,7 @@ pub async fn delete_user(
     headers: HeaderMap,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -328,7 +333,7 @@ pub async fn list_equivalences(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if get_claims(&headers, &state).is_none() {
+    if get_claims(&headers, &state).await.is_none() {
         return unauthorized().into_response();
     }
 
@@ -359,7 +364,7 @@ pub async fn create_equivalence(
     headers: HeaderMap,
     Json(body): Json<CreateEquivalenceRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -403,7 +408,7 @@ pub async fn update_equivalence(
     headers: HeaderMap,
     Json(body): Json<UpdateEquivalenceRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -428,7 +433,7 @@ pub async fn delete_equivalence(
     Query(params): Query<DeleteEquivalenceQuery>,
     Json(body): Json<DeleteEquivalenceBody>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -638,7 +643,10 @@ pub async fn export_csv(
                 csv,
             ).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+        Err(e) => {
+            tracing::error!("[API] Export error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Internal server error"}))).into_response()
+        }
     }
 }
 
@@ -721,7 +729,10 @@ pub async fn export_therapy_csv(
                 csv,
             ).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+        Err(e) => {
+            tracing::error!("[API] Export error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Internal server error"}))).into_response()
+        }
     }
 }
 
@@ -734,7 +745,7 @@ pub async fn serial_status(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if get_claims(&headers, &state).is_none() {
+    if get_claims(&headers, &state).await.is_none() {
         return unauthorized().into_response();
     }
 
@@ -753,7 +764,7 @@ pub async fn serial_start(
     headers: HeaderMap,
     payload: Option<Json<StartSerialPayload>>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -771,7 +782,7 @@ pub async fn serial_stop(
     State(state): State<ApiState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -815,7 +826,7 @@ pub async fn list_comments(
     headers: HeaderMap,
     Path(therapy_id): Path<i64>,
 ) -> impl IntoResponse {
-    if get_claims(&headers, &state).is_none() {
+    if get_claims(&headers, &state).await.is_none() {
         return unauthorized().into_response();
     }
 
@@ -843,7 +854,7 @@ pub async fn create_comment(
     Path(therapy_id): Path<i64>,
     Json(body): Json<CreateCommentRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
@@ -882,7 +893,7 @@ pub async fn delete_comment(
     Path(comment_id): Path<i64>,
     Json(body): Json<DeleteCommentRequest>,
 ) -> impl IntoResponse {
-    let session = match get_claims(&headers, &state) {
+    let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
     };
