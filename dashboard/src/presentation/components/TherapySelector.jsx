@@ -101,10 +101,6 @@ export const TherapySelector = ({
   const debouncedQuery = useDebouncedValue(localQuery, 200);
 
   useEffect(() => {
-    setLocalQuery(searchQuery);
-  }, [searchQuery]);
-
-  useEffect(() => {
     if (debouncedQuery !== searchQuery) {
       onSearchChange(debouncedQuery);
     }
@@ -112,8 +108,7 @@ export const TherapySelector = ({
 
   const handleClear = useCallback(() => {
     setLocalQuery('');
-    onSearchChange('');
-  }, [onSearchChange]);
+  }, []);
 
   return (
     <>
