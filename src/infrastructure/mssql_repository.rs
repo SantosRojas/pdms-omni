@@ -409,7 +409,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
     async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut qi = Query::new("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (@P1, @P2); SELECT SCOPE_IDENTITY() AS id");
+        let mut qi = Query::new("INSERT INTO serial_sessions (machine_id, patient_id_str) OUTPUT INSERTED.id VALUES (@P1, @P2)");
         qi.bind(machine_id as i32);
         qi.bind(patient_id_str);
         let stream = qi.query(&mut *conn).await.map_err(map_db_err)?;
