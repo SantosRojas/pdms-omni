@@ -617,8 +617,16 @@ pub async fn therapy_history(
 /// GET /api/export?patient=XYZ&limit=5000
 pub async fn export_csv(
     State(state): State<ApiState>,
+    headers: HeaderMap,
     Query(params): Query<ExportQuery>,
 ) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state).await {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" && session.role != "operator" {
+        return forbidden().into_response();
+    }
     match state.db.export_history(&params.patient, params.limit).await {
         Ok(rows) => {
             let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
@@ -703,8 +711,16 @@ pub async fn get_session_readings(
 /// GET /api/therapy-export?therapy_id=123&limit=5000
 pub async fn export_therapy_csv(
     State(state): State<ApiState>,
+    headers: HeaderMap,
     Query(params): Query<TherapyExportQuery>,
 ) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state).await {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" && session.role != "operator" {
+        return forbidden().into_response();
+    }
     match state.db.export_therapy_history(params.therapy_id, params.limit).await {
         Ok(rows) => {
             let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");

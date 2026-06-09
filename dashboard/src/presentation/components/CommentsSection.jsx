@@ -14,6 +14,7 @@ export const CommentsSection = ({ therapyId }) => {
   const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   const fetchComments = useCallback(async () => {
     if (!therapyId) return;
@@ -35,7 +36,10 @@ export const CommentsSection = ({ therapyId }) => {
 
   useEffect(() => {
     apiService.getMe()
-      .then(user => setCanDelete(user.role === 'admin'))
+      .then(user => {
+        setCanDelete(user.role === 'admin');
+        setUserRole(user.role);
+      })
       .catch(() => setCanDelete(false));
   }, []);
 
@@ -135,6 +139,7 @@ export const CommentsSection = ({ therapyId }) => {
         ))}
       </div>
 
+      {userRole !== 'viewer' && (
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <input
           type="text"
@@ -167,6 +172,7 @@ export const CommentsSection = ({ therapyId }) => {
           </button>
         </div>
       </form>
+      )}
 
       {deleteTarget !== null && (
         <div className="modal-backdrop" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteReason(''); } }}>

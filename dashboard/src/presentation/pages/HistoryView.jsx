@@ -5,7 +5,7 @@ import { DataTable } from '../components/DataTable';
 import { Download, Clock, ChevronLeft } from 'lucide-react';
 import { CommentsSection } from '../components/CommentsSection';
 
-export const HistoryView = ({ therapy, onBack }) => {
+export const HistoryView = ({ therapy, userRole, onBack }) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -94,14 +94,17 @@ export const HistoryView = ({ therapy, onBack }) => {
           </h2>
         </div>
 
-        <button onClick={handleDownload} className="btn btn-success">
-          <Download size={16} /> Exportar Excel (CSV)
-        </button>
+        {userRole !== 'viewer' && (
+          <button onClick={handleDownload} className="btn btn-success">
+            <Download size={16} /> Exportar Excel (CSV)
+          </button>
+        )}
       </div>
 
       {error && (
         <div className="message-box message-error">{error}</div>
       )}
+      <CommentsSection therapyId={therapy?.id} />
 
       {loading ? (
         <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
@@ -119,7 +122,6 @@ export const HistoryView = ({ therapy, onBack }) => {
         />
       )}
 
-      <CommentsSection therapyId={therapy?.id} />
     </div>
   );
 };

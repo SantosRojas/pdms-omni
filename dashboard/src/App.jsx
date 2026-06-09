@@ -129,7 +129,7 @@ function App() {
   const renderContent = () => {
     switch (view) {
       case 'history':
-        return <HistoryView therapy={historyTherapy} onBack={() => { window.location.hash = '#/'; }} />;
+        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
       case 'admin':
         return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':

@@ -192,18 +192,19 @@ impl DbPool {
             "password" | "full_name" | "email" | "role" => field,
             _ => return Err(format!("Field '{}' not allowed", field)),
         };
-        let sql_lhs = |param: &str| format!("UPDATE users SET {} = {}", sql_suffix, param);
         match self {
             DbPool::Sqlite(pool) => {
-                sqlx::query(&sql_lhs("?1")).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                let sql = format!("UPDATE users SET {} = ?1 WHERE id = ?2", sql_suffix);
+                sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Postgres(pool) => {
-                sqlx::query(&sql_lhs("$1")).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
+                let sql = format!("UPDATE users SET {} = $1 WHERE id = $2", sql_suffix);
+                sqlx::query(&sql).bind(value).bind(user_id).execute(pool).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Mssql(pool) => {
-                let sql = sql_lhs("@P1");
+                let sql = format!("UPDATE users SET {} = @P1 WHERE id = @P2", sql_suffix);
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(sql);
                 q.bind(value); q.bind(user_id as i32);
