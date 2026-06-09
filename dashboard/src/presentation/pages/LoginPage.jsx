@@ -62,7 +62,7 @@ export const LoginPage = ({ onLogin }) => {
         width: '600px',
         height: '600px',
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(0,210,255,0.08) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.08) 0%, transparent 70%)',
         top: '-200px',
         right: '-100px',
         animation: 'float 4s ease-in-out infinite',
@@ -113,7 +113,7 @@ export const LoginPage = ({ onLogin }) => {
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 20px',
-            boxShadow: '0 8px 32px rgba(0,210,255,0.3)',
+            boxShadow: 'var(--primary-shadow-lg)',
           }}>
             <Activity size={32} color="#0f172a" />
           </div>

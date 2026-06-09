@@ -5,12 +5,20 @@
 /* ── Design Tokens ──────────────────────────────────────────── */
 
 :root {
-  /* Brand colors */
-  --primary: #00d2ff;
-  --primary-dark: #00a2cc;
-  --primary-light: #66e5ff;
+  /* Brand colors — HSL channels (dynamic accent) */
+  --primary-h: 191;
+  --primary-s: 100%;
+  --primary-l: 50%;
+  --primary: hsl(var(--primary-h), var(--primary-s), var(--primary-l));
+  --primary-dark: hsl(var(--primary-h), var(--primary-s), calc(var(--primary-l) - 10%));
+  --primary-light: hsl(var(--primary-h), calc(var(--primary-s) - 20%), calc(var(--primary-l) + 15%));
   --secondary: #3b82f6;
   --accent: #f43f5e;
+
+  /* Primary color shadows for inline JSX */
+  --primary-shadow-sm: 0 4px 12px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.3);
+  --primary-shadow-md: 0 8px 24px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.25);
+  --primary-shadow-lg: 0 8px 32px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.3);
 
   /* Semantic colors */
   --success: #10b981;
@@ -53,7 +61,7 @@
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.15);
-  --shadow-glow: 0 0 20px rgba(0, 210, 255, 0.25);
+  --shadow-glow: 0 0 20px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.25);
 
   /* Transition */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -83,17 +91,17 @@
 
   --border-default: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-hover: rgba(0, 210, 255, 0.2);
+  --border-hover: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.2);
 
   --shadow-surface: 0 8px 32px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-elevated: 0 20px 60px rgba(0, 0, 0, 0.5);
-  --shadow-glow-primary: 0 0 30px rgba(0, 210, 255, 0.15);
+  --shadow-glow-primary: 0 0 30px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.15);
 
   /* Legacy variables for backward compatibility */
   --bg-dark: var(--bg-base);
   --bg-card: var(--bg-surface);
   --bg-card-hover: var(--bg-surface-hover);
-  --primary-glow: rgba(0, 210, 255, 0.15);
+  --primary-glow: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.15);
   --text-main: var(--text-primary);
   --text-muted: var(--text-secondary);
   --border: var(--border-default);
@@ -131,17 +139,17 @@
 
   --border-default: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.04);
-  --border-hover: rgba(0, 210, 255, 0.4);
+  --border-hover: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.4);
 
   --shadow-surface: 0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
   --shadow-elevated: 0 20px 60px rgba(0, 0, 0, 0.1);
-  --shadow-glow-primary: 0 0 30px rgba(0, 210, 255, 0.1);
+  --shadow-glow-primary: 0 0 30px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.1);
 
   /* Legacy variables */
   --bg-dark: var(--bg-base);
   --bg-card: var(--bg-surface);
   --bg-card-hover: var(--bg-surface-hover);
-  --primary-glow: rgba(0, 210, 255, 0.1);
+  --primary-glow: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.1);
   --text-main: var(--text-primary);
   --text-muted: var(--text-secondary);
   --border: var(--border-default);
@@ -438,7 +446,7 @@
 }
 
 ::selection {
-  background: rgba(0, 210, 255, 0.3);
+  background: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.3);
   color: var(--text-primary);
 }
 
@@ -563,12 +571,12 @@ code, pre, .font-mono {
 .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
   color: #0f172a;
-  box-shadow: 0 4px 15px rgba(0, 210, 255, 0.25);
+  box-shadow: 0 4px 15px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.25);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 210, 255, 0.35);
+  box-shadow: 0 6px 20px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.35);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -641,7 +649,7 @@ code, pre, .font-mono {
 
 .input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.15);
+  box-shadow: 0 0 0 3px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.15);
 }
 
 .input::placeholder {
@@ -1073,7 +1081,7 @@ label {
 
 .search-input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.12);
+  box-shadow: 0 0 0 3px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.12);
 }
 
 .search-clear {
@@ -1463,7 +1471,7 @@ label {
 
 .nav-link.active {
   color: var(--primary);
-  background: rgba(0,210,255,0.08);
+  background: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.08);
   font-weight: 600;
   border-left-color: var(--primary);
 }

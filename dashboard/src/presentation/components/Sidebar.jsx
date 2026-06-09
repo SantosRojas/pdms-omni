@@ -1,12 +1,13 @@
 import React from 'react';
-import { Home, Layers, Users, Settings, LogOut, Activity } from 'lucide-react';
+import { Home, Layers, Users, User, Settings, LogOut, Activity } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV_ITEMS = [
   { hash: '#/', label: 'Inicio', icon: Home, roles: null },
   { hash: '#/equivalences', label: 'Equivalencias', icon: Layers, roles: null },
   { hash: '#/admin', label: 'Usuarios', icon: Users, roles: ['admin'] },
-  { hash: '#/profile', label: 'Configuración', icon: Settings, roles: null },
+  { hash: '#/profile', label: 'Perfil', icon: User, roles: null },
+  { hash: '#/settings', label: 'Ajustes', icon: Settings, roles: null },
 ];
 
 export const Sidebar = ({ user, onLogout, open }) => {
@@ -30,7 +31,7 @@ export const Sidebar = ({ user, onLogout, open }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 4px 12px rgba(0,210,255,0.3)',
+          boxShadow: 'var(--primary-shadow-sm)',
         }}>
           <Activity size={20} color="#0f172a" />
         </div>
@@ -118,6 +119,7 @@ export const Sidebar = ({ user, onLogout, open }) => {
           </div>
           <ThemeToggle />
         </div>
+
         <button
           onClick={onLogout}
           className="btn-logout"

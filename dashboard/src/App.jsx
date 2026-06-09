@@ -5,6 +5,7 @@ import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
 import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
+import { SettingsPage } from './presentation/pages/SettingsPage';
 import { Sidebar } from './presentation/components/Sidebar';
 import { apiService } from './infrastructure/api';
 import { Activity, Menu, X } from 'lucide-react';
@@ -26,6 +27,8 @@ const parseHash = () => {
     return { view: 'equivalences', historyTherapy: null, dashboardTherapyId: null };
   } else if (hash === '#/profile') {
     return { view: 'profile', historyTherapy: null, dashboardTherapyId: null };
+  } else if (hash === '#/settings') {
+    return { view: 'settings', historyTherapy: null, dashboardTherapyId: null };
   }
   return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
 };
@@ -111,7 +114,7 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 32px rgba(0,210,255,0.3)',
+          boxShadow: 'var(--primary-shadow-lg)',
           marginBottom: '8px',
         }}>
           <Activity size={32} color="#0f172a" />
@@ -136,6 +139,8 @@ function App() {
         return <EquivalencesPage userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
       case 'profile':
         return <ProfilePage currentUser={user} onBack={() => { window.location.hash = '#/'; }} onUpdateUser={setUser} />;
+      case 'settings':
+        return <SettingsPage onBack={() => { window.location.hash = '#/'; }} />;
       default:
         return (
           <Dashboard

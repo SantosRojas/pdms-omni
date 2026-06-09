@@ -79,7 +79,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
             fontSize: '1.75rem',
             fontWeight: 'bold',
             color: '#fff',
-            boxShadow: '0 8px 24px rgba(0,210,255,0.25)',
+            boxShadow: 'var(--primary-shadow-md)',
           }}>
             {currentUser.username.charAt(0).toUpperCase()}
           </div>
