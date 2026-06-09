@@ -412,7 +412,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             .await
             .map_err(map_db_err)?;
 
-        let row = sqlx::query_scalar::<_, i64>("SELECT MAX(id) FROM serial_sessions")
+        let row = sqlx::query_scalar::<_, i64>("SELECT last_insert_rowid()")
             .fetch_one(&self.pool)
             .await
             .map_err(map_db_err)?;

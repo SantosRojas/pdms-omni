@@ -409,13 +409,10 @@ impl TelemetryRepository for MssqlTelemetryRepository {
 
     async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let mut qi = Query::new("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (@P1, @P2)");
+        let mut qi = Query::new("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (@P1, @P2); SELECT SCOPE_IDENTITY() AS id");
         qi.bind(machine_id as i32);
         qi.bind(patient_id_str);
-        qi.execute(&mut *conn).await.map_err(map_db_err)?;
-
-        let qs = Query::new("SELECT MAX(id) FROM serial_sessions");
-        let stream = qs.query(&mut *conn).await.map_err(map_db_err)?;
+        let stream = qi.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
         let id = rows.first().and_then(|r: &Row| r.get::<i32, _>(0)).unwrap_or(0);
         Ok(id as i64)

@@ -417,14 +417,9 @@ impl TelemetryRepository for PgTelemetryRepository {
     }
 
     async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
-        sqlx::query("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES ($1, $2)")
+        let row = sqlx::query_scalar::<_, i64>("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES ($1, $2) RETURNING id")
             .bind(machine_id)
             .bind(patient_id_str)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_err)?;
-
-        let row = sqlx::query_scalar::<_, i64>("SELECT MAX(id) FROM serial_sessions")
             .fetch_one(&self.pool)
             .await
             .map_err(map_db_err)?;
