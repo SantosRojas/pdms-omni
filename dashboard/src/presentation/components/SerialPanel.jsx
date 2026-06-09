@@ -14,7 +14,7 @@ export const SerialPanel = ({
   const [dismissedAtFailure, setDismissedAtFailure] = useState(null);
 
   return (
-    <div className={`serial-panel ${serialStatus.status}`}>
+    <div className={`glass-panel serial-panel ${serialStatus.status}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 auto', minWidth: '200px' }}>
         <div className={`status-dot ${serialStatus.status === 'Running' ? 'connected' : serialStatus.status === 'Initializing' ? 'initializing' : serialStatus.status === 'FailedLimit' ? 'disconnected' : 'stopped'}`} />
         <div>

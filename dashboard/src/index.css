@@ -692,12 +692,12 @@ label {
 
 .badge-active {
   background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  color: var(--success);
 }
 
 .badge-open {
   background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .badge-closed {
@@ -942,7 +942,7 @@ label {
 }
 
 .table-container tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--btn-bg);
 }
 
 .table-container tbody tr:nth-child(even):hover {
@@ -1046,7 +1046,7 @@ label {
 }
 
 .modal-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
@@ -1100,7 +1100,7 @@ label {
 }
 
 .search-clear:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface-hover);
 }
 
 
@@ -1247,7 +1247,9 @@ label {
 /* ── Detail Card (for machine/therapy details) ──────────────── */
 .detail-card {
   text-align: left;
-  background: var(--bg-inset);
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
@@ -1255,7 +1257,8 @@ label {
   cursor: pointer;
   transition: transform var(--transition-fast), 
               border-color var(--transition-fast), 
-              box-shadow var(--transition-fast);
+              box-shadow var(--transition-fast),
+              background var(--transition-base);
 }
 
 .detail-card:hover {
@@ -1266,11 +1269,13 @@ label {
 
 /* ── Machine Group Details ──────────────────────────────────── */
 .machine-details {
-  background: var(--bg-inset);
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-base);
 }
 
 .machine-details:hover {
@@ -1295,7 +1300,7 @@ label {
 }
 
 .machine-details summary:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface-hover);
 }
 
 .machine-details[open] summary {

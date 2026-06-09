@@ -9,7 +9,8 @@ import { TherapySelector } from '../components/TherapySelector';
 import { StartSerialModal } from '../components/StartSerialModal';
 import { GeneralInfo } from '../components/GeneralInfo';
 import { PressurePanel } from '../components/PressurePanel';
-import { AccumulatedChart } from '../components/AccumulatedChart';
+import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
+import { AccumulatedFlowChart } from '../components/AccumulatedFlowChart';
 
 const PAGE_SIZE = 30;
 
@@ -295,7 +296,12 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               {liveAvailable ? (
                 <>
                   <PressurePanel data={data} />
-                  {!isPreTherapy && <AccumulatedChart therapyId={therapyId} isActive={true} />}
+                  {!isPreTherapy && (
+                    <>
+                      <AccumulatedPresureChart therapyId={therapyId} isActive={true} />
+                      <AccumulatedFlowChart therapyId={therapyId} isActive={true} />
+                    </>
+                  )}
                 </>
               ) : selectedTherapyIsOpen ? (
                 <div className="glass-panel empty-state" style={{ padding: '48px' }}>

@@ -163,7 +163,7 @@ export const CommentsSection = ({ therapyId }) => {
             disabled={!authorName.trim() || !newComment.trim() || sending}
             className="btn"
             style={{
-              background: (!authorName.trim() || !newComment.trim()) ? 'var(--btn-bg)' : 'linear-gradient(135deg, var(--primary), #6366f1)',
+              background: (!authorName.trim() || !newComment.trim()) ? 'var(--btn-bg)' : 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
               color: (!authorName.trim() || !newComment.trim()) ? 'var(--text-tertiary)' : 'white',
               cursor: (!authorName.trim() || !newComment.trim()) ? 'default' : 'pointer',
             }}

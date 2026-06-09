@@ -4,7 +4,7 @@ import { apiService } from '../../infrastructure/api';
 import { toLocalTimeOnly, toLocalDate } from '../../infrastructure/time';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export const AccumulatedChart = memo(({ therapyId, isActive }) => {
+export const AccumulatedPresureChart = memo(({ therapyId, isActive }) => {
   const [accData, setAccData] = useState([]);
   const [accLoading, setAccLoading] = useState(false);
   const [accError, setAccError] = useState(null);
@@ -50,10 +50,10 @@ export const AccumulatedChart = memo(({ therapyId, isActive }) => {
   return (
     <div className="glass-panel animate-slide-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h3 className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-          <Database size={20} color="var(--primary)" /> Tendencias Acumuladas de Terapia
-          {accDate && <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>{accDate}</span>}
-        </h3>
+          <h3 className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+            <Database size={20} color="var(--primary)" /> Presiones Acumuladas
+            {accDate && <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>{accDate}</span>}
+          </h3>
         <button
           className="btn btn-ghost btn-sm"
           onClick={fetchAccData}
@@ -102,18 +102,6 @@ export const AccumulatedChart = memo(({ therapyId, isActive }) => {
                 labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
               />
               <Legend />
-              {accData.some(d => d.c_acc_net_rem_vol_act !== undefined) && (
-                <Line type="monotone" dataKey="c_acc_net_rem_vol_act" stroke="#22d3ee" name="Rem. Neta Acum." dot={false} strokeWidth={2} />
-              )}
-              {accData.some(d => d.c_acc_therapy_time_act !== undefined) && (
-                <Line type="monotone" dataKey="c_acc_therapy_time_act" stroke="var(--primary)" name="Tiempo de Terapia" dot={false} strokeWidth={2} />
-              )}
-              {accData.some(d => d.d_renal_dose_act !== undefined) && (
-                <Line type="monotone" dataKey="d_renal_dose_act" stroke="#a855f7" name="Dosis Renal" dot={false} strokeWidth={2} />
-              )}
-              {accData.some(d => d.c_net_rem_flow_act !== undefined) && (
-                <Line type="monotone" dataKey="c_net_rem_flow_act" stroke="var(--fil-color)" name="Flujo Rem. Neta" dot={false} strokeWidth={2} />
-              )}
               {accData.some(d => d.c_press_ap_act !== undefined) && (
                 <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={2} />
               )}
