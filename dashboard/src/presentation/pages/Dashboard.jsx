@@ -11,23 +11,81 @@ import { GeneralInfo } from '../components/GeneralInfo';
 import { PressurePanel } from '../components/PressurePanel';
 import { AccumulatedChart } from '../components/AccumulatedChart';
 
+const PAGE_SIZE = 30;
+
 export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   const [therapies, setTherapies] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [therapyError, setTherapyError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showStartModal, setShowStartModal] = useState(false);
   const { serialStatus, loading: serialLoading, error: serialError, startReader, stopReader } = useSerialStatus();
 
   const canControlSerial = user.role === 'admin' || user.role === 'operator';
 
-  const therapiesSorted = useMemo(
-    () => [...therapies].sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')) || (b.id - a.id)),
-    [therapies]
-  );
+  const serialIsRunning = serialStatus.status === 'Running' || serialStatus.status === 'Initializing';
+
+  const loadPage = useCallback(async (pageNum, query) => {
+    try {
+      const result = await apiService.getTherapies({ page: pageNum, pageSize: PAGE_SIZE, search: query });
+      setTherapyError(null);
+      return result;
+    } catch (e) {
+      setTherapyError(e.message);
+      return null;
+    }
+  }, []);
+
+  // Load page 1 on mount or when search changes
+  useEffect(() => {
+    loadPage(1, searchQuery).then(result => {
+      if (result) {
+        setTherapies(result.therapies);
+        setTotal(result.total);
+        setPage(1);
+      }
+    });
+  }, [searchQuery, loadPage]);
+
+  // Auto-refresh page 1 while serial is running
+  useEffect(() => {
+    if (!serialIsRunning) return;
+    const interval = setInterval(async () => {
+      const result = await loadPage(1, searchQuery);
+      if (result) {
+        setTherapies(prev => {
+          if (prev.length <= PAGE_SIZE) return result.therapies;
+          const merged = [...result.therapies];
+          merged.push(...prev.slice(PAGE_SIZE));
+          return merged;
+        });
+        setTotal(result.total);
+        setPage(1);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [serialIsRunning, searchQuery, loadPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const result = await loadPage(nextPage, searchQuery);
+    if (result) {
+      setTherapies(prev => [...prev, ...result.therapies]);
+      setPage(nextPage);
+      setTotal(result.total);
+    }
+    setLoadingMore(false);
+  }, [page, searchQuery, loadingMore, loadPage]);
+
+  const hasMore = therapies.length < total;
 
   const activeTherapyIds = useMemo(() => {
     const latestOpenByPair = new Map();
-    for (const therapy of therapiesSorted) {
+    for (const therapy of therapies) {
       const isOpen = !therapy.ended_at && therapy.status !== 'completed';
       if (!isOpen) continue;
       const pairKey = `${therapy.patient_id_str}::${therapy.serial_number}`;
@@ -37,11 +95,11 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
       }
     }
     return new Set([...latestOpenByPair.values()].map(therapy => String(therapy.id)));
-  }, [therapiesSorted]);
+  }, [therapies]);
 
   const machineGroups = useMemo(() => {
     const groups = new Map();
-    for (const therapy of therapiesSorted) {
+    for (const therapy of therapies) {
       const machineKey = String(therapy.machine_id);
       if (groups.has(machineKey)) {
         groups.get(machineKey).therapies.push(therapy);
@@ -58,25 +116,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
     return [...groups.values()].sort((left, right) => {
       return String(right.therapies[0]?.started_at || '').localeCompare(String(left.therapies[0]?.started_at || '')) || (right.machine_id - left.machine_id);
     });
-  }, [therapiesSorted]);
-
-  const filteredMachineGroups = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return machineGroups;
-    return machineGroups
-      .map(machine => {
-        const therapies = machine.therapies.filter(therapy => {
-          const haystack = [
-            machine.serial_number, machine.software_version, machine.machine_id,
-            therapy.id, therapy.patient_id_str, therapy.started_at,
-            therapy.ended_at || '', therapy.status,
-          ].map(v => String(v ?? '').toLowerCase()).join(' ');
-          return haystack.includes(query);
-        });
-        return therapies.length > 0 ? { ...machine, therapies } : null;
-      })
-      .filter(Boolean);
-  }, [machineGroups, searchQuery]);
+  }, [therapies]);
 
   const selectedTherapy = useMemo(
     () => therapies.find(t => String(t.id) === String(therapyId)) || null,
@@ -84,29 +124,11 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   );
   const selectedTherapyIsOpen = !!selectedTherapy && !selectedTherapy.ended_at && selectedTherapy.status !== 'completed';
   const therapyIsActive = !!selectedTherapy && activeTherapyIds.has(String(selectedTherapy.id));
-  const serialIsRunning = serialStatus.status === 'Running' || serialStatus.status === 'Initializing';
   const shouldConnectTelemetry = serialIsRunning || therapyIsActive;
   const { data, connected } = useTelemetry(shouldConnectTelemetry);
   const liveAvailable = connected;
   const isPreTherapy = serialIsRunning && !therapyIsActive && connected;
   const showDashboard = !!therapyId;
-
-  const fetchTherapies = useCallback(() => {
-    apiService.getTherapies()
-      .then(list => setTherapies(list))
-      .catch(e => setTherapyError(e.message));
-  }, []);
-
-  useEffect(() => {
-    fetchTherapies();
-  }, [fetchTherapies]);
-
-  // Auto-refresh therapy list while serial is running
-  useEffect(() => {
-    if (serialStatus.status !== 'Running' && serialStatus.status !== 'Initializing') return;
-    const interval = setInterval(fetchTherapies, 5000);
-    return () => clearInterval(interval);
-  }, [serialStatus.status, fetchTherapies]);
 
   // Auto-select: when serial transitions to Running, navigate to latest open therapy
   const prevSerialStatus = useRef(serialStatus.status);
@@ -177,11 +199,14 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
             <TherapySelector
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              filteredMachineGroups={filteredMachineGroups}
+              machineGroups={machineGroups}
               activeTherapyIds={activeTherapyIds}
               onSelectTherapy={handleSelectTherapy}
               onNavigateHistory={onNavigateHistory}
               therapyError={therapyError}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              onLoadMore={loadMore}
             />
           </div>
         </>
@@ -291,7 +316,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
       <StartSerialModal
         show={showStartModal}
         onClose={() => setShowStartModal(false)}
-        latestTherapy={therapiesSorted[0]}
+        latestTherapy={therapies[0]}
         onStartReader={startReader}
       />
     </div>

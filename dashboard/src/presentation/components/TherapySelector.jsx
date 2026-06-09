@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Search, X, ChevronRight } from 'lucide-react';
+import { Search, X, ChevronRight, Loader } from 'lucide-react';
 import { toLocalDatetime } from '../../infrastructure/time';
 
 function useDebouncedValue(value, delay = 200) {
@@ -91,11 +91,14 @@ const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHi
 export const TherapySelector = ({
   searchQuery,
   onSearchChange,
-  filteredMachineGroups,
+  machineGroups,
   activeTherapyIds,
   onSelectTherapy,
   onNavigateHistory,
   therapyError,
+  hasMore,
+  loadingMore,
+  onLoadMore,
 }) => {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const debouncedQuery = useDebouncedValue(localQuery, 200);
@@ -136,12 +139,12 @@ export const TherapySelector = ({
           )}
         </div>
         <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-          {filteredMachineGroups.length} máquina{filteredMachineGroups.length === 1 ? '' : 's'}
+          {machineGroups.length} máquina{machineGroups.length === 1 ? '' : 's'}
         </div>
       </div>
 
       <div style={{ display: 'grid', gap: '14px' }}>
-        {filteredMachineGroups.length > 0 ? filteredMachineGroups.map(machine => (
+        {machineGroups.length > 0 ? machineGroups.map(machine => (
           <MachineGroup
             key={machine.key}
             machine={machine}
@@ -158,6 +161,20 @@ export const TherapySelector = ({
           </div>
         )}
       </div>
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="btn btn-ghost"
+            style={{ padding: '10px 32px', fontSize: '0.85rem' }}
+          >
+            {loadingMore ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+            {loadingMore ? 'Cargando...' : 'Cargar más terapias'}
+          </button>
+        </div>
+      )}
     </>
   );
 };

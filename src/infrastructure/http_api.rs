@@ -534,10 +534,33 @@ pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
     }
 }
 
-/// GET /api/therapies
-pub async fn list_therapies(State(state): State<ApiState>) -> impl IntoResponse {
-    match state.db.list_therapies().await {
-        Ok(rows) => {
+#[derive(Deserialize)]
+pub struct TherapiesQuery {
+    pub search: Option<String>,
+    pub status: Option<String>,
+    #[serde(default = "default_therapies_page")]
+    pub page: i64,
+    #[serde(default = "default_therapies_page_size")]
+    pub page_size: i64,
+}
+fn default_therapies_page() -> i64 { 1 }
+fn default_therapies_page_size() -> i64 { 30 }
+
+#[derive(Serialize)]
+pub struct TherapiesResponse {
+    pub therapies: Vec<TherapyDto>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+}
+
+/// GET /api/therapies?search=&status=&page=1&page_size=30
+pub async fn list_therapies(
+    State(state): State<ApiState>,
+    Query(params): Query<TherapiesQuery>,
+) -> impl IntoResponse {
+    match state.db.list_therapies(params.search.as_deref(), params.status.as_deref(), params.page, params.page_size).await {
+        Ok((rows, total)) => {
             let therapies: Vec<TherapyDto> = rows.into_iter().map(|row| TherapyDto {
                 id: row.get_i64(0),
                 started_at: row.get_string(1),
@@ -550,7 +573,7 @@ pub async fn list_therapies(State(state): State<ApiState>) -> impl IntoResponse 
                 software_version: row.get_string(8),
                 serial_session_id: row.get_optional_i64(9),
             }).collect();
-            Json(therapies).into_response()
+            Json(TherapiesResponse { therapies, total, page: params.page, page_size: params.page_size }).into_response()
         }
         Err(e) => db_err(e).into_response(),
     }

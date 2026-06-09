@@ -432,18 +432,47 @@ impl DbPool {
         }
     }
 
-    pub async fn list_therapies(&self) -> Result<Vec<GenericRow>, String> {
+    pub async fn list_therapies(
+        &self,
+        search: Option<&str>,
+        status_filter: Option<&str>,
+        page: i64,
+        page_size: i64,
+    ) -> Result<(Vec<GenericRow>, i64), String> {
+        let search_pattern = search.map(|s| format!("%{}%", s)).unwrap_or_else(|| "%".to_string());
+        let status = status_filter.unwrap_or("");
+        let offset = (page - 1) * page_size;
+        let where_clause = "WHERE (p.patient_id_str LIKE ?1 OR m.serial_number LIKE ?1 OR m.software_version LIKE ?1 OR COALESCE(th.status, '') LIKE ?1)
+                            AND (?2 = '' OR th.status = ?2)";
+        let where_clause_pg = "WHERE (p.patient_id_str LIKE $1 OR m.serial_number LIKE $1 OR m.software_version LIKE $1 OR COALESCE(th.status, '') LIKE $1)
+                               AND ($2 = '' OR th.status = $2)";
+        let where_clause_ms = "WHERE (p.patient_id_str LIKE @P1 OR m.serial_number LIKE @P1 OR m.software_version LIKE @P1 OR ISNULL(th.status, '') LIKE @P1)
+                               AND (@P2 = '' OR th.status = @P2)";
         match self {
             DbPool::Sqlite(pool) => {
-                let rows = sqlx::query(
-                    "SELECT th.id, th.started_at, th.ended_at, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
-                     FROM therapies th
-                     JOIN patients p ON th.patient_id = p.id
-                     JOIN machines m ON th.machine_id = m.id
-                     ORDER BY th.started_at DESC"
+                let total = sqlx::query_scalar::<_, i64>(
+                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_clause)
                 )
+                .bind(&search_pattern)
+                .bind(status)
+                .fetch_one(pool).await.map_err(|e| e.to_string())?;
+
+                let rows = sqlx::query(
+                    &format!(
+                        "SELECT th.id, th.started_at, th.ended_at, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
+                         FROM therapies th
+                         JOIN patients p ON th.patient_id = p.id
+                         JOIN machines m ON th.machine_id = m.id
+                         {}
+                         ORDER BY th.started_at DESC LIMIT ?3 OFFSET ?4", where_clause
+                    )
+                )
+                .bind(&search_pattern)
+                .bind(status)
+                .bind(page_size)
+                .bind(offset)
                 .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| build_therapy_row(
+                Ok((rows.into_iter().map(|r| build_therapy_row(
                     r.get::<i64, _>(0),
                     r.get::<String, _>(1),
                     r.get::<Option<String>, _>(2),
@@ -454,18 +483,32 @@ impl DbPool {
                     r.get::<String, _>(7),
                     r.get::<String, _>(8),
                     r.get::<Option<i64>, _>(9),
-                )).collect())
+                )).collect(), total))
             }
             DbPool::Postgres(pool) => {
-                let rows = sqlx::query(
-                    "SELECT th.id, TO_CHAR(th.started_at, 'YYYY-MM-DD HH24:MI:SS'), CASE WHEN th.ended_at IS NULL THEN NULL ELSE TO_CHAR(th.ended_at, 'YYYY-MM-DD HH24:MI:SS') END, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
-                     FROM therapies th
-                     JOIN patients p ON th.patient_id = p.id
-                     JOIN machines m ON th.machine_id = m.id
-                     ORDER BY th.started_at DESC"
+                let total = sqlx::query_scalar::<_, i64>(
+                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_clause_pg)
                 )
+                .bind(&search_pattern)
+                .bind(status)
+                .fetch_one(pool).await.map_err(|e| e.to_string())?;
+
+                let rows = sqlx::query(
+                    &format!(
+                        "SELECT th.id, TO_CHAR(th.started_at, 'YYYY-MM-DD HH24:MI:SS'), CASE WHEN th.ended_at IS NULL THEN NULL ELSE TO_CHAR(th.ended_at, 'YYYY-MM-DD HH24:MI:SS') END, COALESCE(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
+                         FROM therapies th
+                         JOIN patients p ON th.patient_id = p.id
+                         JOIN machines m ON th.machine_id = m.id
+                         {}
+                         ORDER BY th.started_at DESC LIMIT $3 OFFSET $4", where_clause_pg
+                    )
+                )
+                .bind(&search_pattern)
+                .bind(status)
+                .bind(page_size)
+                .bind(offset)
                 .fetch_all(pool).await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r| build_therapy_row(
+                Ok((rows.into_iter().map(|r| build_therapy_row(
                     r.get::<i64, _>(0),
                     r.get::<String, _>(1),
                     r.get::<Option<String>, _>(2),
@@ -476,20 +519,35 @@ impl DbPool {
                     r.get::<String, _>(7),
                     r.get::<String, _>(8),
                     r.get::<Option<i64>, _>(9),
-                )).collect())
+                )).collect(), total))
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let q = Query::new(
+
+                let count_sql = format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_clause_ms);
+                let mut qc = Query::new(&count_sql);
+                qc.bind(&search_pattern);
+                qc.bind(status);
+                let stream = qc.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let count_rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
+                let total = count_rows.first().and_then(|r| r.get::<i32, _>(0)).unwrap_or(0) as i64;
+
+                let data_sql = format!(
                     "SELECT th.id, CONVERT(NVARCHAR(30), th.started_at, 120), CONVERT(NVARCHAR(30), th.ended_at, 120), ISNULL(th.status, ''), p.id, p.patient_id_str, m.id, m.serial_number, m.software_version, th.serial_session_id
                      FROM therapies th
                      JOIN patients p ON th.patient_id = p.id
                      JOIN machines m ON th.machine_id = m.id
-                     ORDER BY th.started_at DESC"
+                     {}
+                     ORDER BY th.started_at DESC OFFSET @P4 ROWS FETCH NEXT @P3 ROWS ONLY", where_clause_ms
                 );
+                let mut q = Query::new(&data_sql);
+                q.bind(&search_pattern);
+                q.bind(status);
+                q.bind(page_size);
+                q.bind(offset);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream.into_first_result().await.map_err(|e| e.to_string())?;
-                Ok(rows.into_iter().map(|r: TibRow| build_therapy_row(
+                Ok((rows.into_iter().map(|r: TibRow| build_therapy_row(
                     r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
                     r.get::<&str, _>(1).unwrap_or("" ).to_string(),
                     r.get::<&str, _>(2).map(|v| v.to_string()),
@@ -500,7 +558,7 @@ impl DbPool {
                     r.get::<&str, _>(7).unwrap_or("").to_string(),
                     r.get::<&str, _>(8).unwrap_or("").to_string(),
                     r.get::<i32, _>(9).map(|v| v as i64),
-                )).collect())
+                )).collect(), total))
             }
         }
     }

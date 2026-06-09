@@ -145,8 +145,14 @@ export const apiService = {
     return res.json();
   },
 
-  async getTherapies() {
-    const res = await fetch(`${API_BASE}/api/therapies`, { headers: this._headers() });
+  async getTherapies({ page = 1, pageSize = 30, search = '', status = '' } = {}) {
+    const params = new URLSearchParams();
+    if (page !== 1) params.set('page', String(page));
+    if (pageSize !== 30) params.set('page_size', String(pageSize));
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    const qs = params.toString();
+    const res = await fetch(`${API_BASE}/api/therapies${qs ? '?' + qs : ''}`, { headers: this._headers() });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
