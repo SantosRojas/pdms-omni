@@ -570,7 +570,7 @@ code, pre, .font-mono {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: #0f172a;
+  color: var(--text-inverse);
   box-shadow: 0 4px 15px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.25);
 }
 
@@ -691,8 +691,8 @@ label {
 }
 
 .badge-active {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--success);
+  background: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.15);
+  color: var(--primary);
 }
 
 .badge-open {
@@ -843,8 +843,8 @@ label {
 }
 
 .serial-panel.Running {
-  background: rgba(16, 185, 129, 0.06);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.06);
+  border: 1px solid hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.2);
 }
 
 .serial-panel.Initializing {

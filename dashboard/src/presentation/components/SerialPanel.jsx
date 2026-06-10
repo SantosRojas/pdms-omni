@@ -73,7 +73,7 @@ export const SerialPanel = ({
         <div style={{ display: 'flex', gap: '8px' }}>
           {(serialStatus.status === 'Stopped' || serialStatus.status === 'FailedLimit' || serialStatus.status === 'Unknown') && (
             <button
-              className="btn btn-success"
+              className="btn btn-primary"
               onClick={() => hasTherapies ? onStart() : onStartDirect(true)}
               disabled={serialLoading}
               style={{ opacity: serialLoading ? 0.6 : 1 }}

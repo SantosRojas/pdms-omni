@@ -209,7 +209,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
               <label>Nombre Mostrado</label>
               <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '220px' }} placeholder="ej. Preparación" />
             </div>
-            <button onClick={handleCreate} className="btn btn-success">
+            <button onClick={handleCreate} className="btn btn-primary">
               <Check size={16} /> Guardar
             </button>
             <button onClick={() => setShowCreate(false)} className="btn btn-ghost">
@@ -245,7 +245,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
               <button onClick={handleEditCancel} className="btn btn-ghost">Cancelar</button>
-              <button onClick={handleEditSave} className="btn btn-success"><Check size={16} /> Guardar</button>
+              <button onClick={handleEditSave} className="btn btn-primary"><Check size={16} /> Guardar</button>
             </div>
           </div>
         </div>

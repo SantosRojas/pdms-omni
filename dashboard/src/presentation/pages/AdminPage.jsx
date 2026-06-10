@@ -95,7 +95,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
                 <option value="viewer">Visor</option>
               </select>
             </div>
-            <button onClick={handleCreate} className="btn btn-success" style={{ marginBottom: '0' }}>
+            <button onClick={handleCreate} className="btn btn-primary" style={{ marginBottom: '0' }}>
               <Check size={16} /> Crear
             </button>
             <button onClick={() => setShowCreate(false)} className="btn btn-ghost" style={{ marginBottom: '0' }}>
@@ -167,7 +167,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {isEditing ? (
                           <>
-                            <button onClick={() => handleUpdate(u.id)} className="btn btn-success btn-sm">Guardar</button>
+                            <button onClick={() => handleUpdate(u.id)} className="btn btn-primary btn-sm">Guardar</button>
                             <button onClick={() => setEditId(null)} className="btn btn-ghost btn-sm">Cancelar</button>
                           </>
                         ) : (

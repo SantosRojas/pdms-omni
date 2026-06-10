@@ -95,7 +95,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
         </div>
 
         {userRole !== 'viewer' && (
-          <button onClick={handleDownload} className="btn btn-success">
+          <button onClick={handleDownload} className="btn btn-primary">
             <Download size={16} /> Exportar Excel (CSV)
           </button>
         )}
