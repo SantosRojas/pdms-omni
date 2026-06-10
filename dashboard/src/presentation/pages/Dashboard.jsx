@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTelemetry } from '../../application/useTelemetry';
 import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
-import { Activity, Database } from 'lucide-react';
+import { Activity, Database, ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { SerialPanel } from '../components/SerialPanel';
 import { TherapySelector } from '../components/TherapySelector';
 import { StartSerialModal } from '../components/StartSerialModal';
+import { StopSerialModal } from '../components/StopSerialModal';
 import { GeneralInfo } from '../components/GeneralInfo';
 import { PressurePanel } from '../components/PressurePanel';
 import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
@@ -22,11 +23,13 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [showStartModal, setShowStartModal] = useState(false);
+  const [showStopModal, setShowStopModal] = useState(false);
   const { serialStatus, loading: serialLoading, error: serialError, startReader, stopReader } = useSerialStatus();
 
   const canControlSerial = user.role === 'admin' || user.role === 'operator';
 
   const serialIsRunning = serialStatus.status === 'Running' || serialStatus.status === 'Initializing';
+  const hasOpenTherapies = therapies.some(t => !t.ended_at && t.status !== 'completed');
 
   const loadPage = useCallback(async (pageNum, query) => {
     try {
@@ -51,6 +54,25 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   }, [searchQuery, loadPage]);
 
   // Auto-refresh page 1 while serial is running
+  const wasRunning = useRef(serialIsRunning);
+  useEffect(() => {
+    const prev = wasRunning.current;
+    wasRunning.current = serialIsRunning;
+    if (prev === true && serialIsRunning === false) {
+      // Wait a beat for backend to finish closing therapy asynchronously
+      const timer = setTimeout(() => {
+        loadPage(1, searchQuery).then(result => {
+          if (result) {
+            setTherapies(result.therapies);
+            setTotal(result.total);
+            setPage(1);
+          }
+        });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [serialIsRunning, searchQuery, loadPage]);
+
   useEffect(() => {
     if (!serialIsRunning) return;
     const interval = setInterval(async () => {
@@ -120,7 +142,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   }, [therapies]);
 
   const selectedTherapy = useMemo(
-    () => therapies.find(t => String(t.id) === String(therapyId)) || null,
+    () => therapyId === 'live' ? null : therapies.find(t => String(t.id) === String(therapyId)) || null,
     [therapies, therapyId]
   );
   const selectedTherapyIsOpen = !!selectedTherapy && !selectedTherapy.ended_at && selectedTherapy.status !== 'completed';
@@ -131,7 +153,19 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   const isPreTherapy = serialIsRunning && !therapyIsActive && connected;
   const showDashboard = !!therapyId;
 
-  // Auto-select: when serial transitions to Running, navigate to latest open therapy
+  // Track known therapy IDs when entering #/live mode
+  const knownIdsAtLiveEntry = useRef(null);
+  useEffect(() => {
+    if (therapyId !== 'live') {
+      knownIdsAtLiveEntry.current = null;
+      return;
+    }
+    if (knownIdsAtLiveEntry.current === null && therapies.length > 0) {
+      knownIdsAtLiveEntry.current = new Set(therapies.map(t => String(t.id)));
+    }
+  }, [therapyId, therapies]);
+
+  // Auto-select: when serial transitions to Running, go to #/live (or latest open therapy if viewing a specific one)
   const prevSerialStatus = useRef(serialStatus.status);
   const browsingRef = useRef(false);
   useEffect(() => {
@@ -144,19 +178,30 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
         .sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')));
       const latest = openTherapies[0];
       if (latest) {
-        window.location.hash = `#/therapy/${latest.id}`;
+        // There's already an open therapy — stay on selection screen so user can choose
+        // (StartSerialModal will offer new/continue)
+      } else {
+        // No open therapies — go to live monitor
+        window.location.hash = '#/live';
       }
     }
   }, [serialStatus.status, therapyId, therapies]);
 
-  // When a new open therapy appears while serial is running and user is not browsing
+  // When a new open therapy appears while in #/live, navigate to it
   useEffect(() => {
-    if (!serialIsRunning || therapyId || browsingRef.current) return;
-    const openTherapies = therapies
-      .filter(t => !t.ended_at && t.status !== 'completed')
-      .sort((a, b) => String(b.started_at || '').localeCompare(String(a.started_at || '')));
-    const latest = openTherapies[0];
-    if (latest) {
+    if (therapyId !== 'live' || !serialIsRunning) return;
+    if (!knownIdsAtLiveEntry.current) return;
+
+    const newOpenTherapies = therapies.filter(t =>
+      !t.ended_at
+      && t.status !== 'completed'
+      && !knownIdsAtLiveEntry.current.has(String(t.id))
+    );
+
+    if (newOpenTherapies.length > 0) {
+      const latest = newOpenTherapies.sort((a, b) =>
+        String(b.started_at || '').localeCompare(String(a.started_at || ''))
+      )[0];
       window.location.hash = `#/therapy/${latest.id}`;
     }
   }, [therapies, serialIsRunning, therapyId]);
@@ -170,6 +215,14 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
     browsingRef.current = false;
     window.location.hash = `#/therapy/${id}`;
   }, []);
+
+  const handleStopClick = useCallback(() => {
+    setShowStopModal(true);
+  }, []);
+
+  const handleStopConfirm = useCallback((closeTherapy) => {
+    stopReader(closeTherapy);
+  }, [stopReader]);
 
   return (
     <div className="app-container">
@@ -191,10 +244,10 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               serialLoading={serialLoading}
               serialError={serialError}
               canControlSerial={canControlSerial}
-              hasTherapies={therapies.length > 0}
+              hasOpenTherapies={hasOpenTherapies}
               onStart={() => setShowStartModal(true)}
               onStartDirect={startReader}
-              onStop={stopReader}
+              onStop={handleStopClick}
             />
 
             <TherapySelector
@@ -223,24 +276,34 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
 
             <div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
+                {therapyId === 'live' ? 'Monitor en vivo' : isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
               </div>
               <div style={{ fontSize: '1rem', fontWeight: 700 }}>
                 {selectedTherapy
                   ? `${selectedTherapy.patient_id_str} · Máquina ${selectedTherapy.serial_number}`
-                  : `Paciente ${data.info.g_patient_id_str.value} · Máquina ${data.info.d_serial_number_to_odi.value}`
+                  : therapyId === 'live'
+                    ? data.info.d_serial_number_to_odi.value !== 'N/A'
+                      ? `Máquina ${data.info.d_serial_number_to_odi.value}`
+                      : 'Esperando datos de la máquina...'
+                    : `Paciente ${data.info.g_patient_id_str.value} · Máquina ${data.info.d_serial_number_to_odi.value}`
                 }
               </div>
             </div>
 
             <div className="page-header-right">
-              {selectedTherapy && (
+              {therapyId === 'live' && (
+                <button className="btn btn-ghost btn-sm" onClick={handleBackToSelection}>
+                  <ArrowLeft size={14} /> Volver
+                </button>
+              )}
+
+              {selectedTherapy && therapyId !== 'live' && (
                 <button className="btn btn-ghost btn-sm" onClick={handleBackToSelection}>
                   Cambiar terapia
                 </button>
               )}
 
-              {selectedTherapy && (
+              {selectedTherapy && therapyId !== 'live' && (
                 <button
                   className="btn btn-sm"
                   style={{
@@ -255,8 +318,14 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               )}
 
               <div className="connection-status">
+                {connected && (therapyIsActive || isPreTherapy || therapyId === 'live') && data.info.g_trmt_main_state_set.value !== 'N/A' && (
+                  <span className={`badge ${therapyIsActive ? 'badge-active' : 'badge-warning'}`}
+                        style={{ marginRight: '8px' }}>
+                    {data.info.g_trmt_main_state_set.value}
+                  </span>
+                )}
                 <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
-                {connected && (therapyIsActive || isPreTherapy) ? 'EN VIVO' : connected ? 'CONECTADO' : 'HISTORIAL'}
+                {connected && (therapyIsActive || isPreTherapy || therapyId === 'live') ? 'EN VIVO' : connected ? 'CONECTADO' : 'HISTORIAL'}
               </div>
 
             </div>
@@ -281,6 +350,19 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
                     : 'Terapia finalizada: sólo historial disponible.'}
             </div>
           </div> */}
+
+          {therapyId === 'live' && (
+            <SerialPanel
+              serialStatus={serialStatus}
+              serialLoading={serialLoading}
+              serialError={serialError}
+              canControlSerial={canControlSerial}
+              hasOpenTherapies={hasOpenTherapies}
+              onStart={() => setShowStartModal(true)}
+              onStartDirect={startReader}
+              onStop={handleStopClick}
+            />
+          )}
 
           <div className="dashboard-grid">
             <div className="side-panel">
@@ -322,8 +404,14 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
       <StartSerialModal
         show={showStartModal}
         onClose={() => setShowStartModal(false)}
-        latestTherapy={therapies[0]}
+        latestTherapy={therapies.find(t => !t.ended_at && t.status !== 'completed') || therapies[0]}
         onStartReader={startReader}
+      />
+
+      <StopSerialModal
+        show={showStopModal}
+        onClose={() => setShowStopModal(false)}
+        onStopReader={handleStopConfirm}
       />
     </div>
   );

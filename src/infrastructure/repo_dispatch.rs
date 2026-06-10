@@ -24,20 +24,20 @@ pub enum DynAttrRepo {
 }
 
 impl DataAttributeRepository for DynAttrRepo {
-    async fn save(&self, attr: &DataAttribute) -> Result<(), RepositoryError> {
+    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.save(attr).await,
-            Self::Postgres(r) => r.save(attr).await,
-            Self::Mssql(r) => r.save(attr).await,
-            Self::Null(r) => r.save(attr).await,
+            Self::Sqlite(r) => r.save(attr, version_fingerprint).await,
+            Self::Postgres(r) => r.save(attr, version_fingerprint).await,
+            Self::Mssql(r) => r.save(attr, version_fingerprint).await,
+            Self::Null(r) => r.save(attr, version_fingerprint).await,
         }
     }
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.get_all().await,
-            Self::Postgres(r) => r.get_all().await,
-            Self::Mssql(r) => r.get_all().await,
-            Self::Null(r) => r.get_all().await,
+            Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Mssql(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Null(r) => r.get_by_fingerprint(fingerprint).await,
         }
     }
     async fn get_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, RepositoryError> {
@@ -48,12 +48,12 @@ impl DataAttributeRepository for DynAttrRepo {
             Self::Null(r) => r.get_by_handle(handle).await,
         }
     }
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.delete_all().await,
-            Self::Postgres(r) => r.delete_all().await,
-            Self::Mssql(r) => r.delete_all().await,
-            Self::Null(r) => r.delete_all().await,
+            Self::Sqlite(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Postgres(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Mssql(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Null(r) => r.delete_by_fingerprint(fingerprint).await,
         }
     }
 }
@@ -68,12 +68,20 @@ pub enum DynDictRepo {
 }
 
 impl DictionaryRepository for DynDictRepo {
-    async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError> {
+    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.save(entry).await,
-            Self::Postgres(r) => r.save(entry).await,
-            Self::Mssql(r) => r.save(entry).await,
-            Self::Null(r) => r.save(entry).await,
+            Self::Sqlite(r) => r.save(entry, version_fingerprint).await,
+            Self::Postgres(r) => r.save(entry, version_fingerprint).await,
+            Self::Mssql(r) => r.save(entry, version_fingerprint).await,
+            Self::Null(r) => r.save(entry, version_fingerprint).await,
+        }
+    }
+    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.save_batch(entries, version_fingerprint).await,
+            Self::Postgres(r) => r.save_batch(entries, version_fingerprint).await,
+            Self::Mssql(r) => r.save_batch(entries, version_fingerprint).await,
+            Self::Null(r) => r.save_batch(entries, version_fingerprint).await,
         }
     }
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError> {
@@ -84,20 +92,20 @@ impl DictionaryRepository for DynDictRepo {
             Self::Null(r) => r.get_by_id(dict_id).await,
         }
     }
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.get_all().await,
-            Self::Postgres(r) => r.get_all().await,
-            Self::Mssql(r) => r.get_all().await,
-            Self::Null(r) => r.get_all().await,
+            Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Mssql(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Null(r) => r.get_by_fingerprint(fingerprint).await,
         }
     }
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.delete_all().await,
-            Self::Postgres(r) => r.delete_all().await,
-            Self::Mssql(r) => r.delete_all().await,
-            Self::Null(r) => r.delete_all().await,
+            Self::Sqlite(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Postgres(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Mssql(r) => r.delete_by_fingerprint(fingerprint).await,
+            Self::Null(r) => r.delete_by_fingerprint(fingerprint).await,
         }
     }
 }
@@ -274,12 +282,12 @@ impl VersionRepository for DynVersionRepo {
             Self::Null(r) => r.save(version).await,
         }
     }
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
         match self {
-            Self::Sqlite(r) => r.get_latest().await,
-            Self::Postgres(r) => r.get_latest().await,
-            Self::Mssql(r) => r.get_latest().await,
-            Self::Null(r) => r.get_latest().await,
+            Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Mssql(r) => r.get_by_fingerprint(fingerprint).await,
+            Self::Null(r) => r.get_by_fingerprint(fingerprint).await,
         }
     }
 }

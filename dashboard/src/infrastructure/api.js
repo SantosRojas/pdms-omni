@@ -262,10 +262,11 @@ export const apiService = {
     return res.json();
   },
 
-  async stopSerial() {
+  async stopSerial(closeTherapy = true) {
     const res = await fetch(`${API_BASE}/api/serial/stop`, {
       method: 'POST',
       headers: this._headers(),
+      body: JSON.stringify({ close_therapy: closeTherapy }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

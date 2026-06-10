@@ -14,6 +14,7 @@ pub struct SerialReaderStatus {
     pub consecutive_failures: u32,
     pub max_failures: u32,
     pub data_warnings: u32,
+    pub close_therapy_on_stop: bool,
 }
 
 pub struct SerialReaderManager {
@@ -29,6 +30,7 @@ impl SerialReaderManager {
             consecutive_failures: 0,
             max_failures,
             data_warnings: 0,
+            close_therapy_on_stop: true,
         }));
         
         let initial_cmd = if start_active {
@@ -59,9 +61,10 @@ impl SerialReaderManager {
         let _ = self.cmd_tx.send(ReaderCommand::Start { id, new_therapy });
     }
 
-    pub async fn stop(&self) {
+    pub async fn stop(&self, close_therapy: bool) {
         let mut s = self.state.lock().await;
         s.status = "Stopped".to_string();
+        s.close_therapy_on_stop = close_therapy;
         let _ = self.cmd_tx.send(ReaderCommand::Stop);
     }
 
@@ -88,6 +91,15 @@ impl SerialReaderManager {
         // Keep status as-is; never transition to FailedLimit from warnings.
     }
 
+    /// Immediately transition to FailedLimit (e.g. device init exhausted its own retries).
+    /// Unlike `record_failure`, this doesn't depend on `max_failures`.
+    pub async fn set_failed_limit(&self) {
+        let mut s = self.state.lock().await;
+        s.status = "FailedLimit".to_string();
+        s.close_therapy_on_stop = true;
+        let _ = self.cmd_tx.send(ReaderCommand::Stop);
+    }
+
     /// Record one connection failure (I/O error, timeout).
     /// Transitions to FailedLimit when threshold is reached.
     pub async fn record_failure(&self) -> bool {
@@ -95,9 +107,10 @@ impl SerialReaderManager {
         s.consecutive_failures += 1;
         if s.consecutive_failures >= s.max_failures {
             s.status = "FailedLimit".to_string();
+            s.close_therapy_on_stop = true;
             let _ = self.cmd_tx.send(ReaderCommand::Stop);
             return true;
         }
-        true
+        false
     }
 }

@@ -49,12 +49,12 @@ impl SqlxDataAttrRepository {
 }
 
 impl DataAttributeRepository for SqlxDataAttrRepository {
-    async fn save(&self, attr: &DataAttribute) -> Result<(), RepositoryError> {
+    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
         let signal_id = get_or_create_signal_id(&self.pool, &attr.internal_name).await?;
             
         sqlx::query(
-            "INSERT OR REPLACE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            "INSERT OR REPLACE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
         )
         .bind(attr.handle)
         .bind(attr.data_type as u16)
@@ -63,19 +63,22 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
         .bind(attr.label_did)
         .bind(attr.unit_did)
         .bind(signal_id)
+        .bind(version_fingerprint)
         .execute(&self.pool)
         .await
         .map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT d.handle, d.data_type, d.size, d.conversion_factor, d.label_did, d.unit_did, d.signal_id, s.internal_name 
              FROM data_attributes d
              JOIN signals s ON d.signal_id = s.id
+             WHERE d.version_fingerprint = ?1
              ORDER BY d.rowid"
         )
+        .bind(fingerprint)
         .fetch_all(&self.pool)
         .await
         .map_err(map_db_err)?;
@@ -116,8 +119,9 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
         }))
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
-        sqlx::query("DELETE FROM data_attributes")
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM data_attributes WHERE version_fingerprint = ?1")
+            .bind(fingerprint)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -140,26 +144,28 @@ impl SqlxDictionaryRepository {
 }
 
 impl DictionaryRepository for SqlxDictionaryRepository {
-    async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text) VALUES (?1, ?2)")
+    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
             .bind(entry.dict_id)
             .bind(&entry.text)
+            .bind(version_fingerprint)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
         if entries.is_empty() {
             return Ok(());
         }
 
         let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         for entry in entries {
-            sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text) VALUES (?1, ?2)")
+            sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
                 .bind(entry.dict_id)
                 .bind(&entry.text)
+                .bind(version_fingerprint)
                 .execute(&mut *tx)
                 .await
                 .map_err(map_db_err)?;
@@ -182,8 +188,9 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         }))
     }
 
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
-        let rows = sqlx::query("SELECT dict_id, text FROM dictionary ORDER BY dict_id")
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+        let rows = sqlx::query("SELECT dict_id, text FROM dictionary WHERE version_fingerprint = ?1 ORDER BY dict_id")
+            .bind(fingerprint)
             .fetch_all(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -194,8 +201,9 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         }).collect())
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
-        sqlx::query("DELETE FROM dictionary")
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM dictionary WHERE version_fingerprint = ?1")
+            .bind(fingerprint)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -496,10 +504,12 @@ impl SqlxVersionRepository {
 
 impl VersionRepository for SqlxVersionRepository {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
         sqlx::query(
-            "INSERT INTO versions (language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+            "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
         )
+        .bind(&fp)
         .bind(version.language_id)
         .bind(&version.system_sw)
         .bind(&version.dss_fw)
@@ -517,11 +527,12 @@ impl VersionRepository for SqlxVersionRepository {
         Ok(())
     }
 
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
         let row = sqlx::query(
             "SELECT language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3
-             FROM versions ORDER BY id DESC LIMIT 1"
+             FROM versions WHERE fingerprint = ?1 ORDER BY id DESC LIMIT 1"
         )
+        .bind(fingerprint)
         .fetch_optional(&self.pool)
         .await
         .map_err(map_db_err)?;

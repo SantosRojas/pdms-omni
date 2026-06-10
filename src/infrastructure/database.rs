@@ -78,6 +78,7 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
         CREATE TABLE IF NOT EXISTS versions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            fingerprint TEXT,
             language_id INTEGER,
             system_sw TEXT,
             dss_fw TEXT, dss_hw TEXT,
@@ -97,11 +98,13 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
             label_did INTEGER,
             unit_did INTEGER,
             signal_id INTEGER,
+            version_fingerprint TEXT,
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
         CREATE TABLE IF NOT EXISTS dictionary (
             dict_id INTEGER PRIMARY KEY,
-            text TEXT
+            text TEXT,
+            version_fingerprint TEXT
         );
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,6 +218,17 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
         "
     ).execute(&pool).await?;
 
+    // Migrate existing databases: add fingerprint columns (safe to ignore if already present)
+    for migration in &[
+        "ALTER TABLE versions ADD COLUMN fingerprint TEXT",
+        "ALTER TABLE data_attributes ADD COLUMN version_fingerprint TEXT",
+        "ALTER TABLE dictionary ADD COLUMN version_fingerprint TEXT",
+    ] {
+        if let Err(e) = sqlx::query(migration).execute(&pool).await {
+            println!("  [DB] Migration note (safe to ignore): {e}");
+        }
+    }
+
     // Safe migrations for existing DB
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
@@ -287,6 +301,7 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
         "CREATE TABLE IF NOT EXISTS versions (
             id BIGSERIAL PRIMARY KEY,
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            fingerprint TEXT,
             language_id INTEGER,
             system_sw TEXT,
             dss_fw TEXT, dss_hw TEXT,
@@ -305,11 +320,13 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
             conversion_factor INTEGER,
             label_did INTEGER,
             unit_did INTEGER,
-            signal_id BIGINT REFERENCES signals(id)
+            signal_id BIGINT REFERENCES signals(id),
+            version_fingerprint TEXT
         )",
         "CREATE TABLE IF NOT EXISTS dictionary (
             dict_id INTEGER PRIMARY KEY,
-            text TEXT
+            text TEXT,
+            version_fingerprint TEXT
         )",
         "CREATE TABLE IF NOT EXISTS patients (
             id BIGSERIAL PRIMARY KEY,
@@ -425,6 +442,9 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
         "ALTER TABLE therapy_comments ADD COLUMN IF NOT EXISTS deletion_reason TEXT",
         "ALTER TABLE therapies ADD COLUMN IF NOT EXISTS serial_session_id BIGINT",
         "CREATE INDEX IF NOT EXISTS idx_therapies_serial_session ON therapies(serial_session_id)",
+        "ALTER TABLE versions ADD COLUMN IF NOT EXISTS fingerprint TEXT",
+        "ALTER TABLE data_attributes ADD COLUMN IF NOT EXISTS version_fingerprint TEXT",
+        "ALTER TABLE dictionary ADD COLUMN IF NOT EXISTS version_fingerprint TEXT",
     ];
 
     for stmt in migration_statements {
@@ -510,6 +530,7 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
              CREATE TABLE versions (
                  id INT IDENTITY(1,1) PRIMARY KEY,
                  created_at DATETIME2 DEFAULT GETUTCDATE(),
+                 fingerprint NVARCHAR(64),
                  language_id INT,
                  system_sw NVARCHAR(100), dss_fw NVARCHAR(100), dss_hw NVARCHAR(100),
                  css_fw NVARCHAR(100), css_hw NVARCHAR(100),
@@ -526,12 +547,14 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
                  handle INT PRIMARY KEY,
                  data_type INT, size INT, conversion_factor INT,
                  label_did INT, unit_did INT, signal_id INT,
+                 version_fingerprint NVARCHAR(64),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'dictionary')
              CREATE TABLE dictionary (
                  dict_id INT PRIMARY KEY,
-                 text NVARCHAR(MAX)
+                 text NVARCHAR(MAX),
+                 version_fingerprint NVARCHAR(64)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'patients')
              CREATE TABLE patients (
@@ -682,6 +705,18 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
             "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('therapies') AND name = 'serial_session_id')
              BEGIN
                  ALTER TABLE therapies ADD serial_session_id INT NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('versions') AND name = 'fingerprint')
+             BEGIN
+                 ALTER TABLE versions ADD fingerprint NVARCHAR(64) NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('data_attributes') AND name = 'version_fingerprint')
+             BEGIN
+                 ALTER TABLE data_attributes ADD version_fingerprint NVARCHAR(64) NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dictionary') AND name = 'version_fingerprint')
+             BEGIN
+                 ALTER TABLE dictionary ADD version_fingerprint NVARCHAR(64) NULL;
              END",
         ];
 

@@ -216,100 +216,92 @@ where
     // ═══════════════════════════════════════════════════════════════
     //  PHASE 2b: INITIALIZATION — Get Data Attributes (per handle)
     // ═══════════════════════════════════════════════════════════════
-    /// Sends CMD_CODE_GET_DATA_ATTRS for a single handle. Answer:
-    ///   [cmd: u16][type: u16][size: u16][factor: u16]
-    ///   [label_did: u16][unit_did: u16][internal_name: null-terminated ASCII, max 64+1]
-    pub async fn get_data_attributes(
-        &mut self,
-        handle: u16,
-    ) -> Result<DataAttribute, UseCaseError> {
-        let mut handle_bytes = [0u8; 2];
-        LittleEndian::write_u16(&mut handle_bytes, handle);
-
-        let data = self
-            .device
-            .request(CMD_CODE_GET_DATA_ATTRS, &handle_bytes)?;
-
-        if data.len() < 12 {
-            return Err(UseCaseError::Protocol(
-                "Data attrs response too short".into(),
-            ));
-        }
-
-        let resp_cmd = LittleEndian::read_u16(&data[0..2]);
-        if resp_cmd == CMD_CODE_NAK {
-            let err_code = if data.len() >= 4 {
-                LittleEndian::read_u16(&data[2..4])
-            } else {
-                0
-            };
-            return Err(UseCaseError::Device(
-                crate::domain::device::DeviceError::Nak(err_code),
-            ));
-        }
-
-        let data_type = DataType::from(LittleEndian::read_u16(&data[2..4]));
-        let size = LittleEndian::read_u16(&data[4..6]);
-        let factor = LittleEndian::read_u16(&data[6..8]);
-        let label_did = LittleEndian::read_u16(&data[8..10]);
-        let unit_did = LittleEndian::read_u16(&data[10..12]);
-
-        // Internal name: null-terminated ASCII string starting at offset 12
-        let name_bytes = &data[12..];
-        let internal_name = if let Some(null_pos) = name_bytes.iter().position(|&b| b == 0) {
-            String::from_utf8_lossy(&name_bytes[..null_pos]).to_string()
-        } else {
-            String::from_utf8_lossy(name_bytes).trim().to_string()
-        };
-
-        let mut attr = DataAttribute {
-            handle,
-            data_type,
-            size,
-            conversion_factor: factor,
-            label_did,
-            unit_did,
-            signal_id: 0, // Will be populated by the DB
-            internal_name,
-        };
-
-        self.attr_repo.save(&attr).await?;
-
-        // Reload from DB to get the generated signal_id
-        if let Some(saved_attr) = self.attr_repo.get_by_handle(handle).await? {
-            attr = saved_attr;
-        }
-
-        self.attr_cache.insert(handle, attr.clone());
-        Ok(attr)
-    }
-
     /// Gets attributes for ALL handles previously discovered.
-    pub async fn get_all_data_attributes(&mut self) -> Result<Vec<DataAttribute>, UseCaseError> {
+    /// Saves each attribute with the given `version_fingerprint` for scoped caching.
+    pub async fn get_all_data_attributes(
+        &mut self,
+        version_fingerprint: &str,
+    ) -> Result<Vec<DataAttribute>, UseCaseError> {
         let handles = self.handles.clone();
         println!(
             "  [3] CMD_GET_DATA_ATTRS for {} handle(s)...",
             handles.len()
         );
 
-        self.attr_repo.delete_all().await?;
+        self.attr_repo.delete_by_fingerprint(version_fingerprint).await?;
         let mut attrs = Vec::with_capacity(handles.len());
         self.attr_cache.clear();
 
         for (i, &handle) in handles.iter().enumerate() {
-            let attr = self.get_data_attributes(handle).await?;
+            let data = {
+                let mut handle_bytes = [0u8; 2];
+                LittleEndian::write_u16(&mut handle_bytes, handle);
+                self.device
+                    .request(CMD_CODE_GET_DATA_ATTRS, &handle_bytes)?
+            };
+
+            if data.len() < 12 {
+                return Err(UseCaseError::Protocol(
+                    "Data attrs response too short".into(),
+                ));
+            }
+
+            let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+            if resp_cmd == CMD_CODE_NAK {
+                let err_code = if data.len() >= 4 {
+                    LittleEndian::read_u16(&data[2..4])
+                } else {
+                    0
+                };
+                return Err(UseCaseError::Device(
+                    crate::domain::device::DeviceError::Nak(err_code),
+                ));
+            }
+
+            let data_type = DataType::from(LittleEndian::read_u16(&data[2..4]));
+            let size = LittleEndian::read_u16(&data[4..6]);
+            let factor = LittleEndian::read_u16(&data[6..8]);
+            let label_did = LittleEndian::read_u16(&data[8..10]);
+            let unit_did = LittleEndian::read_u16(&data[10..12]);
+
+            let name_bytes = &data[12..];
+            let internal_name = if let Some(null_pos) = name_bytes.iter().position(|&b| b == 0) {
+                String::from_utf8_lossy(&name_bytes[..null_pos]).to_string()
+            } else {
+                String::from_utf8_lossy(name_bytes).trim().to_string()
+            };
+
+            let attr = DataAttribute {
+                handle,
+                data_type,
+                size,
+                conversion_factor: factor,
+                label_did,
+                unit_did,
+                signal_id: 0,
+                internal_name,
+            };
+
+            self.attr_repo.save(&attr, version_fingerprint).await?;
+
+            let saved_attr = if let Some(sa) = self.attr_repo.get_by_handle(handle).await? {
+                sa
+            } else {
+                attr
+            };
+
             println!(
                 "      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
                 i + 1,
                 handles.len(),
                 handle,
-                attr.internal_name,
-                attr.data_type,
-                attr.size,
-                attr.conversion_factor
+                saved_attr.internal_name,
+                saved_attr.data_type,
+                saved_attr.size,
+                saved_attr.conversion_factor
             );
-            self.attr_cache.insert(handle, attr.clone());
-            attrs.push(attr);
+            self.attr_cache.insert(handle, saved_attr.clone());
+            attrs.push(saved_attr);
         }
 
         Ok(attrs)
@@ -324,11 +316,14 @@ where
     /// Answer:  [cmd: u16][dict_id: u16][utf8_string...\0]
     ///
     /// Start with prev_dict_id=0. When dict_id in answer == 0, dictionary is complete.
-    pub async fn get_dictionary(&mut self) -> Result<Vec<DictionaryEntry>, UseCaseError> {
+    pub async fn get_dictionary(
+        &mut self,
+        version_fingerprint: &str,
+    ) -> Result<Vec<DictionaryEntry>, UseCaseError> {
         println!("  [4] CMD_GET_NEXT_DICT_STR (building dictionary)...");
 
         const MAX_DICT_ENTRIES: usize = 20_000;
-        self.dict_repo.delete_all().await?;
+        self.dict_repo.delete_by_fingerprint(version_fingerprint).await?;
         let mut entries = Vec::new();
         self.dict_cache.clear();
         let mut prev_id: u16 = 0;
@@ -406,7 +401,7 @@ where
             prev_id = dict_id;
         }
 
-        self.dict_repo.save_batch(&entries).await?;
+        self.dict_repo.save_batch(&entries, version_fingerprint).await?;
         println!("      Dictionary complete: {} entries", entries.len());
         Ok(entries)
     }
@@ -632,44 +627,39 @@ where
     //  FULL INITIALIZATION (convenience)
     // ═══════════════════════════════════════════════════════════════
     /// Runs the complete initialization sequence as per the protocol spec:
-    /// 1. Get versions from OMNI.
-    /// 2. Compare with stored version.
-    /// 3. If versions match, load handles, attributes, and dictionary from DB.
-    /// 4. If versions differ, request all data from OMNI and store in DB.
+    /// 1. Get versions from OMNI and compute a fingerprint.
+    /// 2. Query the DB for cached configuration by fingerprint.
+    /// 3. If cached, load handles, attributes, and dictionary from DB.
+    /// 4. If not cached, request all data from OMNI and store with the fingerprint.
     pub async fn initialize(&mut self) -> Result<VersionInfo, UseCaseError> {
         println!("\n══ PHASE: IDENTIFICATION ══");
-        let latest_db_version = self.version_repo.get_latest().await?;
         let version = self.get_versions().await?;
+        let fp = version.fingerprint();
 
-        // Compare the combination of SW, HW and Language versions
-        let versions_match = match latest_db_version {
-            Some(db_v) => {
-                db_v.system_sw == version.system_sw
-                    && db_v.dss_fw == version.dss_fw
-                    && db_v.dss_hw == version.dss_hw
-                    && db_v.css_fw == version.css_fw
-                    && db_v.css_hw == version.css_hw
-                    && db_v.language_id == version.language_id
-            }
-            None => false,
-        };
+        let cached_version = self.version_repo.get_by_fingerprint(&fp).await?;
 
         println!("\n══ PHASE: INITIALIZATION ══");
 
-        if versions_match {
-            println!("  [i] Versions match. Loading configuration from database...");
-            let loaded = self.load_configuration_from_db().await?;
+        if cached_version.is_some() {
+            println!(
+                "  [i] Fingerprint {} match. Loading configuration from database...",
+                fp
+            );
+            let loaded = self.load_configuration_from_db(&fp).await?;
             if !loaded {
                 println!("  [i] Database cache is empty/incomplete. Fetching from device...");
                 self.get_data_handles().await?;
-                self.get_all_data_attributes().await?;
-                self.get_dictionary().await?;
+                self.get_all_data_attributes(&fp).await?;
+                self.get_dictionary(&fp).await?;
             }
         } else {
-            println!("  [i] New version detected or no previous data. Fetching from device...");
+            println!(
+                "  [i] Fingerprint {} is new. Fetching from device...",
+                fp
+            );
             self.get_data_handles().await?;
-            self.get_all_data_attributes().await?;
-            self.get_dictionary().await?;
+            self.get_all_data_attributes(&fp).await?;
+            self.get_dictionary(&fp).await?;
         }
 
         // Persist the currently detected version only after successful initialization.
@@ -688,32 +678,34 @@ where
 
     /// Loads the data handles, data attributes, and dictionary directly from the DB
     /// into the in-memory caches, bypassing the serial communication.
-    async fn load_configuration_from_db(&mut self) -> Result<bool, UseCaseError> {
-        // Load data attributes from DB
-        let attrs = self.attr_repo.get_all().await?;
+    async fn load_configuration_from_db(&mut self, fp: &str) -> Result<bool, UseCaseError> {
+        // Load data attributes from DB (scoped to fingerprint)
+        let attrs = self.attr_repo.get_by_fingerprint(fp).await?;
         self.attr_cache.clear();
         self.handles.clear();
 
-        for attr in attrs {
-            // Note: DB doesn't inherently store the 'order' of handles like the device does.
-            // In a strict implementation, handles order must be preserved. We assume the DB
-            // `ORDER BY rowid` returns them in the insertion order.
+        for attr in &attrs {
             self.handles.push(attr.handle);
-            self.attr_cache.insert(attr.handle, attr);
+            self.attr_cache.insert(attr.handle, attr.clone());
         }
-        println!("      Loaded {} attribute(s) from DB.", self.handles.len());
+        println!(
+            "      Loaded {} attribute(s) from DB (fp={}).",
+            self.handles.len(),
+            fp
+        );
         if self.handles.is_empty() {
             return Ok(false);
         }
 
-        let dict_entries = self.dict_repo.get_all().await?;
+        let dict_entries = self.dict_repo.get_by_fingerprint(fp).await?;
         self.dict_cache.clear();
         for entry in dict_entries {
             self.dict_cache.insert(entry.dict_id, entry.text);
         }
         println!(
-            "      Loaded {} dictionary entries from DB.",
-            self.dict_cache.len()
+            "      Loaded {} dictionary entries from DB (fp={}).",
+            self.dict_cache.len(),
+            fp
         );
         if self.dict_cache.is_empty() {
             return Ok(false);

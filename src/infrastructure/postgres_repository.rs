@@ -49,19 +49,20 @@ impl PgDataAttrRepository {
 }
 
 impl DataAttributeRepository for PgDataAttrRepository {
-    async fn save(&self, attr: &DataAttribute) -> Result<(), RepositoryError> {
+    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
         let signal_id = get_or_create_signal_id(&self.pool, &attr.internal_name).await?;
 
         sqlx::query(
-            "INSERT INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "INSERT INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (handle) DO UPDATE SET
                  data_type = EXCLUDED.data_type,
                  size = EXCLUDED.size,
                  conversion_factor = EXCLUDED.conversion_factor,
                  label_did = EXCLUDED.label_did,
                  unit_did = EXCLUDED.unit_did,
-                 signal_id = EXCLUDED.signal_id"
+                 signal_id = EXCLUDED.signal_id,
+                 version_fingerprint = EXCLUDED.version_fingerprint"
         )
         .bind(attr.handle as i32)
         .bind(attr.data_type as i32)
@@ -70,17 +71,19 @@ impl DataAttributeRepository for PgDataAttrRepository {
         .bind(attr.label_did as i32)
         .bind(attr.unit_did as i32)
         .bind(signal_id as i64)
+        .bind(version_fingerprint)
         .execute(&self.pool)
         .await
         .map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT d.handle, d.data_type, d.size, d.conversion_factor, d.label_did, d.unit_did, d.signal_id, s.internal_name
-             FROM data_attributes d JOIN signals s ON d.signal_id = s.id ORDER BY d.handle"
+             FROM data_attributes d JOIN signals s ON d.signal_id = s.id WHERE d.version_fingerprint = $1 ORDER BY d.handle"
         )
+        .bind(fingerprint)
         .fetch_all(&self.pool)
         .await
         .map_err(map_db_err)?;
@@ -119,8 +122,9 @@ impl DataAttributeRepository for PgDataAttrRepository {
         }))
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
-        sqlx::query("DELETE FROM data_attributes")
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM data_attributes WHERE version_fingerprint = $1")
+            .bind(fingerprint)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -143,20 +147,21 @@ impl PgDictionaryRepository {
 }
 
 impl DictionaryRepository for PgDictionaryRepository {
-    async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError> {
+    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
         sqlx::query(
-            "INSERT INTO dictionary (dict_id, text) VALUES ($1, $2)
-             ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text"
+            "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
+             ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text, version_fingerprint = EXCLUDED.version_fingerprint"
         )
         .bind(entry.dict_id as i32)
         .bind(&entry.text)
+        .bind(version_fingerprint)
         .execute(&self.pool)
         .await
         .map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
         if entries.is_empty() {
             return Ok(());
         }
@@ -164,11 +169,12 @@ impl DictionaryRepository for PgDictionaryRepository {
         let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         for entry in entries {
             sqlx::query(
-                "INSERT INTO dictionary (dict_id, text) VALUES ($1, $2)
-                 ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text"
+                "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
+                 ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text, version_fingerprint = EXCLUDED.version_fingerprint"
             )
             .bind(entry.dict_id as i32)
             .bind(&entry.text)
+            .bind(version_fingerprint)
             .execute(&mut *tx)
             .await
             .map_err(map_db_err)?;
@@ -191,8 +197,9 @@ impl DictionaryRepository for PgDictionaryRepository {
         }))
     }
 
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
-        let rows = sqlx::query("SELECT dict_id, text FROM dictionary ORDER BY dict_id")
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+        let rows = sqlx::query("SELECT dict_id, text FROM dictionary WHERE version_fingerprint = $1 ORDER BY dict_id")
+            .bind(fingerprint)
             .fetch_all(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -203,8 +210,9 @@ impl DictionaryRepository for PgDictionaryRepository {
         }).collect())
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
-        sqlx::query("DELETE FROM dictionary")
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM dictionary WHERE version_fingerprint = $1")
+            .bind(fingerprint)
             .execute(&self.pool)
             .await
             .map_err(map_db_err)?;
@@ -504,10 +512,12 @@ impl PgVersionRepository {
 
 impl VersionRepository for PgVersionRepository {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
         sqlx::query::<sqlx::Postgres>(
-            "INSERT INTO versions (language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"
+            "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"
         )
+        .bind(&fp)
         .bind(version.language_id as i32)
         .bind(&version.system_sw)
         .bind(&version.dss_fw)
@@ -525,11 +535,12 @@ impl VersionRepository for PgVersionRepository {
         Ok(())
     }
 
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
         let row = sqlx::query::<sqlx::Postgres>(
             "SELECT language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3
-             FROM versions ORDER BY id DESC LIMIT 1"
+             FROM versions WHERE fingerprint = $1 ORDER BY id DESC LIMIT 1"
         )
+        .bind(fingerprint)
         .fetch_optional(&self.pool)
         .await
         .map_err(map_db_err)?;

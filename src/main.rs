@@ -151,8 +151,10 @@ async fn run_reader_session(
         Ok(dev) => dev,
         Err(err) => {
             error!("[Serial] No se pudo abrir el puerto: {}", err);
-            serial_manager.record_failure().await;
-            broadcast_serial_status(ws_hub, &serial_manager).await;
+            if serial_manager.record_failure().await {
+                error!("[Serial] Límite de fallos alcanzado al abrir puerto.");
+                broadcast_serial_status(ws_hub, &serial_manager).await;
+            }
             return;
         }
     };
@@ -183,7 +185,8 @@ async fn run_reader_session(
         }
         Err(e) => {
             error!("[Device] {}", e);
-            serial_manager.record_failure().await;
+            error!("[Device] Límite de fallos alcanzado en inicialización.");
+            serial_manager.set_failed_limit().await;
             broadcast_serial_status(ws_hub, &serial_manager).await;
             return;
         }
@@ -209,6 +212,7 @@ async fn run_reader_session(
     let mut persistence_warned = false;
     let mut force_new_session = new_therapy;
     let software_version = version.system_sw.clone();
+    let mut prev_therapy_state_value: Option<f64> = None;
 
     info!("[Loop] Lectura cíclica de valores (Ctrl+C para detener)...");
 
@@ -255,19 +259,38 @@ async fn run_reader_session(
                         && matches!(&r.physical_value, crate::domain::entities::TelemetryValue::Number(n) if (n - 2.0).abs() < 0.1)
                 });
 
-                let therapy_state_name = readings
-                    .iter()
-                    .find(|r| {
-                        r.internal_name == "c_trmt_main_state"
-                            || r.internal_name == "g_trmt_main_state_set"
-                    })
+                let therapy_state_entry = readings.iter().find(|r| {
+                    r.internal_name == "c_trmt_main_state"
+                        || r.internal_name == "g_trmt_main_state_set"
+                });
+
+                let therapy_state_name = therapy_state_entry
                     .and_then(|r| r.display_value.clone())
                     .unwrap_or_else(|| "N/A".to_string());
 
-                info!(
-                    "[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia activa: {act}, Estado: {est}",
-                    act = is_in_therapy, est = therapy_state_name
-                );
+                let therapy_state_value = readings
+                    .iter()
+                    .find(|r| r.internal_name == "c_trmt_main_state")
+                    .and_then(|r| match &r.physical_value {
+                        crate::domain::entities::TelemetryValue::Number(n) => Some(*n),
+                        _ => None,
+                    });
+
+                match therapy_state_value {
+                    Some(v) => info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Estado: {therapy_state_name} ({v})"),
+                    None => info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Estado: {therapy_state_name}"),
+                }
+
+                if therapy_state_value != prev_therapy_state_value {
+                    let prev = prev_therapy_state_value
+                        .map(|v| format!("{v}"))
+                        .unwrap_or_else(|| "N/A".to_string());
+                    let curr = therapy_state_value
+                        .map(|v| format!("{therapy_state_name} ({v})"))
+                        .unwrap_or_else(|| therapy_state_name.clone());
+                    info!("═══════ CAMBIO DE ESTADO: {prev} → {curr} ═══════");
+                }
+                prev_therapy_state_value = therapy_state_value;
 
                 let patient_key = readings
                     .iter()
@@ -386,8 +409,18 @@ async fn run_reader_session(
                         info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia reanudada");
                     }
                 } else if was_in_therapy {
-                    info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Pausa de terapia (sesión serial continúa)");
-                    therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                    let is_state_3 = therapy_state_value.is_some_and(|v| (v - 3.0).abs() < 0.1);
+                    if is_state_3 {
+                        if let Some(tid) = current_therapy_id.take() {
+                            info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] FIN de terapia detectado (state=3). Cerrando terapia {tid}...");
+                            let _ = interactor.end_therapy(tid).await;
+                        }
+                        therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia finalizada. Sesión serial continúa en modo post-terapia.");
+                    } else {
+                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Pausa de terapia (sesión serial continúa)");
+                        therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                    }
                 }
                 was_in_therapy = is_in_therapy;
 
@@ -464,32 +497,33 @@ async fn run_reader_session(
 
                 if is_connection_error {
                     error!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ERROR de conexión: {e}");
-                    serial_manager.record_failure().await;
-                    broadcast_serial_status(ws_hub, &serial_manager).await;
-
-                    let current = serial_manager.get_status().await;
-                    if current.status == "FailedLimit" {
+                    if serial_manager.record_failure().await {
                         error!(
                             "[Serial] Límite de {max} fallos consecutivos alcanzado. Suspendiendo lectura.",
-                            max = current.max_failures
+                            max = serial_manager.get_status().await.max_failures
                         );
+                        broadcast_serial_status(ws_hub, &serial_manager).await;
                         return;
                     }
                 } else {
                     warn!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ADVERTENCIA de datos: {e}");
                     serial_manager.record_warning().await;
-                    broadcast_serial_status(ws_hub, &serial_manager).await;
                 }
             }
         }
         tokio::time::sleep(Duration::from_secs(config.cycle_interval_secs)).await;
     }
 
-    // Cleanup: close therapy and serial session
+    // Cleanup: close serial session (and therapy only if close_therapy_on_stop is set)
     if persistence_enabled {
-        if let Some(therapy_id) = current_therapy_id {
-            info!("[Session] Cerrando terapia {therapy_id}");
-            let _ = interactor.end_therapy(therapy_id).await;
+        let status = serial_manager.get_status().await;
+        if status.close_therapy_on_stop {
+            if let Some(therapy_id) = current_therapy_id {
+                info!("[Session] Cerrando terapia {therapy_id}");
+                let _ = interactor.end_therapy(therapy_id).await;
+            }
+        } else {
+            info!("[Session] Deteniendo lectura SIN cerrar terapia (close_therapy_on_stop=false)");
         }
         if let Some(session_id) = current_session_id {
             info!("[Session] Cerrando sesión serial {session_id}");
@@ -605,6 +639,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             persistence_enabled,
                             new_therapy,
                         );
+
+                        // Asegurar que la UI nunca se quede trabada en "Conectando..."
+                        let final_status = rt.block_on(sm_thread.get_status());
+                        if final_status.status == "Initializing" {
+                            rt.block_on(sm_thread.stop(false));
+                        }
+                        rt.block_on(broadcast_serial_status(&ws_hub_thread, &sm_thread));
 
                         if !wait_for_command(&mut cmd_rx) {
                             break;

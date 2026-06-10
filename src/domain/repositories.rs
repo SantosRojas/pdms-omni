@@ -16,24 +16,24 @@ pub enum RepositoryError {
 
 /// Persists and retrieves data attribute definitions.
 pub trait DataAttributeRepository: Send + Sync {
-    async fn save(&self, attr: &DataAttribute) -> Result<(), RepositoryError>;
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError>;
+    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError>;
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError>;
     async fn get_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, RepositoryError>;
-    async fn delete_all(&self) -> Result<(), RepositoryError>;
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError>;
 }
 
 /// Persists and retrieves dictionary entries (labels, units, etc.).
 pub trait DictionaryRepository: Send + Sync {
-    async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError>;
-    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError>;
+    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
         for entry in entries {
-            self.save(entry).await?;
+            self.save(entry, version_fingerprint).await?;
         }
         Ok(())
     }
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError>;
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError>;
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError>;
-    async fn delete_all(&self) -> Result<(), RepositoryError>;
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError>;
 }
 
 /// Persists telemetry readings and manages serial sessions.
@@ -99,7 +99,7 @@ pub trait TelemetryRepository: Send + Sync {
 /// Persists version information for caching/comparison.
 pub trait VersionRepository: Send + Sync {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError>;
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError>;
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError>;
 }
 
 /// CRUD for value equivalences (e.g., 0.0 = Preparation).

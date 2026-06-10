@@ -55,15 +55,15 @@ impl MssqlDataAttrRepository {
 }
 
 impl DataAttributeRepository for MssqlDataAttrRepository {
-    async fn save(&self, attr: &DataAttribute) -> Result<(), RepositoryError> {
+    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
         let signal_id = get_or_create_signal_id(&self.pool, &attr.internal_name).await?;
 
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
             "MERGE data_attributes AS tgt \
              USING (SELECT @P1 AS handle) AS src ON tgt.handle = src.handle \
-             WHEN MATCHED THEN UPDATE SET data_type=@P2, size=@P3, conversion_factor=@P4, label_did=@P5, unit_did=@P6, signal_id=@P7 \
-             WHEN NOT MATCHED THEN INSERT (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id) VALUES (@P1,@P2,@P3,@P4,@P5,@P6,@P7);"
+             WHEN MATCHED THEN UPDATE SET data_type=@P2, size=@P3, conversion_factor=@P4, label_did=@P5, unit_did=@P6, signal_id=@P7, version_fingerprint=@P8 \
+             WHEN NOT MATCHED THEN INSERT (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint) VALUES (@P1,@P2,@P3,@P4,@P5,@P6,@P7,@P8);"
         );
         q.bind(attr.handle as i32);
         q.bind(attr.data_type as i32);
@@ -72,16 +72,18 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
         q.bind(attr.label_did as i32);
         q.bind(attr.unit_did as i32);
         q.bind(signal_id as i32);
+        q.bind(version_fingerprint);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let q = Query::new(
+        let mut q = Query::new(
             "SELECT d.handle, d.data_type, d.size, d.conversion_factor, d.label_did, d.unit_did, d.signal_id, s.internal_name \
-             FROM data_attributes d JOIN signals s ON d.signal_id = s.id ORDER BY d.handle"
+             FROM data_attributes d JOIN signals s ON d.signal_id = s.id WHERE d.version_fingerprint = @P1 ORDER BY d.handle"
         );
+        q.bind(fingerprint);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
@@ -119,9 +121,10 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
         }))
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let q = Query::new("DELETE FROM data_attributes");
+        let mut q = Query::new("DELETE FROM data_attributes WHERE version_fingerprint = @P1");
+        q.bind(fingerprint);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
@@ -142,20 +145,21 @@ impl MssqlDictionaryRepository {
 }
 
 impl DictionaryRepository for MssqlDictionaryRepository {
-    async fn save(&self, entry: &DictionaryEntry) -> Result<(), RepositoryError> {
+    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
             "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id) AS src ON tgt.dict_id = src.dict_id \
-             WHEN MATCHED THEN UPDATE SET text = @P2 \
-             WHEN NOT MATCHED THEN INSERT (dict_id, text) VALUES (@P1, @P2);"
+             WHEN MATCHED THEN UPDATE SET text = @P2, version_fingerprint = @P3 \
+             WHEN NOT MATCHED THEN INSERT (dict_id, text, version_fingerprint) VALUES (@P1, @P2, @P3);"
         );
         q.bind(entry.dict_id as i32);
         q.bind(entry.text.as_str());
+        q.bind(version_fingerprint);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn save_batch(&self, entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
         if entries.is_empty() {
             return Ok(());
         }
@@ -164,11 +168,12 @@ impl DictionaryRepository for MssqlDictionaryRepository {
         for entry in entries {
             let mut q = Query::new(
                 "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id) AS src ON tgt.dict_id = src.dict_id \
-                 WHEN MATCHED THEN UPDATE SET text = @P2 \
-                 WHEN NOT MATCHED THEN INSERT (dict_id, text) VALUES (@P1, @P2);"
+                 WHEN MATCHED THEN UPDATE SET text = @P2, version_fingerprint = @P3 \
+                 WHEN NOT MATCHED THEN INSERT (dict_id, text, version_fingerprint) VALUES (@P1, @P2, @P3);"
             );
             q.bind(entry.dict_id as i32);
             q.bind(entry.text.as_str());
+            q.bind(version_fingerprint);
             q.execute(&mut *conn).await.map_err(map_db_err)?;
         }
 
@@ -188,9 +193,10 @@ impl DictionaryRepository for MssqlDictionaryRepository {
         }))
     }
 
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let q = Query::new("SELECT dict_id, text FROM dictionary ORDER BY dict_id");
+        let mut q = Query::new("SELECT dict_id, text FROM dictionary WHERE version_fingerprint = @P1 ORDER BY dict_id");
+        q.bind(fingerprint);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 
@@ -200,9 +206,10 @@ impl DictionaryRepository for MssqlDictionaryRepository {
         }).collect())
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let q = Query::new("DELETE FROM dictionary");
+        let mut q = Query::new("DELETE FROM dictionary WHERE version_fingerprint = @P1");
+        q.bind(fingerprint);
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
     }
@@ -493,11 +500,13 @@ impl MssqlVersionRepository {
 
 impl VersionRepository for MssqlVersionRepository {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
-            "INSERT INTO versions (language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3) \
-             VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10, @P11)"
+            "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3) \
+             VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10, @P11, @P12)"
         );
+        q.bind(fp.as_str());
         q.bind(version.language_id as i32);
         q.bind(version.system_sw.as_str());
         q.bind(version.dss_fw.as_str());
@@ -513,12 +522,13 @@ impl VersionRepository for MssqlVersionRepository {
         Ok(())
     }
 
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
-        let q = Query::new(
+        let mut q = Query::new(
             "SELECT TOP(1) language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3 \
-             FROM versions ORDER BY id DESC"
+             FROM versions WHERE fingerprint = @P1 ORDER BY id DESC"
         );
+        q.bind(fingerprint);
         let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
         let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
 

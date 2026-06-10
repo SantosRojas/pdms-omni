@@ -23,6 +23,27 @@ pub struct VersionInfo {
     pub language3: String,
 }
 
+impl VersionInfo {
+    /// Returns a deterministic fingerprint based on all version fields.
+    /// Used as a cache key to identify a specific firmware/hardware combination.
+    pub fn fingerprint(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.system_sw.hash(&mut hasher);
+        self.dss_fw.hash(&mut hasher);
+        self.dss_hw.hash(&mut hasher);
+        self.css_fw.hash(&mut hasher);
+        self.css_hw.hash(&mut hasher);
+        self.pss_fw.hash(&mut hasher);
+        self.pss_hw.hash(&mut hasher);
+        self.language_id.hash(&mut hasher);
+        self.language1.hash(&mut hasher);
+        self.language2.hash(&mut hasher);
+        self.language3.hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
+    }
+}
+
 /// Data types as defined in the OMNI-ODI protocol (Appendix A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]

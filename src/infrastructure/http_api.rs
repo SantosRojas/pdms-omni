@@ -797,6 +797,11 @@ pub struct StartSerialPayload {
     new_therapy: Option<bool>,
 }
 
+#[derive(Deserialize)]
+pub struct StopSerialPayload {
+    close_therapy: Option<bool>,
+}
+
 /// POST /api/serial/start
 pub async fn serial_start(
     State(state): State<ApiState>,
@@ -820,6 +825,7 @@ pub async fn serial_start(
 pub async fn serial_stop(
     State(state): State<ApiState>,
     headers: HeaderMap,
+    payload: Option<Json<StopSerialPayload>>,
 ) -> impl IntoResponse {
     let session = match get_claims(&headers, &state).await {
         Some(s) => s,
@@ -829,7 +835,8 @@ pub async fn serial_stop(
         return forbidden().into_response();
     }
 
-    state.serial_manager.stop().await;
+    let close_therapy = payload.and_then(|Json(p)| p.close_therapy).unwrap_or(true);
+    state.serial_manager.stop(close_therapy).await;
     Json(serde_json::json!({"ok": true})).into_response()
 }
 

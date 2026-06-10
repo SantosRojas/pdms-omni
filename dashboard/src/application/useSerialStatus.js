@@ -57,11 +57,11 @@ export const useSerialStatus = () => {
     }
   }, []);
 
-  const stopReader = useCallback(async () => {
+  const stopReader = useCallback(async (closeTherapy = true) => {
     setLoading(true);
     setError(null);
     try {
-      await apiService.stopSerial();
+      await apiService.stopSerial(closeTherapy);
       setSerialStatus(prev => ({ ...prev, status: 'Stopped' }));
     } catch (e) {
       setError(e.message);

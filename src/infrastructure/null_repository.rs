@@ -22,11 +22,11 @@ impl NullDataAttrRepository {
 }
 
 impl DataAttributeRepository for NullDataAttrRepository {
-    async fn save(&self, _attr: &DataAttribute) -> Result<(), RepositoryError> {
+    async fn save(&self, _attr: &DataAttribute, _version_fingerprint: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn get_all(&self) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -34,7 +34,7 @@ impl DataAttributeRepository for NullDataAttrRepository {
         Ok(None)
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, _fingerprint: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
 }
@@ -49,15 +49,15 @@ impl NullDictionaryRepository {
 }
 
 impl DictionaryRepository for NullDictionaryRepository {
-    async fn save(&self, _entry: &DictionaryEntry) -> Result<(), RepositoryError> {
+    async fn save(&self, _entry: &DictionaryEntry, _version_fingerprint: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn save_batch(&self, _entries: &[DictionaryEntry]) -> Result<(), RepositoryError> {
+    async fn save_batch(&self, _entries: &[DictionaryEntry], _version_fingerprint: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn get_all(&self) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -65,7 +65,7 @@ impl DictionaryRepository for NullDictionaryRepository {
         Ok(None)
     }
 
-    async fn delete_all(&self) -> Result<(), RepositoryError> {
+    async fn delete_by_fingerprint(&self, _fingerprint: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
 }
@@ -174,7 +174,7 @@ impl VersionRepository for NullVersionRepository {
         Ok(())
     }
 
-    async fn get_latest(&self) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
         Ok(None)
     }
 }

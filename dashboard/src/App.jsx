@@ -29,6 +29,8 @@ const parseHash = () => {
     return { view: 'profile', historyTherapy: null, dashboardTherapyId: null };
   } else if (hash === '#/settings') {
     return { view: 'settings', historyTherapy: null, dashboardTherapyId: null };
+  } else if (hash === '#/live') {
+    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: 'live' };
   }
   return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
 };
@@ -132,7 +134,7 @@ function App() {
   const renderContent = () => {
     switch (view) {
       case 'history':
-        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
+        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = historyTherapy?.id ? `#/therapy/${historyTherapy.id}` : '#/'; }} />;
       case 'admin':
         return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':
