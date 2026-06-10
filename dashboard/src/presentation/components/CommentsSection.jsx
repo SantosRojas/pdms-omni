@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
 import { MessageSquare, Send, Trash2, User, Clock, X } from 'lucide-react';
@@ -124,11 +125,21 @@ export const CommentsSection = ({ therapyId }) => {
               {canDelete && (
                 <button
                   onClick={() => setDeleteTarget(comment.id)}
-                  className="btn-icon btn-ghost"
-                  style={{ width: '28px', height: '28px', borderRadius: '6px', opacity: 0.5 }}
+                  className="btn btn-sm"
+                  style={{
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.2)',
+                    color: 'var(--danger)',
+                    padding: '2px 8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    transition: 'all 0.15s ease',
+                  }}
                   title="Eliminar comentario"
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)'; }}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={11} /> Eliminar
                 </button>
               )}
             </div>
@@ -140,41 +151,41 @@ export const CommentsSection = ({ therapyId }) => {
       </div>
 
       {userRole !== 'viewer' && (
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <input
-          type="text"
-          className="input"
-          placeholder="Nombre del personal de salud *"
-          value={authorName}
-          onChange={e => setAuthorName(e.target.value)}
-          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-        />
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <textarea
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <input
+            type="text"
             className="input"
-            placeholder="Escriba su comentario aquí..."
-            value={newComment}
-            onChange={e => setNewComment(e.target.value)}
-            rows={2}
-            style={{ flex: 1, padding: '8px 12px', fontSize: '0.85rem', resize: 'none' }}
+            placeholder="Nombre del personal de salud *"
+            value={authorName}
+            onChange={e => setAuthorName(e.target.value)}
+            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
           />
-          <button
-            type="submit"
-            disabled={!authorName.trim() || !newComment.trim() || sending}
-            className="btn"
-            style={{
-              background: (!authorName.trim() || !newComment.trim()) ? 'var(--btn-bg)' : 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-              color: (!authorName.trim() || !newComment.trim()) ? 'var(--text-tertiary)' : 'white',
-              cursor: (!authorName.trim() || !newComment.trim()) ? 'default' : 'pointer',
-            }}
-          >
-            <Send size={16} /> {sending ? '...' : 'Enviar'}
-          </button>
-        </div>
-      </form>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <textarea
+              className="input"
+              placeholder="Escriba su comentario aquí..."
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              rows={2}
+              style={{ flex: 1, padding: '8px 12px', fontSize: '0.85rem', resize: 'none' }}
+            />
+            <button
+              type="submit"
+              disabled={!authorName.trim() || !newComment.trim() || sending}
+              className="btn"
+              style={{
+                background: (!authorName.trim() || !newComment.trim()) ? 'var(--btn-bg)' : 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+                color: (!authorName.trim() || !newComment.trim()) ? 'var(--text-tertiary)' : 'white',
+                cursor: (!authorName.trim() || !newComment.trim()) ? 'default' : 'pointer',
+              }}
+            >
+              <Send size={16} /> {sending ? '...' : 'Enviar'}
+            </button>
+          </div>
+        </form>
       )}
 
-      {deleteTarget !== null && (
+      {deleteTarget !== null && createPortal(
         <div className="modal-backdrop" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteReason(''); } }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '24px', maxWidth: '420px' }}>
             <div className="modal-header">
@@ -208,7 +219,8 @@ export const CommentsSection = ({ therapyId }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

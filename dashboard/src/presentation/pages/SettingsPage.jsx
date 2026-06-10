@@ -29,7 +29,7 @@ export const SettingsPage = ({ onBack }) => {
       <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
 
         {/* Tema */}
-        <div style={{ paddingBottom: '24px', marginBottom: '24px', borderBottom: '1px solid var(--border-default)' }}>
+        {/* <div style={{ paddingBottom: '24px', marginBottom: '24px', borderBottom: '1px solid var(--border-default)' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
             {theme === 'dark' ? <Moon size={14} /> : theme === 'light' ? <Sun size={14} /> : <Monitor size={14} />}
             Tema
@@ -50,7 +50,7 @@ export const SettingsPage = ({ onBack }) => {
               );
             })}
           </div>
-        </div>
+        </div> */}
 
         {/* Color de Acento */}
         <div>
