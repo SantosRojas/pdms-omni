@@ -2,43 +2,46 @@
 //! Supports SQLite (via sqlx), PostgreSQL (via sqlx), and MSSQL (via tiberius + bb8).
 //! Detects backend from the DB_CONNECTION environment variable.
 
-use sqlx::{sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode, SqlitePool, Row as SqlxRow};
-use sqlx::postgres::PgPoolOptions;
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
-use tiberius::{AuthMethod, Config as TibConfig, Row as TibRow, Query as TibQuery};
-use std::str::FromStr;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::{Row as SqlxRow, SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqliteJournalMode};
 use std::io;
+use std::str::FromStr;
+use tiberius::{AuthMethod, Config as TibConfig, Query as TibQuery, Row as TibRow};
 use tracing::{info, warn};
 
-use super::db_pool::DbPool;
+use super::auth::hash_password;
 use super::config::{DatabaseConfig, MssqlSettings, PostgresSettings};
+use super::db_pool::DbPool;
+use super::mssql_repository::*;
 use super::null_repository::{
     NullAttributeEquivalenceRepository, NullDataAttrRepository, NullDictionaryRepository,
     NullTelemetryRepository, NullVersionRepository,
 };
+use super::postgres_repository::*;
 use super::repo_dispatch::*;
 use super::sqlx_repository::*;
-use super::postgres_repository::*;
-use super::mssql_repository::*;
-use super::auth::hash_password;
 
 /// All repository instances bundled together for easy injection.
 /// Uses enum dispatch so the same struct works for both SQLite and MSSQL.
 #[derive(Clone)]
 pub struct Repositories {
-    pub attr_repo:      DynAttrRepo,
-    pub dict_repo:      DynDictRepo,
+    pub attr_repo: DynAttrRepo,
+    pub dict_repo: DynDictRepo,
     pub telemetry_repo: DynTelemetryRepo,
-    pub version_repo:   DynVersionRepo,
-    pub equiv_repo:     DynEquivRepo,
+    pub version_repo: DynVersionRepo,
+    pub equiv_repo: DynEquivRepo,
     /// Shared DB pool for the HTTP API layer
     pub db: Option<DbPool>,
 }
 
 /// Initializes the database: opens connection, creates schema,
 /// and returns all repository instances ready for injection.
-pub async fn initialize_db(db_config: &DatabaseConfig, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+pub async fn initialize_db(
+    db_config: &DatabaseConfig,
+    admin_password: &str,
+) -> Result<Repositories, Box<dyn std::error::Error>> {
     match db_config {
         DatabaseConfig::Sqlite { url } => initialize_sqlite(url, admin_password).await,
         DatabaseConfig::Postgres(cfg) => initialize_postgres(cfg, admin_password).await,
@@ -52,12 +55,12 @@ pub async fn initialize_db(db_config: &DatabaseConfig, admin_password: &str) -> 
 /// Builds in-memory/no-op repositories for degraded operation without persistence.
 pub fn initialize_without_persistence() -> Repositories {
     Repositories {
-        attr_repo:      DynAttrRepo::Null(NullDataAttrRepository::new()),
-        dict_repo:      DynDictRepo::Null(NullDictionaryRepository::new()),
+        attr_repo: DynAttrRepo::Null(NullDataAttrRepository::new()),
+        dict_repo: DynDictRepo::Null(NullDictionaryRepository::new()),
         telemetry_repo: DynTelemetryRepo::Null(NullTelemetryRepository::new()),
-        version_repo:   DynVersionRepo::Null(NullVersionRepository::new()),
-        equiv_repo:     DynEquivRepo::Null(NullAttributeEquivalenceRepository::new()),
-        db:             None,
+        version_repo: DynVersionRepo::Null(NullVersionRepository::new()),
+        equiv_repo: DynEquivRepo::Null(NullAttributeEquivalenceRepository::new()),
+        db: None,
     }
 }
 
@@ -65,7 +68,10 @@ pub fn initialize_without_persistence() -> Repositories {
 //  SQLite backend (existing)
 // ═══════════════════════════════════════════════════════════════
 
-async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_sqlite(
+    db_url: &str,
+    admin_password: &str,
+) -> Result<Repositories, Box<dyn std::error::Error>> {
     let options = SqliteConnectOptions::from_str(db_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal);
@@ -198,8 +204,10 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
             FOREIGN KEY(serial_session_id) REFERENCES serial_sessions(id),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
-        "
-    ).execute(&pool).await?;
+        ",
+    )
+    .execute(&pool)
+    .await?;
 
     // Query-performance indexes (safe, idempotent)
     sqlx::query(
@@ -230,22 +238,51 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
     }
 
     // Safe migrations for existing DB
-    let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deleted_at DATETIME").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deletion_reason TEXT").execute(&pool).await;
-    let _ = sqlx::query("ALTER TABLE therapies ADD COLUMN serial_session_id INTEGER").execute(&pool).await;
-    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_therapies_serial_session ON therapies(serial_session_id)").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_start DATETIME")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deleted_at DATETIME")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deletion_reason TEXT")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE therapies ADD COLUMN serial_session_id INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_therapies_serial_session ON therapies(serial_session_id)",
+    )
+    .execute(&pool)
+    .await;
+
+    // Ensure deterministic lookup by fingerprint (prevent duplicates).
+    let _ = sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_fingerprint ON versions(fingerprint)",
+    )
+    .execute(&pool)
+    .await;
 
     // Seed default admin user if no users exist
-    let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
+    let row = sqlx::query("SELECT COUNT(*) FROM users")
+        .fetch_one(&pool)
+        .await?;
     let user_count: i64 = row.get(0);
     if user_count == 0 {
-        let admin_password_hash = hash_password(admin_password)
-            .map_err(|e| io::Error::other(e.to_string()))?;
+        let admin_password_hash =
+            hash_password(admin_password).map_err(|e| io::Error::other(e.to_string()))?;
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', ?1, 'Administrator', 'admin')"
         ).bind(admin_password_hash).execute(&pool).await?;
@@ -253,7 +290,9 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
     }
 
     // Seed equivalences
-    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
+    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences")
+        .fetch_one(&pool)
+        .await?;
     let count: i64 = row.get(0);
     if count == 0 {
         use crate::infrastructure::equivalences_data::EQUIVALENCES;
@@ -261,10 +300,12 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
         for eq in EQUIVALENCES {
             sqlx::query("INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)")
                 .bind(eq.internal_name)
-                .execute(&mut *tx).await?;
+                .execute(&mut *tx)
+                .await?;
             let row = sqlx::query("SELECT id FROM signals WHERE internal_name = ?1")
                 .bind(eq.internal_name)
-                .fetch_one(&mut *tx).await?;
+                .fetch_one(&mut *tx)
+                .await?;
             let signal_id: i64 = row.get(0);
             sqlx::query(
                 "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES (?1, ?2, ?3)"
@@ -279,23 +320,29 @@ async fn initialize_sqlite(db_url: &str, admin_password: &str) -> Result<Reposit
     }
 
     Ok(Repositories {
-        attr_repo:      DynAttrRepo::Sqlite(SqlxDataAttrRepository::new(pool.clone())),
-        dict_repo:      DynDictRepo::Sqlite(SqlxDictionaryRepository::new(pool.clone())),
+        attr_repo: DynAttrRepo::Sqlite(SqlxDataAttrRepository::new(pool.clone())),
+        dict_repo: DynDictRepo::Sqlite(SqlxDictionaryRepository::new(pool.clone())),
         telemetry_repo: DynTelemetryRepo::Sqlite(SqlxTelemetryRepository::new(pool.clone())),
-        version_repo:   DynVersionRepo::Sqlite(SqlxVersionRepository::new(pool.clone())),
-        equiv_repo:     DynEquivRepo::Sqlite(SqlxAttributeEquivalenceRepository::new(pool.clone())),
-        db:             Some(DbPool::Sqlite(pool)),
+        version_repo: DynVersionRepo::Sqlite(SqlxVersionRepository::new(pool.clone())),
+        equiv_repo: DynEquivRepo::Sqlite(SqlxAttributeEquivalenceRepository::new(pool.clone())),
+        db: Some(DbPool::Sqlite(pool)),
     })
 }
 
-async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_postgres(
+    settings: &PostgresSettings,
+    admin_password: &str,
+) -> Result<Repositories, Box<dyn std::error::Error>> {
     info!("  [DB] Connecting to PostgreSQL...");
 
     let url = format!(
         "postgresql://{}:{}@{}:{}/{}",
         settings.username, settings.password, settings.host, settings.port, settings.database
     );
-    let pool = PgPoolOptions::new().max_connections(8).connect(&url).await?;
+    let pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&url)
+        .await?;
 
     let schema_statements = vec![
         "CREATE TABLE IF NOT EXISTS versions (
@@ -451,18 +498,29 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
         let _ = sqlx::query(stmt).execute(&pool).await;
     }
 
-    let row = sqlx::query("SELECT COUNT(*) FROM users").fetch_one(&pool).await?;
+    // Ensure deterministic lookup by fingerprint (prevent duplicates).
+    let _ = sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_fingerprint ON versions(fingerprint)",
+    )
+    .execute(&pool)
+    .await;
+
+    let row = sqlx::query("SELECT COUNT(*) FROM users")
+        .fetch_one(&pool)
+        .await?;
     let user_count: i64 = row.get(0);
     if user_count == 0 {
-        let admin_password_hash = hash_password(admin_password)
-            .map_err(|e| io::Error::other(e.to_string()))?;
+        let admin_password_hash =
+            hash_password(admin_password).map_err(|e| io::Error::other(e.to_string()))?;
         sqlx::query(
             "INSERT INTO users (username, password, full_name, role) VALUES ('admin', $1, 'Administrator', 'admin')"
         ).bind(&admin_password_hash).execute(&pool).await?;
         info!("  [DB] Default admin user created (username: admin)");
     }
 
-    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences").fetch_one(&pool).await?;
+    let row = sqlx::query("SELECT COUNT(*) FROM attribute_equivalences")
+        .fetch_one(&pool)
+        .await?;
     let count: i64 = row.get(0);
     if count == 0 {
         use crate::infrastructure::equivalences_data::EQUIVALENCES;
@@ -473,7 +531,8 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
                 .execute(&mut *tx).await?;
             let row = sqlx::query("SELECT id FROM signals WHERE internal_name = $1")
                 .bind(eq.internal_name)
-                .fetch_one(&mut *tx).await?;
+                .fetch_one(&mut *tx)
+                .await?;
             let signal_id: i64 = row.get(0);
             sqlx::query(
                 "INSERT INTO attribute_equivalences (signal_id, numeric_value, display_name) VALUES ($1, $2, $3)
@@ -489,12 +548,12 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
     }
 
     Ok(Repositories {
-        attr_repo:      DynAttrRepo::Postgres(PgDataAttrRepository::new(pool.clone())),
-        dict_repo:      DynDictRepo::Postgres(PgDictionaryRepository::new(pool.clone())),
+        attr_repo: DynAttrRepo::Postgres(PgDataAttrRepository::new(pool.clone())),
+        dict_repo: DynDictRepo::Postgres(PgDictionaryRepository::new(pool.clone())),
         telemetry_repo: DynTelemetryRepo::Postgres(PgTelemetryRepository::new(pool.clone())),
-        version_repo:   DynVersionRepo::Postgres(PgVersionRepository::new(pool.clone())),
-        equiv_repo:     DynEquivRepo::Postgres(PgAttributeEquivalenceRepository::new(pool.clone())),
-        db:             Some(DbPool::Postgres(pool)),
+        version_repo: DynVersionRepo::Postgres(PgVersionRepository::new(pool.clone())),
+        equiv_repo: DynEquivRepo::Postgres(PgAttributeEquivalenceRepository::new(pool.clone())),
+        db: Some(DbPool::Postgres(pool)),
     })
 }
 
@@ -502,7 +561,10 @@ async fn initialize_postgres(settings: &PostgresSettings, admin_password: &str) 
 //  MSSQL backend (new)
 // ═══════════════════════════════════════════════════════════════
 
-async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Result<Repositories, Box<dyn std::error::Error>> {
+async fn initialize_mssql(
+    settings: &MssqlSettings,
+    admin_password: &str,
+) -> Result<Repositories, Box<dyn std::error::Error>> {
     info!("  [DB] Connecting to SQL Server...");
 
     // Keep this aligned with the known-good standalone tiberius sample.
@@ -729,18 +791,38 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
         }
     }
 
+    // Ensure deterministic lookup by fingerprint (prevent duplicates).
+    {
+        let mut c = pool.get().await?;
+        let q = TibQuery::new(
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_versions_fingerprint' AND object_id = OBJECT_ID('versions'))
+             CREATE UNIQUE NONCLUSTERED INDEX idx_versions_fingerprint ON versions(fingerprint) WHERE fingerprint IS NOT NULL"
+        );
+        if let Err(e) = q.execute(&mut *c).await {
+            warn!("  [DB] Index creation warning: {}", e);
+        }
+    }
+
     // Seed default admin user
     {
         let mut conn = pool.get().await?;
         let q = TibQuery::new("SELECT COUNT(*) FROM users");
         let stream = q.query(&mut *conn).await?;
         let rows: Vec<TibRow> = stream.into_first_result().await?;
-        let user_count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+        let user_count = rows
+            .first()
+            .and_then(|r: &TibRow| r.get::<i32, _>(0))
+            .unwrap_or(0);
         if user_count == 0 {
-            let admin_password_hash = hash_password(admin_password)
-                .map_err(|e| io::Error::other(e.to_string()))?;
-            let mut qi = TibQuery::new("INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)");
-            qi.bind("admin"); qi.bind(admin_password_hash.as_str()); qi.bind("Administrator"); qi.bind("admin");
+            let admin_password_hash =
+                hash_password(admin_password).map_err(|e| io::Error::other(e.to_string()))?;
+            let mut qi = TibQuery::new(
+                "INSERT INTO users (username, password, full_name, role) VALUES (@P1, @P2, @P3, @P4)",
+            );
+            qi.bind("admin");
+            qi.bind(admin_password_hash.as_str());
+            qi.bind("Administrator");
+            qi.bind("admin");
             qi.execute(&mut *conn).await?;
             info!("  [DB] Default admin user created (username: admin)");
         }
@@ -752,14 +834,19 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
         let q = TibQuery::new("SELECT COUNT(*) FROM attribute_equivalences");
         let stream = q.query(&mut *conn).await?;
         let rows: Vec<TibRow> = stream.into_first_result().await?;
-        let count = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+        let count = rows
+            .first()
+            .and_then(|r: &TibRow| r.get::<i32, _>(0))
+            .unwrap_or(0);
 
         if count == 0 {
             use crate::infrastructure::equivalences_data::EQUIVALENCES;
             for eq in EQUIVALENCES {
                 let mut c = pool.get().await?;
 
-                let mut q1 = TibQuery::new("IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)");
+                let mut q1 = TibQuery::new(
+                    "IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)",
+                );
                 q1.bind(eq.internal_name);
                 q1.execute(&mut *c).await?;
 
@@ -767,16 +854,21 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
                 q2.bind(eq.internal_name);
                 let stream = q2.query(&mut *c).await?;
                 let rows: Vec<TibRow> = stream.into_first_result().await?;
-                let signal_id = rows.first().and_then(|r: &TibRow| r.get::<i32, _>(0)).unwrap_or(0);
+                let signal_id = rows
+                    .first()
+                    .and_then(|r: &TibRow| r.get::<i32, _>(0))
+                    .unwrap_or(0);
 
                 let mut q3 = TibQuery::new(
                     "MERGE attribute_equivalences AS tgt \
                      USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src \
                      ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value \
                      WHEN MATCHED THEN UPDATE SET display_name = @P3 \
-                     WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);"
+                     WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);",
                 );
-                q3.bind(signal_id); q3.bind(eq.numeric_value); q3.bind(eq.display_name);
+                q3.bind(signal_id);
+                q3.bind(eq.numeric_value);
+                q3.bind(eq.display_name);
                 q3.execute(&mut *c).await?;
             }
             info!("  [DB] Embedded equivalences initialized.");
@@ -784,11 +876,11 @@ async fn initialize_mssql(settings: &MssqlSettings, admin_password: &str) -> Res
     }
 
     Ok(Repositories {
-        attr_repo:      DynAttrRepo::Mssql(MssqlDataAttrRepository::new(pool.clone())),
-        dict_repo:      DynDictRepo::Mssql(MssqlDictionaryRepository::new(pool.clone())),
+        attr_repo: DynAttrRepo::Mssql(MssqlDataAttrRepository::new(pool.clone())),
+        dict_repo: DynDictRepo::Mssql(MssqlDictionaryRepository::new(pool.clone())),
         telemetry_repo: DynTelemetryRepo::Mssql(MssqlTelemetryRepository::new(pool.clone())),
-        version_repo:   DynVersionRepo::Mssql(MssqlVersionRepository::new(pool.clone())),
-        equiv_repo:     DynEquivRepo::Mssql(MssqlAttributeEquivalenceRepository::new(pool.clone())),
-        db:             Some(DbPool::Mssql(pool)),
+        version_repo: DynVersionRepo::Mssql(MssqlVersionRepository::new(pool.clone())),
+        equiv_repo: DynEquivRepo::Mssql(MssqlAttributeEquivalenceRepository::new(pool.clone())),
+        db: Some(DbPool::Mssql(pool)),
     })
 }

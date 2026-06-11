@@ -1,14 +1,16 @@
 //! HTTP REST API: Auth, Users, Equivalences, Telemetry history.
 //! Uses DbPool abstraction to support both SQLite and SQL Server.
 
-use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, HeaderMap};
-use axum::response::IntoResponse;
 use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::entities::TelemetryValue;
-use crate::infrastructure::auth::{decode_token, hash_password, issue_token, verify_password, JwtClaims};
+use crate::infrastructure::auth::{
+    JwtClaims, decode_token, hash_password, issue_token, verify_password,
+};
 use crate::infrastructure::db_pool::DbPool;
 
 // ─── Shared State ───────────────────────────────────────────────
@@ -28,21 +30,35 @@ async fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> 
     let token = auth.strip_prefix("Bearer ")?;
     let claims = decode_token(&state.jwt_secret, token).ok()?;
     let active = state.db.is_user_active(claims.user_id).await.ok()?;
-    if !active { return None; }
+    if !active {
+        return None;
+    }
     Some(claims)
 }
 
 fn unauthorized() -> impl IntoResponse {
-    (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response()
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "Unauthorized"})),
+    )
+        .into_response()
 }
 
 fn forbidden() -> impl IntoResponse {
-    (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden: insufficient role"}))).into_response()
+    (
+        StatusCode::FORBIDDEN,
+        Json(serde_json::json!({"error": "Forbidden: insufficient role"})),
+    )
+        .into_response()
 }
 
 fn db_err(msg: String) -> impl IntoResponse {
     tracing::error!("[API] Internal error: {}", msg);
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Internal server error"}))).into_response()
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({"error": "Internal server error"})),
+    )
+        .into_response()
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -89,17 +105,25 @@ pub async fn login(
             let created_at = row.get_string(7);
 
             if !active {
-                return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Account disabled"}))).into_response();
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({"error": "Account disabled"})),
+                )
+                    .into_response();
             }
             let password_check = verify_password(&password_hash, &body.password);
             if !password_check.verified {
-                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response();
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "Invalid credentials"})),
+                )
+                    .into_response();
             }
 
-            if password_check.needs_upgrade {
-                if let Ok(new_hash) = hash_password(&body.password) {
-                    let _ = state.db.update_user_password(id, &new_hash).await;
-                }
+            if password_check.needs_upgrade
+                && let Ok(new_hash) = hash_password(&body.password)
+            {
+                let _ = state.db.update_user_password(id, &new_hash).await;
             }
 
             let claims = JwtClaims {
@@ -120,29 +144,35 @@ pub async fn login(
                 Ok(token) => token,
                 Err(e) => return db_err(e.to_string()).into_response(),
             };
-            let user = UserDto { id, username: username.clone(), full_name: full_name.clone(), email: email.clone(), role: role.clone(), active, created_at };
+            let user = UserDto {
+                id,
+                username: username.clone(),
+                full_name: full_name.clone(),
+                email: email.clone(),
+                role: role.clone(),
+                active,
+                created_at,
+            };
 
             Json(LoginResponse { token, user }).into_response()
         }
-        Ok(None) => (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid credentials"}))).into_response(),
+        Ok(None) => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Invalid credentials"})),
+        )
+            .into_response(),
         Err(e) => db_err(e).into_response(),
     }
 }
 
 /// POST /api/auth/logout
-pub async fn logout(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn logout(State(state): State<ApiState>, headers: HeaderMap) -> impl IntoResponse {
     let _ = (state, headers);
     Json(serde_json::json!({"ok": true})).into_response()
 }
 
 /// GET /api/auth/me
-pub async fn get_me(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn get_me(State(state): State<ApiState>, headers: HeaderMap) -> impl IntoResponse {
     match get_claims(&headers, &state).await {
         Some(session) => Json(serde_json::json!({
             "user_id": session.user_id,
@@ -150,7 +180,8 @@ pub async fn get_me(
             "full_name": session.full_name,
             "email": session.email,
             "role": session.role,
-        })).into_response(),
+        }))
+        .into_response(),
         None => unauthorized().into_response(),
     }
 }
@@ -160,10 +191,7 @@ pub async fn get_me(
 // ═══════════════════════════════════════════════════════════════
 
 /// GET /api/users
-pub async fn list_users(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn list_users(State(state): State<ApiState>, headers: HeaderMap) -> impl IntoResponse {
     let session = match get_claims(&headers, &state).await {
         Some(s) => s,
         None => return unauthorized().into_response(),
@@ -174,15 +202,18 @@ pub async fn list_users(
 
     match state.db.list_users().await {
         Ok(rows) => {
-            let users: Vec<UserDto> = rows.into_iter().map(|row| UserDto {
-                id: row.get_i64(0),
-                username: row.get_string(1),
-                full_name: row.get_string(2),
-                email: row.get_string(3),
-                role: row.get_string(4),
-                active: row.get_bool(5),
-                created_at: row.get_string(6),
-            }).collect();
+            let users: Vec<UserDto> = rows
+                .into_iter()
+                .map(|row| UserDto {
+                    id: row.get_i64(0),
+                    username: row.get_string(1),
+                    full_name: row.get_string(2),
+                    email: row.get_string(3),
+                    role: row.get_string(4),
+                    active: row.get_bool(5),
+                    created_at: row.get_string(6),
+                })
+                .collect();
             Json(users).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -213,7 +244,11 @@ pub async fn create_user(
     }
 
     if !["admin", "operator", "viewer"].contains(&body.role.as_str()) {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid role. Must be: admin, operator, viewer"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid role. Must be: admin, operator, viewer"})),
+        )
+            .into_response();
     }
 
     let full_name = body.full_name.unwrap_or_default();
@@ -224,7 +259,17 @@ pub async fn create_user(
         Err(e) => return db_err(e.to_string()).into_response(),
     };
 
-    match state.db.insert_user(&body.username, &password_hash, &full_name, &email, &body.role).await {
+    match state
+        .db
+        .insert_user(
+            &body.username,
+            &password_hash,
+            &full_name,
+            &email,
+            &body.role,
+        )
+        .await
+    {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(serde_json::json!({"error": e}))).into_response(),
     }
@@ -263,7 +308,11 @@ pub async fn update_user(
             return forbidden().into_response();
         }
         if !["admin", "operator", "viewer"].contains(&role.as_str()) {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid role"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid role"})),
+            )
+                .into_response();
         }
     }
 
@@ -271,24 +320,40 @@ pub async fn update_user(
         return forbidden().into_response();
     }
 
+    let mut errors: Vec<String> = Vec::new();
+
     if let Some(ref pw) = body.password {
         let password_hash = match hash_password(pw) {
             Ok(hash) => hash,
             Err(e) => return db_err(e.to_string()).into_response(),
         };
-        let _ = state.db.update_user_password(user_id, &password_hash).await;
+        if let Err(e) = state.db.update_user_password(user_id, &password_hash).await {
+            errors.push(format!("password: {e}"));
+        }
     }
-    if let Some(ref fn_) = body.full_name {
-        let _ = state.db.update_user_full_name(user_id, fn_).await;
+    if let Some(ref fn_) = body.full_name
+        && let Err(e) = state.db.update_user_full_name(user_id, fn_).await
+    {
+        errors.push(format!("full_name: {e}"));
     }
-    if let Some(ref e) = body.email {
-        let _ = state.db.update_user_email(user_id, e).await;
+    if let Some(ref e) = body.email
+        && let Err(e) = state.db.update_user_email(user_id, e).await
+    {
+        errors.push(format!("email: {e}"));
     }
-    if let Some(ref role) = body.role {
-        let _ = state.db.update_user_role(user_id, role).await;
+    if let Some(ref role) = body.role
+        && let Err(e) = state.db.update_user_role(user_id, role).await
+    {
+        errors.push(format!("role: {e}"));
     }
-    if let Some(active) = body.active {
-        let _ = state.db.update_user_active(user_id, active).await;
+    if let Some(active) = body.active
+        && let Err(e) = state.db.update_user_active(user_id, active).await
+    {
+        errors.push(format!("active: {e}"));
+    }
+
+    if !errors.is_empty() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Partial update failure: {}", errors.join("; "))}))).into_response();
     }
 
     Json(serde_json::json!({"ok": true})).into_response()
@@ -309,10 +374,16 @@ pub async fn delete_user(
     }
     // Prevent self-deletion
     if session.user_id == user_id {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Cannot delete yourself"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Cannot delete yourself"})),
+        )
+            .into_response();
     }
 
-    let _ = state.db.delete_user(user_id).await;
+    if let Err(e) = state.db.delete_user(user_id).await {
+        return db_err(e.to_string()).into_response();
+    }
     Json(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -339,12 +410,15 @@ pub async fn list_equivalences(
 
     match state.db.list_equivalences().await {
         Ok(rows) => {
-            let eq: Vec<EquivalenceDto> = rows.into_iter().map(|row| EquivalenceDto {
-                signal_id: row.get_i64(0),
-                internal_name: row.get_string(1),
-                numeric_value: row.get_f64(2),
-                display_name: row.get_string(3),
-            }).collect();
+            let eq: Vec<EquivalenceDto> = rows
+                .into_iter()
+                .map(|row| EquivalenceDto {
+                    signal_id: row.get_i64(0),
+                    internal_name: row.get_string(1),
+                    numeric_value: row.get_f64(2),
+                    display_name: row.get_string(3),
+                })
+                .collect();
             Json(eq).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -374,7 +448,11 @@ pub async fn create_equivalence(
 
     match state.db.get_or_create_signal(&body.internal_name).await {
         Ok(sid) => {
-            match state.db.upsert_equivalence(sid, body.numeric_value, &body.display_name).await {
+            match state
+                .db
+                .upsert_equivalence(sid, body.numeric_value, &body.display_name)
+                .await
+            {
                 Ok(_) => Json(serde_json::json!({"ok": true, "signal_id": sid})).into_response(),
                 Err(e) => db_err(e).into_response(),
             }
@@ -417,10 +495,18 @@ pub async fn update_equivalence(
     }
 
     if body.display_name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El nombre mostrado no puede estar vacío"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "El nombre mostrado no puede estar vacío"})),
+        )
+            .into_response();
     }
 
-    match state.db.update_equivalence(body.signal_id, body.numeric_value, &body.display_name).await {
+    match state
+        .db
+        .update_equivalence(body.signal_id, body.numeric_value, &body.display_name)
+        .await
+    {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => db_err(e).into_response(),
     }
@@ -442,13 +528,30 @@ pub async fn delete_equivalence(
     }
 
     if body.deleted_by.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El nombre del usuario no puede estar vacío"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "El nombre del usuario no puede estar vacío"})),
+        )
+            .into_response();
     }
     if body.deletion_reason.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El motivo de eliminación no puede estar vacío"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "El motivo de eliminación no puede estar vacío"})),
+        )
+            .into_response();
     }
 
-    match state.db.delete_equivalence_with_log(params.signal_id, params.numeric_value, &body.deleted_by, &body.deletion_reason).await {
+    match state
+        .db
+        .delete_equivalence_with_log(
+            params.signal_id,
+            params.numeric_value,
+            &body.deleted_by,
+            &body.deletion_reason,
+        )
+        .await
+    {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => db_err(e).into_response(),
     }
@@ -495,7 +598,9 @@ pub struct HistoryQuery {
     #[serde(default = "default_limit")]
     pub limit: u32,
 }
-fn default_limit() -> u32 { 500 }
+fn default_limit() -> u32 {
+    500
+}
 
 #[derive(Deserialize)]
 pub struct ExportQuery {
@@ -503,7 +608,9 @@ pub struct ExportQuery {
     #[serde(default = "default_export_limit")]
     pub limit: u32,
 }
-fn default_export_limit() -> u32 { 5000 }
+fn default_export_limit() -> u32 {
+    5000
+}
 
 #[derive(Deserialize)]
 pub struct TherapyHistoryQuery {
@@ -523,11 +630,14 @@ pub struct TherapyExportQuery {
 pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
     match state.db.list_patients().await {
         Ok(rows) => {
-            let pts: Vec<PatientDto> = rows.into_iter().map(|row| PatientDto {
-                id: row.get_i64(0),
-                patient_id_str: row.get_string(1),
-                created_at: row.get_string(2),
-            }).collect();
+            let pts: Vec<PatientDto> = rows
+                .into_iter()
+                .map(|row| PatientDto {
+                    id: row.get_i64(0),
+                    patient_id_str: row.get_string(1),
+                    created_at: row.get_string(2),
+                })
+                .collect();
             Json(pts).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -543,8 +653,12 @@ pub struct TherapiesQuery {
     #[serde(default = "default_therapies_page_size")]
     pub page_size: i64,
 }
-fn default_therapies_page() -> i64 { 1 }
-fn default_therapies_page_size() -> i64 { 30 }
+fn default_therapies_page() -> i64 {
+    1
+}
+fn default_therapies_page_size() -> i64 {
+    30
+}
 
 #[derive(Serialize)]
 pub struct TherapiesResponse {
@@ -559,21 +673,39 @@ pub async fn list_therapies(
     State(state): State<ApiState>,
     Query(params): Query<TherapiesQuery>,
 ) -> impl IntoResponse {
-    match state.db.list_therapies(params.search.as_deref(), params.status.as_deref(), params.page, params.page_size).await {
+    match state
+        .db
+        .list_therapies(
+            params.search.as_deref(),
+            params.status.as_deref(),
+            params.page,
+            params.page_size,
+        )
+        .await
+    {
         Ok((rows, total)) => {
-            let therapies: Vec<TherapyDto> = rows.into_iter().map(|row| TherapyDto {
-                id: row.get_i64(0),
-                started_at: row.get_string(1),
-                ended_at: row.get_optional_string(2),
-                status: row.get_string(3),
-                patient_id: row.get_i64(4),
-                patient_id_str: row.get_string(5),
-                machine_id: row.get_i64(6),
-                serial_number: row.get_string(7),
-                software_version: row.get_string(8),
-                serial_session_id: row.get_optional_i64(9),
-            }).collect();
-            Json(TherapiesResponse { therapies, total, page: params.page, page_size: params.page_size }).into_response()
+            let therapies: Vec<TherapyDto> = rows
+                .into_iter()
+                .map(|row| TherapyDto {
+                    id: row.get_i64(0),
+                    started_at: row.get_string(1),
+                    ended_at: row.get_optional_string(2),
+                    status: row.get_string(3),
+                    patient_id: row.get_i64(4),
+                    patient_id_str: row.get_string(5),
+                    machine_id: row.get_i64(6),
+                    serial_number: row.get_string(7),
+                    software_version: row.get_string(8),
+                    serial_session_id: row.get_optional_i64(9),
+                })
+                .collect();
+            Json(TherapiesResponse {
+                therapies,
+                total,
+                page: params.page,
+                page_size: params.page_size,
+            })
+            .into_response()
         }
         Err(e) => db_err(e).into_response(),
     }
@@ -584,24 +716,31 @@ pub async fn patient_history(
     State(state): State<ApiState>,
     Query(params): Query<HistoryQuery>,
 ) -> impl IntoResponse {
-    match state.db.patient_history(&params.patient, params.limit).await {
+    match state
+        .db
+        .patient_history(&params.patient, params.limit)
+        .await
+    {
         Ok(rows) => {
-            let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
-                let phys_str = row.get_string(3);
-                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                    TelemetryValue::Number(n)
-                } else {
-                    TelemetryValue::String(phys_str)
-                };
-                HistoryRowDto {
-                    id: row.get_i64(0),
-                    timestamp: row.get_string(1),
-                    internal_name: row.get_string(2),
-                    physical_value,
-                    display_value: row.get_optional_string(4),
-                    unit: row.get_string(5),
-                }
-            }).collect();
+            let data: Vec<HistoryRowDto> = rows
+                .into_iter()
+                .map(|row| {
+                    let phys_str = row.get_string(3);
+                    let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                        TelemetryValue::Number(n)
+                    } else {
+                        TelemetryValue::String(phys_str)
+                    };
+                    HistoryRowDto {
+                        id: row.get_i64(0),
+                        timestamp: row.get_string(1),
+                        internal_name: row.get_string(2),
+                        physical_value,
+                        display_value: row.get_optional_string(4),
+                        unit: row.get_string(5),
+                    }
+                })
+                .collect();
             Json(data).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -613,24 +752,31 @@ pub async fn therapy_history(
     State(state): State<ApiState>,
     Query(params): Query<TherapyHistoryQuery>,
 ) -> impl IntoResponse {
-    match state.db.therapy_history(params.therapy_id, params.limit).await {
+    match state
+        .db
+        .therapy_history(params.therapy_id, params.limit)
+        .await
+    {
         Ok(rows) => {
-            let data: Vec<HistoryRowDto> = rows.into_iter().map(|row| {
-                let phys_str = row.get_string(3);
-                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                    TelemetryValue::Number(n)
-                } else {
-                    TelemetryValue::String(phys_str)
-                };
-                HistoryRowDto {
-                    id: row.get_i64(0),
-                    timestamp: row.get_string(1),
-                    internal_name: row.get_string(2),
-                    physical_value,
-                    display_value: row.get_optional_string(4),
-                    unit: row.get_string(5),
-                }
-            }).collect();
+            let data: Vec<HistoryRowDto> = rows
+                .into_iter()
+                .map(|row| {
+                    let phys_str = row.get_string(3);
+                    let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                        TelemetryValue::Number(n)
+                    } else {
+                        TelemetryValue::String(phys_str)
+                    };
+                    HistoryRowDto {
+                        id: row.get_i64(0),
+                        timestamp: row.get_string(1),
+                        internal_name: row.get_string(2),
+                        physical_value,
+                        display_value: row.get_optional_string(4),
+                        unit: row.get_string(5),
+                    }
+                })
+                .collect();
             Json(data).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -659,8 +805,13 @@ pub async fn export_csv(
                 let val_str = row.get_string(2);
                 let disp = row.get_optional_string(3).unwrap_or_default();
                 let unit = row.get_string(4);
-                csv.push_str(&format!("{},{},{},{},{}\n",
-                    ts.replace(',', ";"), name.replace(',', ";"), val_str, disp.replace(',', ";"), unit.replace(',', ";")
+                csv.push_str(&format!(
+                    "{},{},{},{},{}\n",
+                    ts.replace(',', ";"),
+                    name.replace(',', ";"),
+                    val_str,
+                    disp.replace(',', ";"),
+                    unit.replace(',', ";")
                 ));
             }
 
@@ -669,14 +820,22 @@ pub async fn export_csv(
                 StatusCode::OK,
                 [
                     ("Content-Type", "text/csv; charset=utf-8"),
-                    ("Content-Disposition", &format!("attachment; filename=\"{}\"", filename)),
+                    (
+                        "Content-Disposition",
+                        &format!("attachment; filename=\"{}\"", filename),
+                    ),
                 ],
                 csv,
-            ).into_response()
+            )
+                .into_response()
         }
         Err(e) => {
             tracing::error!("[API] Export error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({"error": "Internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -705,26 +864,33 @@ pub async fn get_session_readings(
     Path(session_id): Path<i64>,
     Query(params): Query<SessionReadingsQuery>,
 ) -> impl IntoResponse {
-    match state.db.list_session_readings(session_id, params.limit).await {
+    match state
+        .db
+        .list_session_readings(session_id, params.limit)
+        .await
+    {
         Ok(rows) => {
-            let data: Vec<SessionReadingDto> = rows.into_iter().map(|row| {
-                let phys_str = row.get_string(3);
-                let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
-                    TelemetryValue::Number(n)
-                } else {
-                    TelemetryValue::String(phys_str)
-                };
-                SessionReadingDto {
-                    id: row.get_i64(0),
-                    timestamp: row.get_string(1),
-                    internal_name: row.get_string(2),
-                    raw_value: row.get_i64(4),
-                    physical_value,
-                    unit: row.get_string(5),
-                    display_value: row.get_optional_string(6),
-                    phase: row.get_optional_string(7),
-                }
-            }).collect();
+            let data: Vec<SessionReadingDto> = rows
+                .into_iter()
+                .map(|row| {
+                    let phys_str = row.get_string(3);
+                    let physical_value = if let Ok(n) = phys_str.parse::<f64>() {
+                        TelemetryValue::Number(n)
+                    } else {
+                        TelemetryValue::String(phys_str)
+                    };
+                    SessionReadingDto {
+                        id: row.get_i64(0),
+                        timestamp: row.get_string(1),
+                        internal_name: row.get_string(2),
+                        raw_value: row.get_i64(4),
+                        physical_value,
+                        unit: row.get_string(5),
+                        display_value: row.get_optional_string(6),
+                        phase: row.get_optional_string(7),
+                    }
+                })
+                .collect();
             Json(data).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -744,7 +910,11 @@ pub async fn export_therapy_csv(
     if session.role != "admin" && session.role != "operator" {
         return forbidden().into_response();
     }
-    match state.db.export_therapy_history(params.therapy_id, params.limit).await {
+    match state
+        .db
+        .export_therapy_history(params.therapy_id, params.limit)
+        .await
+    {
         Ok(rows) => {
             let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
             for row in rows {
@@ -753,8 +923,13 @@ pub async fn export_therapy_csv(
                 let val_str = row.get_string(2);
                 let disp = row.get_optional_string(3).unwrap_or_default();
                 let unit = row.get_string(4);
-                csv.push_str(&format!("{},{},{},{},{}\n",
-                    ts.replace(',', ";"), name.replace(',', ";"), val_str, disp.replace(',', ";"), unit.replace(',', ";")
+                csv.push_str(&format!(
+                    "{},{},{},{},{}\n",
+                    ts.replace(',', ";"),
+                    name.replace(',', ";"),
+                    val_str,
+                    disp.replace(',', ";"),
+                    unit.replace(',', ";")
                 ));
             }
 
@@ -763,14 +938,22 @@ pub async fn export_therapy_csv(
                 StatusCode::OK,
                 [
                     ("Content-Type", "text/csv; charset=utf-8"),
-                    ("Content-Disposition", &format!("attachment; filename=\"{}\"", filename)),
+                    (
+                        "Content-Disposition",
+                        &format!("attachment; filename=\"{}\"", filename),
+                    ),
                 ],
                 csv,
-            ).into_response()
+            )
+                .into_response()
         }
         Err(e) => {
             tracing::error!("[API] Export error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Internal server error"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({"error": "Internal server error"})),
+            )
+                .into_response()
         }
     }
 }
@@ -780,10 +963,7 @@ pub async fn export_therapy_csv(
 // ═══════════════════════════════════════════════
 
 /// GET /api/serial/status
-pub async fn serial_status(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn serial_status(State(state): State<ApiState>, headers: HeaderMap) -> impl IntoResponse {
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized().into_response();
     }
@@ -878,15 +1058,26 @@ pub async fn list_comments(
 
     match state.db.list_therapy_comments(therapy_id).await {
         Ok(rows) => {
-            let comments: Vec<TherapyCommentDto> = rows.into_iter().map(|row| TherapyCommentDto {
-                id: row.get_i64(0),
-                therapy_id: row.get_i64(1),
-                author_name: row.get_string(2),
-                comment: row.get_string(3),
-                created_at: row.get_string(4),
-                deleted_at: if row.get_string(5).is_empty() { None } else { Some(row.get_string(5)) },
-                deletion_reason: if row.get_string(6).is_empty() { None } else { Some(row.get_string(6)) },
-            }).collect();
+            let comments: Vec<TherapyCommentDto> = rows
+                .into_iter()
+                .map(|row| TherapyCommentDto {
+                    id: row.get_i64(0),
+                    therapy_id: row.get_i64(1),
+                    author_name: row.get_string(2),
+                    comment: row.get_string(3),
+                    created_at: row.get_string(4),
+                    deleted_at: if row.get_string(5).is_empty() {
+                        None
+                    } else {
+                        Some(row.get_string(5))
+                    },
+                    deletion_reason: if row.get_string(6).is_empty() {
+                        None
+                    } else {
+                        Some(row.get_string(6))
+                    },
+                })
+                .collect();
             Json(comments).into_response()
         }
         Err(e) => db_err(e).into_response(),
@@ -909,13 +1100,25 @@ pub async fn create_comment(
     }
 
     if body.author_name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Author name cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Author name cannot be empty"})),
+        )
+            .into_response();
     }
     if body.comment.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Comment cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Comment cannot be empty"})),
+        )
+            .into_response();
     }
 
-    match state.db.create_therapy_comment(therapy_id, &body.author_name, &body.comment).await {
+    match state
+        .db
+        .create_therapy_comment(therapy_id, &body.author_name, &body.comment)
+        .await
+    {
         Ok(id) => {
             let comment = TherapyCommentDto {
                 id,
@@ -948,12 +1151,19 @@ pub async fn delete_comment(
     }
 
     if body.reason.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Deletion reason cannot be empty"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Deletion reason cannot be empty"})),
+        )
+            .into_response();
     }
 
-    match state.db.soft_delete_therapy_comment(comment_id, &body.reason).await {
+    match state
+        .db
+        .soft_delete_therapy_comment(comment_id, &body.reason)
+        .await
+    {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => db_err(e).into_response(),
     }
 }
-

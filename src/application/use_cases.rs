@@ -2,7 +2,7 @@
 //! Contains ALL business logic for the OMNI-ODI protocol.
 //! This module ONLY depends on domain traits — never on infrastructure.
 
-use byteorder::{ByteOrder, LittleEndian};
+use chrono::Local;
 use thiserror::Error;
 
 use crate::domain::device::{
@@ -104,10 +104,10 @@ where
                 "Response too short for versions".into(),
             ));
         }
-        let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+        let resp_cmd = u16::from_le_bytes(data[0..2].try_into().unwrap());
         if resp_cmd == CMD_CODE_NAK {
             let err_code = if data.len() >= 4 {
-                LittleEndian::read_u16(&data[2..4])
+                u16::from_le_bytes(data[2..4].try_into().unwrap())
             } else {
                 0
             };
@@ -126,7 +126,7 @@ where
             )));
         }
 
-        let language_id = LittleEndian::read_u16(&data[2..4]);
+        let language_id = u16::from_le_bytes(data[2..4].try_into().unwrap());
 
         let read_version = |offset: usize| -> String {
             let slice = &data[offset..offset + VERSION_STRING_LENGTH];
@@ -176,10 +176,10 @@ where
             return Err(UseCaseError::Protocol("Handles response too short".into()));
         }
 
-        let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+        let resp_cmd = u16::from_le_bytes(data[0..2].try_into().unwrap());
         if resp_cmd == CMD_CODE_NAK {
             let err_code = if data.len() >= 4 {
-                LittleEndian::read_u16(&data[2..4])
+                u16::from_le_bytes(data[2..4].try_into().unwrap())
             } else {
                 0
             };
@@ -188,7 +188,7 @@ where
             ));
         }
 
-        let num_handles = LittleEndian::read_u16(&data[2..4]) as usize;
+        let num_handles = u16::from_le_bytes(data[2..4].try_into().unwrap()) as usize;
         let expected_len = 4 + num_handles * 2;
 
         if data.len() < expected_len {
@@ -203,7 +203,7 @@ where
         let mut handles = Vec::with_capacity(num_handles);
         for i in 0..num_handles {
             let offset = 4 + i * 2;
-            let handle = LittleEndian::read_u16(&data[offset..offset + 2]);
+            let handle = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap());
             handles.push(handle);
         }
 
@@ -228,14 +228,15 @@ where
             handles.len()
         );
 
-        self.attr_repo.delete_by_fingerprint(version_fingerprint).await?;
+        self.attr_repo
+            .delete_by_fingerprint(version_fingerprint)
+            .await?;
         let mut attrs = Vec::with_capacity(handles.len());
         self.attr_cache.clear();
 
         for (i, &handle) in handles.iter().enumerate() {
             let data = {
-                let mut handle_bytes = [0u8; 2];
-                LittleEndian::write_u16(&mut handle_bytes, handle);
+                let handle_bytes = handle.to_le_bytes();
                 self.device
                     .request(CMD_CODE_GET_DATA_ATTRS, &handle_bytes)?
             };
@@ -246,10 +247,10 @@ where
                 ));
             }
 
-            let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+            let resp_cmd = u16::from_le_bytes(data[0..2].try_into().unwrap());
             if resp_cmd == CMD_CODE_NAK {
                 let err_code = if data.len() >= 4 {
-                    LittleEndian::read_u16(&data[2..4])
+                    u16::from_le_bytes(data[2..4].try_into().unwrap())
                 } else {
                     0
                 };
@@ -258,11 +259,11 @@ where
                 ));
             }
 
-            let data_type = DataType::from(LittleEndian::read_u16(&data[2..4]));
-            let size = LittleEndian::read_u16(&data[4..6]);
-            let factor = LittleEndian::read_u16(&data[6..8]);
-            let label_did = LittleEndian::read_u16(&data[8..10]);
-            let unit_did = LittleEndian::read_u16(&data[10..12]);
+            let data_type = DataType::from(u16::from_le_bytes(data[2..4].try_into().unwrap()));
+            let size = u16::from_le_bytes(data[4..6].try_into().unwrap());
+            let factor = u16::from_le_bytes(data[6..8].try_into().unwrap());
+            let label_did = u16::from_le_bytes(data[8..10].try_into().unwrap());
+            let unit_did = u16::from_le_bytes(data[10..12].try_into().unwrap());
 
             let name_bytes = &data[12..];
             let internal_name = if let Some(null_pos) = name_bytes.iter().position(|&b| b == 0) {
@@ -284,11 +285,11 @@ where
 
             self.attr_repo.save(&attr, version_fingerprint).await?;
 
-            let saved_attr = if let Some(sa) = self.attr_repo.get_by_handle(handle).await? {
-                sa
-            } else {
-                attr
-            };
+            let saved_attr = self.attr_repo.get_by_handle(handle).await?.ok_or_else(|| {
+                UseCaseError::Protocol(format!(
+                    "Saved attribute handle=0x{handle:04X} not found after insert"
+                ))
+            })?;
 
             println!(
                 "      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
@@ -323,15 +324,16 @@ where
         println!("  [4] CMD_GET_NEXT_DICT_STR (building dictionary)...");
 
         const MAX_DICT_ENTRIES: usize = 20_000;
-        self.dict_repo.delete_by_fingerprint(version_fingerprint).await?;
+        self.dict_repo
+            .delete_by_fingerprint(version_fingerprint)
+            .await?;
         let mut entries = Vec::new();
         self.dict_cache.clear();
         let mut prev_id: u16 = 0;
         let mut seen_ids = std::collections::HashSet::new();
 
         loop {
-            let mut id_bytes = [0u8; 2];
-            LittleEndian::write_u16(&mut id_bytes, prev_id);
+            let id_bytes = prev_id.to_le_bytes();
 
             let data = self.device.request(CMD_CODE_GET_NEXT_DICT_STR, &id_bytes)?;
 
@@ -341,10 +343,10 @@ where
                 ));
             }
 
-            let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+            let resp_cmd = u16::from_le_bytes(data[0..2].try_into().unwrap());
             if resp_cmd == CMD_CODE_NAK {
                 let err_code = if data.len() >= 4 {
-                    LittleEndian::read_u16(&data[2..4])
+                    u16::from_le_bytes(data[2..4].try_into().unwrap())
                 } else {
                     0
                 };
@@ -353,7 +355,7 @@ where
                 ));
             }
 
-            let dict_id = LittleEndian::read_u16(&data[2..4]);
+            let dict_id = u16::from_le_bytes(data[2..4].try_into().unwrap());
 
             // dict_id == 0 means end of dictionary
             if dict_id == 0 {
@@ -401,7 +403,9 @@ where
             prev_id = dict_id;
         }
 
-        self.dict_repo.save_batch(&entries, version_fingerprint).await?;
+        self.dict_repo
+            .save_batch(&entries, version_fingerprint)
+            .await?;
         println!("      Dictionary complete: {} entries", entries.len());
         Ok(entries)
     }
@@ -434,10 +438,10 @@ where
             return Err(UseCaseError::Protocol("Cyclical response too short".into()));
         }
 
-        let resp_cmd = LittleEndian::read_u16(&data[0..2]);
+        let resp_cmd = u16::from_le_bytes(data[0..2].try_into().unwrap());
         if resp_cmd == CMD_CODE_NAK {
             let err_code = if data.len() >= 4 {
-                LittleEndian::read_u16(&data[2..4])
+                u16::from_le_bytes(data[2..4].try_into().unwrap())
             } else {
                 0
             };
@@ -523,16 +527,16 @@ where
             };
 
             // Always extract patient ID regardless of whether it's included in the filtered readings
-            if attr.internal_name == "g_patient_id_str" {
-                if let TelemetryValue::String(ref s) = physical_value {
-                    patient_id_text = Some(s.clone());
-                }
+            if attr.internal_name == "g_patient_id_str"
+                && let TelemetryValue::String(ref s) = physical_value
+            {
+                patient_id_text = Some(s.clone());
             }
 
             if include_reading(attr) {
                 readings.push(TelemetryReading {
                     id: None,
-                    timestamp: String::new(), // DB sets CURRENT_TIMESTAMP
+                    timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                     therapy_id: None,
                     serial_session_id: None,
                     signal_id: attr.signal_id,
@@ -595,7 +599,13 @@ where
     ) -> Result<i64, UseCaseError> {
         Ok(self
             .telemetry_repo
-            .get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
+            .get_or_create_therapy(
+                patient_id,
+                machine_id,
+                started_at,
+                force_new,
+                serial_session_id,
+            )
             .await?)
     }
 
@@ -604,8 +614,15 @@ where
         Ok(())
     }
 
-    pub async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, UseCaseError> {
-        Ok(self.telemetry_repo.create_serial_session(machine_id, patient_id_str).await?)
+    pub async fn create_serial_session(
+        &self,
+        machine_id: i64,
+        patient_id_str: &str,
+    ) -> Result<i64, UseCaseError> {
+        Ok(self
+            .telemetry_repo
+            .create_serial_session(machine_id, patient_id_str)
+            .await?)
     }
 
     pub async fn end_serial_session(&self, session_id: i64) -> Result<(), UseCaseError> {
@@ -613,14 +630,28 @@ where
         Ok(())
     }
 
-    pub async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), UseCaseError> {
-        self.telemetry_repo.save_session_readings(session_id, readings, phase).await?;
+    pub async fn save_session_readings(
+        &self,
+        session_id: i64,
+        readings: &[TelemetryReading],
+        phase: &str,
+    ) -> Result<(), UseCaseError> {
+        self.telemetry_repo
+            .save_session_readings(session_id, readings, phase)
+            .await?;
         Ok(())
     }
 
     #[allow(dead_code)]
-    pub async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, UseCaseError> {
-        Ok(self.telemetry_repo.get_session_readings(session_id, limit).await?)
+    pub async fn get_session_readings(
+        &self,
+        session_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, UseCaseError> {
+        Ok(self
+            .telemetry_repo
+            .get_session_readings(session_id, limit)
+            .await?)
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -642,7 +673,7 @@ where
 
         if cached_version.is_some() {
             println!(
-                "  [i] Fingerprint {} match. Loading configuration from database...",
+                "  [i] Fingerprint {} matched in DB. Loading from database...",
                 fp
             );
             let loaded = self.load_configuration_from_db(&fp).await?;
@@ -651,19 +682,20 @@ where
                 self.get_data_handles().await?;
                 self.get_all_data_attributes(&fp).await?;
                 self.get_dictionary(&fp).await?;
+                self.version_repo.save(&version).await?;
+            } else {
+                println!("  [i] Cache hit. Skipping device fetch. Moving to cyclic loop.");
             }
         } else {
             println!(
-                "  [i] Fingerprint {} is new. Fetching from device...",
+                "  [i] Fingerprint {} is new (not found in DB). Fetching from device...",
                 fp
             );
             self.get_data_handles().await?;
             self.get_all_data_attributes(&fp).await?;
             self.get_dictionary(&fp).await?;
+            self.version_repo.save(&version).await?;
         }
-
-        // Persist the currently detected version only after successful initialization.
-        self.version_repo.save(&version).await?;
 
         // Always load the equivalence cache from DB after initialization,
         // regardless of whether we fetched from device or loaded from local cache.
@@ -723,7 +755,7 @@ where
         for eq in equivs {
             self.equiv_cache
                 .entry(eq.internal_name)
-                .or_insert_with(std::collections::HashMap::new)
+                .or_default()
                 .insert(eq.numeric_value.to_bits(), eq.display_name);
         }
         println!(
@@ -752,7 +784,7 @@ where
                 }
             }
             2 => {
-                let val = LittleEndian::read_u16(bytes);
+                let val = u16::from_le_bytes(bytes[..2].try_into().unwrap());
                 if is_signed {
                     val as i16 as i64
                 } else {
@@ -760,7 +792,7 @@ where
                 }
             }
             4 => {
-                let val = LittleEndian::read_u32(bytes);
+                let val = u32::from_le_bytes(bytes[..4].try_into().unwrap());
                 if is_signed {
                     val as i32 as i64
                 } else {
@@ -770,9 +802,11 @@ where
             _ => {
                 // For strings or unusual sizes, return first 2 bytes as u16
                 if size >= 2 {
-                    LittleEndian::read_u16(bytes) as i64
-                } else {
+                    u16::from_le_bytes(bytes[..2].try_into().unwrap()) as i64
+                } else if !bytes.is_empty() {
                     bytes[0] as i64
+                } else {
+                    0
                 }
             }
         }

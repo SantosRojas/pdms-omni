@@ -24,23 +24,32 @@ pub struct VersionInfo {
 }
 
 impl VersionInfo {
-    /// Returns a deterministic fingerprint based on all version fields.
+    /// Returns a fully deterministic fingerprint based on all version fields.
     /// Used as a cache key to identify a specific firmware/hardware combination.
+    /// Uses FNV-1a 64-bit over a canonical representation of the version data.
+    /// This is reproducible across process restarts (unlike DefaultHasher which uses RandomState).
     pub fn fingerprint(&self) -> String {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.system_sw.hash(&mut hasher);
-        self.dss_fw.hash(&mut hasher);
-        self.dss_hw.hash(&mut hasher);
-        self.css_fw.hash(&mut hasher);
-        self.css_hw.hash(&mut hasher);
-        self.pss_fw.hash(&mut hasher);
-        self.pss_hw.hash(&mut hasher);
-        self.language_id.hash(&mut hasher);
-        self.language1.hash(&mut hasher);
-        self.language2.hash(&mut hasher);
-        self.language3.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
+        let s = format!(
+            "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+            self.language_id,
+            self.system_sw,
+            self.dss_fw,
+            self.dss_hw,
+            self.css_fw,
+            self.css_hw,
+            self.pss_fw,
+            self.pss_hw,
+            self.language1,
+            self.language2,
+            self.language3,
+        );
+        // FNV-1a 64-bit — determinista, portable, sin dependencias externas
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for byte in s.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        format!("{:016x}", hash)
     }
 }
 

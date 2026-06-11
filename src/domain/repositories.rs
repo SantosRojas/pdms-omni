@@ -16,22 +16,40 @@ pub enum RepositoryError {
 
 /// Persists and retrieves data attribute definitions.
 pub trait DataAttributeRepository: Send + Sync {
-    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError>;
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError>;
+    async fn save(
+        &self,
+        attr: &DataAttribute,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError>;
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DataAttribute>, RepositoryError>;
     async fn get_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, RepositoryError>;
     async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError>;
 }
 
 /// Persists and retrieves dictionary entries (labels, units, etc.).
 pub trait DictionaryRepository: Send + Sync {
-    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError>;
-    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        entry: &DictionaryEntry,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError>;
+    async fn save_batch(
+        &self,
+        entries: &[DictionaryEntry],
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         for entry in entries {
             self.save(entry, version_fingerprint).await?;
         }
         Ok(())
     }
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError>;
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DictionaryEntry>, RepositoryError>;
     async fn get_by_id(&self, dict_id: u16) -> Result<Option<DictionaryEntry>, RepositoryError>;
     async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError>;
 }
@@ -84,22 +102,38 @@ pub trait TelemetryRepository: Send + Sync {
     async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError>;
 
     /// Creates a new serial session record.
-    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError>;
+    async fn create_serial_session(
+        &self,
+        machine_id: i64,
+        patient_id_str: &str,
+    ) -> Result<i64, RepositoryError>;
 
     /// Marks a serial session as ended.
     async fn end_serial_session(&self, session_id: i64) -> Result<(), RepositoryError>;
 
     /// Saves a batch of session (non-therapy) readings to session_readings table.
-    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError>;
+    async fn save_session_readings(
+        &self,
+        session_id: i64,
+        readings: &[TelemetryReading],
+        phase: &str,
+    ) -> Result<(), RepositoryError>;
 
     /// Retrieves session readings for a given serial session.
-    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError>;
+    async fn get_session_readings(
+        &self,
+        session_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError>;
 }
 
 /// Persists version information for caching/comparison.
 pub trait VersionRepository: Send + Sync {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError>;
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError>;
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<VersionInfo>, RepositoryError>;
 }
 
 /// CRUD for value equivalences (e.g., 0.0 = Preparation).

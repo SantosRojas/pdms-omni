@@ -1,8 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::{Error as PasswordError, SaltString};
 use argon2::password_hash::rand_core::OsRng;
+use argon2::password_hash::{Error as PasswordError, SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
@@ -36,8 +36,14 @@ pub fn hash_password(password: &str) -> Result<String, PasswordError> {
 pub fn verify_password(stored_password: &str, candidate: &str) -> PasswordCheck {
     if let Ok(parsed_hash) = PasswordHash::new(stored_password) {
         return match Argon2::default().verify_password(candidate.as_bytes(), &parsed_hash) {
-            Ok(()) => PasswordCheck { verified: true, needs_upgrade: false },
-            Err(_) => PasswordCheck { verified: false, needs_upgrade: false },
+            Ok(()) => PasswordCheck {
+                verified: true,
+                needs_upgrade: false,
+            },
+            Err(_) => PasswordCheck {
+                verified: false,
+                needs_upgrade: false,
+            },
         };
     }
 
@@ -48,7 +54,11 @@ pub fn verify_password(stored_password: &str, candidate: &str) -> PasswordCheck 
     }
 }
 
-pub fn issue_token(secret: &str, claims: &JwtClaims, ttl: Duration) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn issue_token(
+    secret: &str,
+    claims: &JwtClaims,
+    ttl: Duration,
+) -> Result<String, jsonwebtoken::errors::Error> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

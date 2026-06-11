@@ -232,7 +232,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
             <div>
               <div className="header-title">
                 <Activity color="var(--primary)" size={28} />
-                OMNI Tiempo Real
+                OMNI Monitor
               </div>
               <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
                 Selecciona una terapia para ver su historial y, si sigue activa, la telemetría en vivo.
@@ -320,7 +320,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               <div className="connection-status">
                 {connected && (therapyIsActive || isPreTherapy || therapyId === 'live') && data.info.g_trmt_main_state_set.value !== 'N/A' && (
                   <span className={`badge ${therapyIsActive ? 'badge-active' : 'badge-warning'}`}
-                        style={{ marginRight: '8px' }}>
+                    style={{ marginRight: '8px' }}>
                     {data.info.g_trmt_main_state_set.value}
                   </span>
                 )}

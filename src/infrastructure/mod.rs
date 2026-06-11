@@ -1,10 +1,10 @@
 pub mod auth;
 pub mod config;
 pub mod database;
-pub mod logger;
 pub mod db_pool;
 pub mod equivalences_data;
 pub mod http_api;
+pub mod logger;
 pub mod mssql_repository;
 pub mod null_repository;
 pub mod persistence_helpers;

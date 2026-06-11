@@ -24,7 +24,11 @@ pub enum DynAttrRepo {
 }
 
 impl DataAttributeRepository for DynAttrRepo {
-    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        attr: &DataAttribute,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         match self {
             Self::Sqlite(r) => r.save(attr, version_fingerprint).await,
             Self::Postgres(r) => r.save(attr, version_fingerprint).await,
@@ -32,7 +36,10 @@ impl DataAttributeRepository for DynAttrRepo {
             Self::Null(r) => r.save(attr, version_fingerprint).await,
         }
     }
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DataAttribute>, RepositoryError> {
         match self {
             Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
             Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,
@@ -68,7 +75,11 @@ pub enum DynDictRepo {
 }
 
 impl DictionaryRepository for DynDictRepo {
-    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        entry: &DictionaryEntry,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         match self {
             Self::Sqlite(r) => r.save(entry, version_fingerprint).await,
             Self::Postgres(r) => r.save(entry, version_fingerprint).await,
@@ -76,7 +87,11 @@ impl DictionaryRepository for DynDictRepo {
             Self::Null(r) => r.save(entry, version_fingerprint).await,
         }
     }
-    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save_batch(
+        &self,
+        entries: &[DictionaryEntry],
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         match self {
             Self::Sqlite(r) => r.save_batch(entries, version_fingerprint).await,
             Self::Postgres(r) => r.save_batch(entries, version_fingerprint).await,
@@ -92,7 +107,10 @@ impl DictionaryRepository for DynDictRepo {
             Self::Null(r) => r.get_by_id(dict_id).await,
         }
     }
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         match self {
             Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
             Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,
@@ -189,20 +207,44 @@ impl TelemetryRepository for DynTelemetryRepo {
     ) -> Result<i64, RepositoryError> {
         match self {
             Self::Sqlite(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
-                    .await
+                r.get_or_create_therapy(
+                    patient_id,
+                    machine_id,
+                    started_at,
+                    force_new,
+                    serial_session_id,
+                )
+                .await
             }
             Self::Postgres(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
-                    .await
+                r.get_or_create_therapy(
+                    patient_id,
+                    machine_id,
+                    started_at,
+                    force_new,
+                    serial_session_id,
+                )
+                .await
             }
             Self::Mssql(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
-                    .await
+                r.get_or_create_therapy(
+                    patient_id,
+                    machine_id,
+                    started_at,
+                    force_new,
+                    serial_session_id,
+                )
+                .await
             }
             Self::Null(r) => {
-                r.get_or_create_therapy(patient_id, machine_id, started_at, force_new, serial_session_id)
-                    .await
+                r.get_or_create_therapy(
+                    patient_id,
+                    machine_id,
+                    started_at,
+                    force_new,
+                    serial_session_id,
+                )
+                .await
             }
         }
     }
@@ -227,7 +269,11 @@ impl TelemetryRepository for DynTelemetryRepo {
         }
     }
 
-    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
+    async fn create_serial_session(
+        &self,
+        machine_id: i64,
+        patient_id_str: &str,
+    ) -> Result<i64, RepositoryError> {
         match self {
             Self::Sqlite(r) => r.create_serial_session(machine_id, patient_id_str).await,
             Self::Postgres(r) => r.create_serial_session(machine_id, patient_id_str).await,
@@ -245,7 +291,12 @@ impl TelemetryRepository for DynTelemetryRepo {
         }
     }
 
-    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError> {
+    async fn save_session_readings(
+        &self,
+        session_id: i64,
+        readings: &[TelemetryReading],
+        phase: &str,
+    ) -> Result<(), RepositoryError> {
         match self {
             Self::Sqlite(r) => r.save_session_readings(session_id, readings, phase).await,
             Self::Postgres(r) => r.save_session_readings(session_id, readings, phase).await,
@@ -254,7 +305,11 @@ impl TelemetryRepository for DynTelemetryRepo {
         }
     }
 
-    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_session_readings(
+        &self,
+        session_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         match self {
             Self::Sqlite(r) => r.get_session_readings(session_id, limit).await,
             Self::Postgres(r) => r.get_session_readings(session_id, limit).await,
@@ -282,7 +337,10 @@ impl VersionRepository for DynVersionRepo {
             Self::Null(r) => r.save(version).await,
         }
     }
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<VersionInfo>, RepositoryError> {
         match self {
             Self::Sqlite(r) => r.get_by_fingerprint(fingerprint).await,
             Self::Postgres(r) => r.get_by_fingerprint(fingerprint).await,

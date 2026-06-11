@@ -1,12 +1,12 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::routing::{get, post, put, delete};
 use axum::Router;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::routing::{delete, get, post, put};
 use serde::Serialize;
 use tokio::sync::broadcast;
-use tower_http::cors::{CorsLayer, Any, AllowOrigin};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing::{error, info};
 
@@ -19,6 +19,7 @@ pub struct WebSocketHub {
 }
 
 impl WebSocketHub {
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         addr: SocketAddr,
         db: Option<DbPool>,
@@ -39,7 +40,8 @@ impl WebSocketHub {
                     .allow_methods(Any)
                     .allow_headers(Any)
             } else {
-                let origins: Vec<_> = cors_origins.iter()
+                let origins: Vec<_> = cors_origins
+                    .iter()
                     .filter_map(|o| o.parse::<axum::http::HeaderValue>().ok())
                     .collect();
                 CorsLayer::new()
@@ -75,15 +77,18 @@ impl WebSocketHub {
 
                 Router::new()
                     .route("/ws", get(ws_route))
-                    .route("/api/status", get({
-                        let persistence_enabled = persistence_enabled;
-                        move || async move {
-                            axum::Json(serde_json::json!({
-                                "ok": true,
-                                "persistence_enabled": persistence_enabled
-                            }))
-                        }
-                    }))
+                    .route(
+                        "/api/status",
+                        get({
+                            let persistence_enabled = persistence_enabled;
+                            move || async move {
+                                axum::Json(serde_json::json!({
+                                    "ok": true,
+                                    "persistence_enabled": persistence_enabled
+                                }))
+                            }
+                        }),
+                    )
                     // Auth
                     .route("/api/auth/login", post(http_api::login))
                     .route("/api/auth/logout", post(http_api::logout))
@@ -110,11 +115,20 @@ impl WebSocketHub {
                     .route("/api/serial/start", post(http_api::serial_start))
                     .route("/api/serial/stop", post(http_api::serial_stop))
                     // Session Readings
-                    .route("/api/sessions/{id}/readings", get(http_api::get_session_readings))
+                    .route(
+                        "/api/sessions/{id}/readings",
+                        get(http_api::get_session_readings),
+                    )
                     // Therapy Comments
                     .route("/api/therapies/{id}/comments", get(http_api::list_comments))
-                    .route("/api/therapies/{id}/comments", post(http_api::create_comment))
-                    .route("/api/therapies/comments/{comment_id}", delete(http_api::delete_comment))
+                    .route(
+                        "/api/therapies/{id}/comments",
+                        post(http_api::create_comment),
+                    )
+                    .route(
+                        "/api/therapies/comments/{comment_id}",
+                        delete(http_api::delete_comment),
+                    )
                     .with_state(api_state)
                     .layer(cors)
                     .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
@@ -123,40 +137,55 @@ impl WebSocketHub {
                 // frontend knows the service is degraded (not a network error or 404).
                 Router::new()
                     .route("/ws", get(ws_route))
-                    .route("/api/status", get({
-                        let persistence_enabled = persistence_enabled;
-                        move || async move {
-                            axum::Json(serde_json::json!({
-                                "ok": true,
-                                "persistence_enabled": persistence_enabled,
-                                "message": "Base de datos no disponible"
-                            }))
-                        }
-                    }))
-                    .route("/api/auth/login",   post(|| async { db_unavailable() }))
-                    .route("/api/auth/logout",  post(|| async { db_unavailable() }))
-                    .route("/api/auth/me",       get(|| async { db_unavailable() }))
-                    .route("/api/users",         get(|| async { db_unavailable() }))
-                    .route("/api/users",        post(|| async { db_unavailable() }))
-                    .route("/api/users/{id}",    put(|| async { db_unavailable() }))
+                    .route(
+                        "/api/status",
+                        get({
+                            let persistence_enabled = persistence_enabled;
+                            move || async move {
+                                axum::Json(serde_json::json!({
+                                    "ok": true,
+                                    "persistence_enabled": persistence_enabled,
+                                    "message": "Base de datos no disponible"
+                                }))
+                            }
+                        }),
+                    )
+                    .route("/api/auth/login", post(|| async { db_unavailable() }))
+                    .route("/api/auth/logout", post(|| async { db_unavailable() }))
+                    .route("/api/auth/me", get(|| async { db_unavailable() }))
+                    .route("/api/users", get(|| async { db_unavailable() }))
+                    .route("/api/users", post(|| async { db_unavailable() }))
+                    .route("/api/users/{id}", put(|| async { db_unavailable() }))
                     .route("/api/users/{id}", delete(|| async { db_unavailable() }))
-                    .route("/api/equivalences",   get(|| async { db_unavailable() }))
-                    .route("/api/equivalences",  post(|| async { db_unavailable() }))
-                    .route("/api/equivalences",   put(|| async { db_unavailable() }))
+                    .route("/api/equivalences", get(|| async { db_unavailable() }))
+                    .route("/api/equivalences", post(|| async { db_unavailable() }))
+                    .route("/api/equivalences", put(|| async { db_unavailable() }))
                     .route("/api/equivalences", delete(|| async { db_unavailable() }))
-                    .route("/api/patients",       get(|| async { db_unavailable() }))
-                    .route("/api/therapies",      get(|| async { db_unavailable() }))
-                    .route("/api/history",        get(|| async { db_unavailable() }))
-                    .route("/api/export",         get(|| async { db_unavailable() }))
-                    .route("/api/therapy-history",get(|| async { db_unavailable() }))
+                    .route("/api/patients", get(|| async { db_unavailable() }))
+                    .route("/api/therapies", get(|| async { db_unavailable() }))
+                    .route("/api/history", get(|| async { db_unavailable() }))
+                    .route("/api/export", get(|| async { db_unavailable() }))
+                    .route("/api/therapy-history", get(|| async { db_unavailable() }))
                     .route("/api/therapy-export", get(|| async { db_unavailable() }))
-                    .route("/api/serial/status",  get(|| async { db_unavailable() }))
-                    .route("/api/serial/start",  post(|| async { db_unavailable() }))
-                    .route("/api/serial/stop",   post(|| async { db_unavailable() }))
-                    .route("/api/therapies/{id}/comments",              get(|| async { db_unavailable() }))
-                    .route("/api/therapies/{id}/comments",             post(|| async { db_unavailable() }))
-                    .route("/api/therapies/comments/{comment_id}",     delete(|| async { db_unavailable() }))
-                    .route("/api/sessions/{id}/readings",               get(|| async { db_unavailable() }))
+                    .route("/api/serial/status", get(|| async { db_unavailable() }))
+                    .route("/api/serial/start", post(|| async { db_unavailable() }))
+                    .route("/api/serial/stop", post(|| async { db_unavailable() }))
+                    .route(
+                        "/api/therapies/{id}/comments",
+                        get(|| async { db_unavailable() }),
+                    )
+                    .route(
+                        "/api/therapies/{id}/comments",
+                        post(|| async { db_unavailable() }),
+                    )
+                    .route(
+                        "/api/therapies/comments/{comment_id}",
+                        delete(|| async { db_unavailable() }),
+                    )
+                    .route(
+                        "/api/sessions/{id}/readings",
+                        get(|| async { db_unavailable() }),
+                    )
                     .layer(cors)
                     .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
             };
@@ -164,7 +193,7 @@ impl WebSocketHub {
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,
                 Err(e) => {
-                    error!("[WS] No se pudo abrir {}: {}", addr, e);
+                    error!("[WS] Failed to open {}: {}", addr, e);
                     return;
                 }
             };

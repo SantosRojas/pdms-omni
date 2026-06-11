@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{watch, Mutex};
-use serde::{Serialize, Deserialize};
+use tokio::sync::{Mutex, watch};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReaderCommand {
@@ -23,8 +23,19 @@ pub struct SerialReaderManager {
 }
 
 impl SerialReaderManager {
-    pub fn new(max_failures: u32, start_active: bool) -> (Self, watch::Receiver<ReaderCommand>, Arc<Mutex<SerialReaderStatus>>) {
-        let initial_status = if start_active { "Initializing" } else { "Stopped" };
+    pub fn new(
+        max_failures: u32,
+        start_active: bool,
+    ) -> (
+        Self,
+        watch::Receiver<ReaderCommand>,
+        Arc<Mutex<SerialReaderStatus>>,
+    ) {
+        let initial_status = if start_active {
+            "Initializing"
+        } else {
+            "Stopped"
+        };
         let state = Arc::new(Mutex::new(SerialReaderStatus {
             status: initial_status.to_string(),
             consecutive_failures: 0,
@@ -32,17 +43,23 @@ impl SerialReaderManager {
             data_warnings: 0,
             close_therapy_on_stop: true,
         }));
-        
+
         let initial_cmd = if start_active {
-            ReaderCommand::Start { id: chrono::Utc::now().timestamp_millis() as u64, new_therapy: false }
+            ReaderCommand::Start {
+                id: chrono::Utc::now().timestamp_millis() as u64,
+                new_therapy: false,
+            }
         } else {
             ReaderCommand::Stop
         };
-        
+
         let (cmd_tx, cmd_rx) = watch::channel(initial_cmd);
-        
+
         (
-            Self { cmd_tx, state: state.clone() },
+            Self {
+                cmd_tx,
+                state: state.clone(),
+            },
             cmd_rx,
             state,
         )

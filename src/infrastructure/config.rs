@@ -147,15 +147,16 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(5),
-            jwt_secret: env::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set in .env"),
+            jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set in .env"),
             jwt_expiration_hours: env::var("JWT_EXPIRATION_HOURS")
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(24),
-            admin_password: env::var("ADMIN_PASSWORD")
-                .expect("ADMIN_PASSWORD must be set in .env"),
-            cors_origins: parse_cors_origins(&env::var("CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:5173,http://localhost:9001".to_string())),
+            admin_password: env::var("ADMIN_PASSWORD").expect("ADMIN_PASSWORD must be set in .env"),
+            cors_origins: parse_cors_origins(
+                &env::var("CORS_ORIGINS")
+                    .unwrap_or_else(|_| "http://localhost:5173,http://localhost:9001".to_string()),
+            ),
             capture_mode,
             capture_handles: parse_handles_csv(&env::var("CAPTURE_HANDLES").unwrap_or_default()),
             capture_names: parse_names_csv(&env::var("CAPTURE_NAMES").unwrap_or_default()),
@@ -181,7 +182,11 @@ impl AppConfig {
                         .or_else(|| {
                             let cwd = std::env::current_dir().ok()?;
                             let from_cwd = cwd.join("dashboard").join("dist");
-                            if from_cwd.exists() { Some(from_cwd) } else { None }
+                            if from_cwd.exists() {
+                                Some(from_cwd)
+                            } else {
+                                None
+                            }
                         })
                         .map(|p| p.to_string_lossy().to_string())
                 }
@@ -276,7 +281,11 @@ fn parse_cors_origins(raw: &str) -> Vec<String> {
     raw.split(',')
         .filter_map(|s| {
             let token = s.trim();
-            if token.is_empty() { None } else { Some(token.to_string()) }
+            if token.is_empty() {
+                None
+            } else {
+                Some(token.to_string())
+            }
         })
         .collect()
 }

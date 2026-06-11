@@ -22,11 +22,18 @@ impl NullDataAttrRepository {
 }
 
 impl DataAttributeRepository for NullDataAttrRepository {
-    async fn save(&self, _attr: &DataAttribute, _version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        _attr: &DataAttribute,
+        _version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        _fingerprint: &str,
+    ) -> Result<Vec<DataAttribute>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -49,15 +56,26 @@ impl NullDictionaryRepository {
 }
 
 impl DictionaryRepository for NullDictionaryRepository {
-    async fn save(&self, _entry: &DictionaryEntry, _version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        _entry: &DictionaryEntry,
+        _version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn save_batch(&self, _entries: &[DictionaryEntry], _version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save_batch(
+        &self,
+        _entries: &[DictionaryEntry],
+        _version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        _fingerprint: &str,
+    ) -> Result<Vec<DictionaryEntry>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -96,11 +114,18 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(())
     }
 
-    async fn get_recent_readings(&self, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_recent_readings(
+        &self,
+        _limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         Ok(Vec::new())
     }
 
-    async fn get_or_create_machine(&self, _serial_number: &str, _software_version: &str) -> Result<i64, RepositoryError> {
+    async fn get_or_create_machine(
+        &self,
+        _serial_number: &str,
+        _software_version: &str,
+    ) -> Result<i64, RepositoryError> {
         Ok(1)
     }
 
@@ -125,7 +150,14 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(assigned)
     }
 
-    async fn get_or_create_therapy(&self, _patient_id: i64, _machine_id: i64, _started_at: &str, _force_new: bool, _serial_session_id: Option<i64>) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(
+        &self,
+        _patient_id: i64,
+        _machine_id: i64,
+        _started_at: &str,
+        _force_new: bool,
+        _serial_session_id: Option<i64>,
+    ) -> Result<i64, RepositoryError> {
         let mut next_therapy_id = self
             .next_therapy_id
             .lock()
@@ -135,7 +167,11 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(assigned)
     }
 
-    async fn get_therapy_history(&self, _therapy_id: i64, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_therapy_history(
+        &self,
+        _therapy_id: i64,
+        _limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -143,7 +179,11 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(())
     }
 
-    async fn create_serial_session(&self, _machine_id: i64, _patient_id_str: &str) -> Result<i64, RepositoryError> {
+    async fn create_serial_session(
+        &self,
+        _machine_id: i64,
+        _patient_id_str: &str,
+    ) -> Result<i64, RepositoryError> {
         Ok(1)
     }
 
@@ -151,11 +191,20 @@ impl TelemetryRepository for NullTelemetryRepository {
         Ok(())
     }
 
-    async fn save_session_readings(&self, _session_id: i64, _readings: &[TelemetryReading], _phase: &str) -> Result<(), RepositoryError> {
+    async fn save_session_readings(
+        &self,
+        _session_id: i64,
+        _readings: &[TelemetryReading],
+        _phase: &str,
+    ) -> Result<(), RepositoryError> {
         Ok(())
     }
 
-    async fn get_session_readings(&self, _session_id: i64, _limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_session_readings(
+        &self,
+        _session_id: i64,
+        _limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         Ok(Vec::new())
     }
 }
@@ -174,7 +223,10 @@ impl VersionRepository for NullVersionRepository {
         Ok(())
     }
 
-    async fn get_by_fingerprint(&self, _fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        _fingerprint: &str,
+    ) -> Result<Option<VersionInfo>, RepositoryError> {
         Ok(None)
     }
 }
@@ -197,7 +249,10 @@ impl AttributeEquivalenceRepository for NullAttributeEquivalenceRepository {
         Ok(())
     }
 
-    async fn get_by_internal_name(&self, _name: &str) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
+    async fn get_by_internal_name(
+        &self,
+        _name: &str,
+    ) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
         Ok(Vec::new())
     }
 

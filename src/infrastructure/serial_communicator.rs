@@ -7,8 +7,7 @@
 //! msg_length includes the entire frame (header + data + crc).
 //! CRC is calculated over (msg_length - 2) bytes (everything except the CRC itself).
 
-use crate::domain::device::{DeviceCommunicator, DeviceError, PC_TREND_VIEWER, DSS_APP};
-use byteorder::{LittleEndian, WriteBytesExt, ByteOrder};
+use crate::domain::device::{DSS_APP, DeviceCommunicator, DeviceError, PC_TREND_VIEWER};
 use serialport::SerialPort;
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -68,14 +67,14 @@ impl SerialDeviceCommunicator {
         let process_len = n_bytes - 2;
 
         let num_words = (process_len & 0xFFFE) / 2;
-        let is_odd = process_len % 2 != 0;
+        let is_odd = !process_len.is_multiple_of(2);
 
         for i in 0..num_words {
             let hbit = crc & 0x8000;
             if hbit != 0 {
                 crc ^= CCITT16_POLYNOM;
             }
-            let data = LittleEndian::read_u16(&buf[i * 2..i * 2 + 2]);
+            let data = u16::from_le_bytes(buf[i * 2..i * 2 + 2].try_into().unwrap());
             crc ^= data;
         }
 
@@ -84,7 +83,9 @@ impl SerialDeviceCommunicator {
             if hbit != 0 {
                 crc ^= CCITT16_POLYNOM;
             }
-            let data = LittleEndian::read_u16(&buf[num_words * 2..num_words * 2 + 2]) & 0x00FF;
+            let data =
+                u16::from_le_bytes(buf[num_words * 2..num_words * 2 + 2].try_into().unwrap())
+                    & 0x00FF;
             crc ^= data;
         }
 
@@ -99,20 +100,20 @@ impl SerialDeviceCommunicator {
         let msg_length = (4 + data_part.len() + 2) as u16;
 
         let mut frame = Vec::with_capacity(msg_length as usize);
-        frame.write_u16::<LittleEndian>(msg_length).unwrap();
+        frame.extend_from_slice(&msg_length.to_le_bytes());
         frame.push(self.config.src_addr);
         frame.push(self.config.dst_addr);
         frame.extend_from_slice(data_part);
 
         // Append placeholder for CRC (2 bytes)
-        frame.write_u16::<LittleEndian>(0x0000).unwrap();
+        frame.extend_from_slice(&0x0000u16.to_le_bytes());
 
         // Calculate CRC over the whole frame (the function itself subtracts 2)
         let crc = Self::calculate_crc(&frame);
 
         // Write the actual CRC at the end
         let crc_offset = frame.len() - 2;
-        LittleEndian::write_u16(&mut frame[crc_offset..], crc);
+        frame[crc_offset..crc_offset + 2].copy_from_slice(&crc.to_le_bytes());
 
         frame
     }
@@ -122,34 +123,33 @@ impl SerialDeviceCommunicator {
     fn read_frame(&mut self) -> Result<Vec<u8>, DeviceError> {
         // 1. Read the first 2 bytes to get message length
         let mut len_buf = [0u8; 2];
-        self.port.read_exact(&mut len_buf)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::TimedOut {
-                    DeviceError::Timeout
-                } else {
-                    DeviceError::IoError(e.to_string())
-                }
-            })?;
+        self.port.read_exact(&mut len_buf).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::TimedOut {
+                DeviceError::Timeout
+            } else {
+                DeviceError::IoError(e.to_string())
+            }
+        })?;
 
-        let msg_length = LittleEndian::read_u16(&len_buf) as usize;
+        let msg_length = u16::from_le_bytes(len_buf) as usize;
         if msg_length < 6 {
             // Minimum: length(2) + src(1) + dst(1) + cmd(2) ... but we already read 2
             return Err(DeviceError::ParseError(format!(
-                "Invalid message length: {}", msg_length
+                "Invalid message length: {}",
+                msg_length
             )));
         }
 
         // 2. Read the remaining bytes
         let remaining = msg_length - 2;
         let mut rest_buf = vec![0u8; remaining];
-        self.port.read_exact(&mut rest_buf)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::TimedOut {
-                    DeviceError::Timeout
-                } else {
-                    DeviceError::IoError(e.to_string())
-                }
-            })?;
+        self.port.read_exact(&mut rest_buf).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::TimedOut {
+                DeviceError::Timeout
+            } else {
+                DeviceError::IoError(e.to_string())
+            }
+        })?;
 
         // 3. Reconstruct full frame for CRC check
         let mut full_frame = Vec::with_capacity(msg_length);
@@ -157,7 +157,8 @@ impl SerialDeviceCommunicator {
         full_frame.extend_from_slice(&rest_buf);
 
         // 4. Verify CRC
-        let received_crc = LittleEndian::read_u16(&full_frame[msg_length - 2..msg_length]);
+        let received_crc =
+            u16::from_le_bytes(full_frame[msg_length - 2..msg_length].try_into().unwrap());
         let calculated_crc = Self::calculate_crc(&full_frame);
 
         if received_crc != calculated_crc {
@@ -176,13 +177,15 @@ impl DeviceCommunicator for SerialDeviceCommunicator {
     fn send_command(&mut self, cmd: u16, data: &[u8]) -> Result<(), DeviceError> {
         // Build data_part: [cmd_code: u16][data...]
         let mut data_part = Vec::with_capacity(2 + data.len());
-        data_part.write_u16::<LittleEndian>(cmd).unwrap();
+        data_part.extend_from_slice(&cmd.to_le_bytes());
         data_part.extend_from_slice(data);
 
         let frame = self.build_frame(&data_part);
-        self.port.write_all(&frame)
+        self.port
+            .write_all(&frame)
             .map_err(|e| DeviceError::IoError(e.to_string()))?;
-        self.port.flush()
+        self.port
+            .flush()
             .map_err(|e| DeviceError::IoError(e.to_string()))?;
 
         Ok(())

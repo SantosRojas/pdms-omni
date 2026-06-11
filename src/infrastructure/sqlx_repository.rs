@@ -1,7 +1,7 @@
 //! SQLx implementations of all domain repository traits.
 //! Supports async execution and can be adapted to AnyPool, PostgresPool, or MssqlPool.
 
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
 
 use crate::domain::entities::{
     AttributeEquivalence, DataAttribute, DataType, DictionaryEntry, TelemetryReading, VersionInfo,
@@ -30,7 +30,7 @@ async fn get_or_create_signal_id(pool: &SqlitePool, name: &str) -> Result<i64, R
         .fetch_one(pool)
         .await
         .map_err(map_db_err)?;
-    
+
     Ok(row.get(0))
 }
 
@@ -49,9 +49,13 @@ impl SqlxDataAttrRepository {
 }
 
 impl DataAttributeRepository for SqlxDataAttrRepository {
-    async fn save(&self, attr: &DataAttribute, version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        attr: &DataAttribute,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         let signal_id = get_or_create_signal_id(&self.pool, &attr.internal_name).await?;
-            
+
         sqlx::query(
             "INSERT OR REPLACE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
@@ -70,7 +74,10 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
         Ok(())
     }
 
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DataAttribute>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DataAttribute>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT d.handle, d.data_type, d.size, d.conversion_factor, d.label_did, d.unit_did, d.signal_id, s.internal_name 
              FROM data_attributes d
@@ -83,16 +90,19 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|row| DataAttribute {
-            handle: row.get::<u16, _>(0),
-            data_type: DataType::from(row.get::<u16, _>(1)),
-            size: row.get::<u16, _>(2),
-            conversion_factor: row.get::<u16, _>(3),
-            label_did: row.get::<u16, _>(4),
-            unit_did: row.get::<u16, _>(5),
-            signal_id: row.get::<i64, _>(6),
-            internal_name: row.get::<String, _>(7),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| DataAttribute {
+                handle: row.get::<u16, _>(0),
+                data_type: DataType::from(row.get::<u16, _>(1)),
+                size: row.get::<u16, _>(2),
+                conversion_factor: row.get::<u16, _>(3),
+                label_did: row.get::<u16, _>(4),
+                unit_did: row.get::<u16, _>(5),
+                signal_id: row.get::<i64, _>(6),
+                internal_name: row.get::<String, _>(7),
+            })
+            .collect())
     }
 
     async fn get_by_handle(&self, handle: u16) -> Result<Option<DataAttribute>, RepositoryError> {
@@ -144,7 +154,11 @@ impl SqlxDictionaryRepository {
 }
 
 impl DictionaryRepository for SqlxDictionaryRepository {
-    async fn save(&self, entry: &DictionaryEntry, version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save(
+        &self,
+        entry: &DictionaryEntry,
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
             .bind(entry.dict_id)
             .bind(&entry.text)
@@ -155,7 +169,11 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         Ok(())
     }
 
-    async fn save_batch(&self, entries: &[DictionaryEntry], version_fingerprint: &str) -> Result<(), RepositoryError> {
+    async fn save_batch(
+        &self,
+        entries: &[DictionaryEntry],
+        version_fingerprint: &str,
+    ) -> Result<(), RepositoryError> {
         if entries.is_empty() {
             return Ok(());
         }
@@ -188,17 +206,25 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         }))
     }
 
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Vec<DictionaryEntry>, RepositoryError> {
-        let rows = sqlx::query("SELECT dict_id, text FROM dictionary WHERE version_fingerprint = ?1 ORDER BY dict_id")
-            .bind(fingerprint)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_db_err)?;
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Vec<DictionaryEntry>, RepositoryError> {
+        let rows = sqlx::query(
+            "SELECT dict_id, text FROM dictionary WHERE version_fingerprint = ?1 ORDER BY dict_id",
+        )
+        .bind(fingerprint)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|r| DictionaryEntry {
-            dict_id: r.get(0),
-            text: r.get(1),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| DictionaryEntry {
+                dict_id: r.get(0),
+                text: r.get(1),
+            })
+            .collect())
     }
 
     async fn delete_by_fingerprint(&self, fingerprint: &str) -> Result<(), RepositoryError> {
@@ -227,14 +253,14 @@ impl SqlxTelemetryRepository {
 
 impl TelemetryRepository for SqlxTelemetryRepository {
     async fn save(&self, reading: &TelemetryReading) -> Result<(), RepositoryError> {
-        // SQLite uses dynamic typing, but sqlx forces us to bind a specific rust type. 
+        // SQLite uses dynamic typing, but sqlx forces us to bind a specific rust type.
         // We can just bind the exact type. To keep it simple, we store numerical as REAL and string as TEXT.
         // Wait, for SQLite, we can just bind both as TEXT or bind the one that has value,
         let physical_value = telemetry_value_to_storage(&reading.physical_value);
 
         sqlx::query(
             "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
-             VALUES (?1, ?2, ?3, ?4, ?5)"
+             VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(reading.therapy_id)
         .bind(reading.signal_id)
@@ -249,13 +275,13 @@ impl TelemetryRepository for SqlxTelemetryRepository {
 
     async fn save_batch(&self, readings: &[TelemetryReading]) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(map_db_err)?;
-        
+
         for reading in readings {
             let physical_value = telemetry_value_to_storage(&reading.physical_value);
-            
+
             sqlx::query(
                 "INSERT INTO telemetry (therapy_id, signal_id, raw_value, physical_value, unit)
-                 VALUES (?1, ?2, ?3, ?4, ?5)"
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             )
             .bind(reading.therapy_id)
             .bind(reading.signal_id)
@@ -266,12 +292,15 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             .await
             .map_err(map_db_err)?;
         }
-        
+
         tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 
-    async fn get_recent_readings(&self, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_recent_readings(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let rows = sqlx::query(&format!(
             "SELECT t.id, t.timestamp, t.therapy_id, t.signal_id, s.internal_name, t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
@@ -285,36 +314,47 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|row| {
-            build_telemetry_reading(
-                Some(row.get(0)),
-                row.get(1),
-                row.get(2),
-                row.get(3),
-                row.get(4),
-                row.get(5),
-                row.get::<String, _>(6),
-                row.get(7),
-                row.get(8),
-                None,
-            )
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                build_telemetry_reading(
+                    Some(row.get(0)),
+                    row.get(1),
+                    row.get(2),
+                    row.get(3),
+                    row.get(4),
+                    row.get(5),
+                    row.get::<String, _>(6),
+                    row.get(7),
+                    row.get(8),
+                    None,
+                )
+            })
+            .collect())
     }
 
-    async fn get_or_create_machine(&self, serial_number: &str, software_version: &str) -> Result<i64, RepositoryError> {
-        sqlx::query("INSERT OR IGNORE INTO machines (serial_number, software_version) VALUES (?1, ?2)")
-            .bind(serial_number)
-            .bind(software_version)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_err)?;
+    async fn get_or_create_machine(
+        &self,
+        serial_number: &str,
+        software_version: &str,
+    ) -> Result<i64, RepositoryError> {
+        sqlx::query(
+            "INSERT OR IGNORE INTO machines (serial_number, software_version) VALUES (?1, ?2)",
+        )
+        .bind(serial_number)
+        .bind(software_version)
+        .execute(&self.pool)
+        .await
+        .map_err(map_db_err)?;
 
-        let row = sqlx::query("SELECT id FROM machines WHERE serial_number = ?1 AND software_version = ?2")
-            .bind(serial_number)
-            .bind(software_version)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_db_err)?;
+        let row = sqlx::query(
+            "SELECT id FROM machines WHERE serial_number = ?1 AND software_version = ?2",
+        )
+        .bind(serial_number)
+        .bind(software_version)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_err)?;
 
         Ok(row.get(0))
     }
@@ -335,7 +375,14 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(row.get(0))
     }
 
-    async fn get_or_create_therapy(&self, patient_id: i64, machine_id: i64, started_at: &str, force_new: bool, serial_session_id: Option<i64>) -> Result<i64, RepositoryError> {
+    async fn get_or_create_therapy(
+        &self,
+        patient_id: i64,
+        machine_id: i64,
+        started_at: &str,
+        force_new: bool,
+        serial_session_id: Option<i64>,
+    ) -> Result<i64, RepositoryError> {
         if force_new {
             sqlx::query("UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE patient_id = ?1 AND machine_id = ?2 AND ended_at IS NULL")
                 .bind(patient_id)
@@ -370,7 +417,11 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(row)
     }
 
-    async fn get_therapy_history(&self, therapy_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_therapy_history(
+        &self,
+        therapy_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let rows = sqlx::query(&format!(
             "SELECT t.id, t.timestamp, t.therapy_id, t.signal_id, s.internal_name, t.raw_value, CAST(t.physical_value AS TEXT), t.unit, e.display_name
              FROM telemetry t
@@ -387,20 +438,23 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|row| {
-            build_telemetry_reading(
-                Some(row.get(0)),
-                row.get(1),
-                row.get(2),
-                row.get(3),
-                row.get(4),
-                row.get(5),
-                row.get::<String, _>(6),
-                row.get(7),
-                row.get(8),
-                None,
-            )
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                build_telemetry_reading(
+                    Some(row.get(0)),
+                    row.get(1),
+                    row.get(2),
+                    row.get(3),
+                    row.get(4),
+                    row.get(5),
+                    row.get::<String, _>(6),
+                    row.get(7),
+                    row.get(8),
+                    None,
+                )
+            })
+            .collect())
     }
 
     async fn set_therapy_end(&self, therapy_id: i64) -> Result<(), RepositoryError> {
@@ -412,7 +466,11 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(())
     }
 
-    async fn create_serial_session(&self, machine_id: i64, patient_id_str: &str) -> Result<i64, RepositoryError> {
+    async fn create_serial_session(
+        &self,
+        machine_id: i64,
+        patient_id_str: &str,
+    ) -> Result<i64, RepositoryError> {
         sqlx::query("INSERT INTO serial_sessions (machine_id, patient_id_str) VALUES (?1, ?2)")
             .bind(machine_id)
             .bind(patient_id_str)
@@ -436,7 +494,12 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(())
     }
 
-    async fn save_session_readings(&self, session_id: i64, readings: &[TelemetryReading], phase: &str) -> Result<(), RepositoryError> {
+    async fn save_session_readings(
+        &self,
+        session_id: i64,
+        readings: &[TelemetryReading],
+        phase: &str,
+    ) -> Result<(), RepositoryError> {
         for reading in readings {
             let physical_value = telemetry_value_to_storage(&reading.physical_value);
             sqlx::query(
@@ -457,7 +520,11 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         Ok(())
     }
 
-    async fn get_session_readings(&self, session_id: i64, limit: u32) -> Result<Vec<TelemetryReading>, RepositoryError> {
+    async fn get_session_readings(
+        &self,
+        session_id: i64,
+        limit: u32,
+    ) -> Result<Vec<TelemetryReading>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT sr.id, sr.timestamp, NULL, sr.serial_session_id, s.internal_name, sr.raw_value, CAST(sr.physical_value AS TEXT), sr.unit, sr.display_value
              FROM session_readings sr
@@ -471,20 +538,23 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|row| {
-            build_telemetry_reading(
-                Some(row.get(0)),
-                row.get(1),
-                row.get::<Option<i64>, _>(2),
-                row.get::<i64, _>(3),
-                row.get::<String, _>(4),
-                row.get::<i64, _>(5),
-                row.get::<String, _>(6),
-                row.get::<String, _>(7),
-                row.get::<Option<String>, _>(8),
-                Some(session_id),
-            )
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                build_telemetry_reading(
+                    Some(row.get(0)),
+                    row.get(1),
+                    row.get::<Option<i64>, _>(2),
+                    row.get::<i64, _>(3),
+                    row.get::<String, _>(4),
+                    row.get::<i64, _>(5),
+                    row.get::<String, _>(6),
+                    row.get::<String, _>(7),
+                    row.get::<Option<String>, _>(8),
+                    Some(session_id),
+                )
+            })
+            .collect())
     }
 }
 
@@ -507,7 +577,13 @@ impl VersionRepository for SqlxVersionRepository {
         let fp = version.fingerprint();
         sqlx::query(
             "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(fingerprint) DO UPDATE SET
+                 language_id=excluded.language_id, system_sw=excluded.system_sw,
+                 dss_fw=excluded.dss_fw, dss_hw=excluded.dss_hw,
+                 css_fw=excluded.css_fw, css_hw=excluded.css_hw,
+                 pss_fw=excluded.pss_fw, pss_hw=excluded.pss_hw,
+                 lang1=excluded.lang1, lang2=excluded.lang2, lang3=excluded.lang3"
         )
         .bind(&fp)
         .bind(version.language_id)
@@ -527,7 +603,10 @@ impl VersionRepository for SqlxVersionRepository {
         Ok(())
     }
 
-    async fn get_by_fingerprint(&self, fingerprint: &str) -> Result<Option<VersionInfo>, RepositoryError> {
+    async fn get_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<VersionInfo>, RepositoryError> {
         let row = sqlx::query(
             "SELECT language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3
              FROM versions WHERE fingerprint = ?1 ORDER BY id DESC LIMIT 1"
@@ -573,7 +652,7 @@ impl AttributeEquivalenceRepository for SqlxAttributeEquivalenceRepository {
 
         sqlx::query(
             "INSERT OR REPLACE INTO attribute_equivalences (signal_id, numeric_value, display_name)
-             VALUES (?1, ?2, ?3)"
+             VALUES (?1, ?2, ?3)",
         )
         .bind(signal_id)
         .bind(equiv.numeric_value)
@@ -592,7 +671,7 @@ impl AttributeEquivalenceRepository for SqlxAttributeEquivalenceRepository {
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(map_db_err)?;
-            
+
             let sig_id: i64 = match sig_id_row {
                 Some(r) => r.get(0),
                 None => {
@@ -625,39 +704,48 @@ impl AttributeEquivalenceRepository for SqlxAttributeEquivalenceRepository {
         Ok(())
     }
 
-    async fn get_by_internal_name(&self, name: &str) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
+    async fn get_by_internal_name(
+        &self,
+        name: &str,
+    ) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT s.internal_name, e.numeric_value, e.display_name 
              FROM attribute_equivalences e
              JOIN signals s ON e.signal_id = s.id
-             WHERE s.internal_name = ?1"
+             WHERE s.internal_name = ?1",
         )
         .bind(name)
         .fetch_all(&self.pool)
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|r| AttributeEquivalence {
-            internal_name: r.get(0),
-            numeric_value: r.get(1),
-            display_name: r.get(2),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| AttributeEquivalence {
+                internal_name: r.get(0),
+                numeric_value: r.get(1),
+                display_name: r.get(2),
+            })
+            .collect())
     }
 
     async fn get_all(&self) -> Result<Vec<AttributeEquivalence>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT s.internal_name, e.numeric_value, e.display_name 
              FROM attribute_equivalences e
-             JOIN signals s ON e.signal_id = s.id"
+             JOIN signals s ON e.signal_id = s.id",
         )
         .fetch_all(&self.pool)
         .await
         .map_err(map_db_err)?;
 
-        Ok(rows.into_iter().map(|r| AttributeEquivalence {
-            internal_name: r.get(0),
-            numeric_value: r.get(1),
-            display_name: r.get(2),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| AttributeEquivalence {
+                internal_name: r.get(0),
+                numeric_value: r.get(1),
+                display_name: r.get(2),
+            })
+            .collect())
     }
 }

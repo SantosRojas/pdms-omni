@@ -72,7 +72,10 @@ where
         match interactor.initialize().await {
             Ok(version) => return Ok(version),
             Err(e) => {
-                error!("[Device] Inicialización fallida (intento {}/{}): {}", attempt, max_attempts, e);
+                error!(
+                    "[Device] Inicialización fallida (intento {}/{}): {}",
+                    attempt, max_attempts, e
+                );
                 if attempt < max_attempts {
                     info!("[Device] Reintentando en {}s...", interval_secs);
                     tokio::time::sleep(Duration::from_secs(interval_secs)).await;
@@ -106,7 +109,7 @@ fn run_reader_session_blocking(
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .expect("[Serial] No se pudo crear el runtime single-thread");
+        .expect("[Serial] Failed to create single-thread runtime");
 
     rt.block_on(run_reader_session(
         &config,
@@ -150,7 +153,7 @@ async fn run_reader_session(
     let device = match SerialDeviceCommunicator::new(serial_config) {
         Ok(dev) => dev,
         Err(err) => {
-            error!("[Serial] No se pudo abrir el puerto: {}", err);
+            error!("[Serial] Failed to open serial port: {}", err);
             if serial_manager.record_failure().await {
                 error!("[Serial] Límite de fallos alcanzado al abrir puerto.");
                 broadcast_serial_status(ws_hub, &serial_manager).await;
@@ -233,15 +236,17 @@ async fn run_reader_session(
         let cycle_result = if capture_all {
             interactor.get_cyclical_values().await
         } else {
-            interactor.get_cyclical_values_filtered(|attr| {
-                let name_lc = attr.internal_name.to_ascii_lowercase();
-                config.capture_handles.contains(&attr.handle)
-                    || config.capture_names.contains(&name_lc)
-                    || name_lc == "g_patient_id_str"
-                    || name_lc == "d_serial_number_to_odi"
-                    || name_lc == "c_trmt_main_state"
-                    || name_lc == "g_trmt_main_state_set"
-            }).await
+            interactor
+                .get_cyclical_values_filtered(|attr| {
+                    let name_lc = attr.internal_name.to_ascii_lowercase();
+                    config.capture_handles.contains(&attr.handle)
+                        || config.capture_names.contains(&name_lc)
+                        || name_lc == "g_patient_id_str"
+                        || name_lc == "d_serial_number_to_odi"
+                        || name_lc == "c_trmt_main_state"
+                        || name_lc == "g_trmt_main_state_set"
+                })
+                .await
         };
 
         let ctx_patient = current_patient_key.clone().unwrap_or("—".to_string());
@@ -251,7 +256,10 @@ async fn run_reader_session(
             Ok(readings) => {
                 serial_manager.record_success().await;
 
-                info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] {count} lecturas", count = readings.len());
+                info!(
+                    "[Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] {count} readings",
+                    count = readings.len()
+                );
 
                 let is_in_therapy = readings.iter().any(|r| {
                     (r.internal_name == "c_trmt_main_state"
@@ -271,14 +279,23 @@ async fn run_reader_session(
                 let therapy_state_value = readings
                     .iter()
                     .find(|r| r.internal_name == "c_trmt_main_state")
+                    .or_else(|| {
+                        readings
+                            .iter()
+                            .find(|r| r.internal_name == "g_trmt_main_state_set")
+                    })
                     .and_then(|r| match &r.physical_value {
                         crate::domain::entities::TelemetryValue::Number(n) => Some(*n),
                         _ => None,
                     });
 
                 match therapy_state_value {
-                    Some(v) => info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Estado: {therapy_state_name} ({v})"),
-                    None => info!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Estado: {therapy_state_name}"),
+                    Some(v) => info!(
+                        "[Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] State: {therapy_state_name} ({v})"
+                    ),
+                    None => info!(
+                        "[Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] State: {therapy_state_name}"
+                    ),
                 }
 
                 if therapy_state_value != prev_therapy_state_value {
@@ -288,7 +305,7 @@ async fn run_reader_session(
                     let curr = therapy_state_value
                         .map(|v| format!("{therapy_state_name} ({v})"))
                         .unwrap_or_else(|| therapy_state_name.clone());
-                    info!("═══════ CAMBIO DE ESTADO: {prev} → {curr} ═══════");
+                    info!("═══════ STATE CHANGE: {prev} → {curr} ═══════");
                 }
                 prev_therapy_state_value = therapy_state_value;
 
@@ -329,7 +346,10 @@ async fn run_reader_session(
                     was_in_therapy = false;
                     therapy_start_time = None;
                     therapy_end_time = None;
-                    info!("[EVENTO] [Máq: {ctx_machine}] Cambio de paciente: {p:?}", p = current_patient_key);
+                    info!(
+                        "[EVENT] [Machine: {ctx_machine}] Patient change: {p:?}",
+                        p = current_patient_key
+                    );
                 }
 
                 if serial_number != current_serial_number {
@@ -337,89 +357,122 @@ async fn run_reader_session(
                     current_machine_id = None;
                     current_session_id = None;
                     current_therapy_id = None;
-                    info!("[EVENTO] Cambio de máquina: {s:?}", s = current_serial_number);
+                    info!(
+                        "[EVENTO] Cambio de máquina: {s:?}",
+                        s = current_serial_number
+                    );
                 }
 
                 // Ensure machine is registered
-                if current_machine_id.is_none() {
-                    if let Some(serial) = current_serial_number.as_deref() {
-                        if persistence_enabled {
-                            match interactor.get_or_create_machine(serial, &software_version).await {
-                                Ok(machine_id) => current_machine_id = Some(machine_id),
-                                Err(e) => error!("[DB] [Máq: {ctx_machine}] No se pudo registrar la máquina: {e}"),
-                            }
+                if current_machine_id.is_none()
+                    && let Some(serial) = current_serial_number.as_deref()
+                    && persistence_enabled
+                {
+                    match interactor
+                        .get_or_create_machine(serial, &software_version)
+                        .await
+                    {
+                        Ok(machine_id) => current_machine_id = Some(machine_id),
+                        Err(e) => {
+                            error!("[DB] [Machine: {ctx_machine}] Failed to register machine: {e}")
                         }
                     }
                 }
 
                 // Ensure patient is registered
-                if current_patient_id.is_none() {
-                    if let Some(patient) = current_patient_key.as_deref() {
-                        if persistence_enabled {
-                            match interactor.get_or_create_patient(patient).await {
-                                Ok(patient_id) => current_patient_id = Some(patient_id),
-                                Err(e) => error!("[DB] [Pac: {patient}] No se pudo registrar el paciente: {e}"),
-                            }
+                if current_patient_id.is_none()
+                    && let Some(patient) = current_patient_key.as_deref()
+                    && persistence_enabled
+                {
+                    match interactor.get_or_create_patient(patient).await {
+                        Ok(patient_id) => current_patient_id = Some(patient_id),
+                        Err(e) => {
+                            error!("[DB] [Patient: {patient}] Failed to register patient: {e}")
                         }
                     }
                 }
 
                 // Create serial session on first cycle where we have patient + machine
-                if current_session_id.is_none() {
-                    if let (Some(machine_id), Some(patient_key)) =
+                if current_session_id.is_none()
+                    && let (Some(machine_id), Some(patient_key)) =
                         (current_machine_id, current_patient_key.as_deref())
+                    && persistence_enabled
+                {
+                    match interactor
+                        .create_serial_session(machine_id, patient_key)
+                        .await
                     {
-                        if persistence_enabled {
-                            match interactor.create_serial_session(machine_id, patient_key).await {
-                                Ok(session_id) => {
-                                    current_session_id = Some(session_id);
-                                    info!("[Session] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Sesión serial creada: {session_id}");
-                                }
-                                Err(e) => error!("[DB] [Máq: {ctx_machine}] [Pac: {ctx_patient}] No se pudo crear sesión serial: {e}"),
-                            }
+                        Ok(session_id) => {
+                            current_session_id = Some(session_id);
+                            info!(
+                                "[Session] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Serial session created: {session_id}"
+                            );
                         }
+                        Err(e) => error!(
+                            "[DB] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Failed to create serial session: {e}"
+                        ),
                     }
                 }
 
                 if is_in_therapy {
-                    if current_therapy_id.is_none() {
-                        if let (Some(patient_id), Some(machine_id)) =
+                    if current_therapy_id.is_none()
+                        && let (Some(patient_id), Some(machine_id)) =
                             (current_patient_id, current_machine_id)
+                        && persistence_enabled
+                    {
+                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                        match interactor
+                            .get_or_create_therapy(
+                                patient_id,
+                                machine_id,
+                                &now,
+                                force_new_session,
+                                current_session_id,
+                            )
+                            .await
                         {
-                            if persistence_enabled {
-                                let now = chrono::Local::now()
-                                    .format("%Y-%m-%d %H:%M:%S")
-                                    .to_string();
-                                match interactor.get_or_create_therapy(patient_id, machine_id, &now, force_new_session, current_session_id).await {
-                                    Ok(therapy_id) => {
-                                        current_therapy_id = Some(therapy_id);
-                                        therapy_start_time = Some(now);
-                                        therapy_end_time = None;
-                                        force_new_session = false;
-                                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] INICIO de terapia detectado (id={therapy_id})");
-                                    }
-                                    Err(e) => error!("[DB] [Máq: {ctx_machine}] [Pac: {ctx_patient}] No se pudo abrir la terapia: {e}"),
-                                }
+                            Ok(therapy_id) => {
+                                current_therapy_id = Some(therapy_id);
+                                therapy_start_time = Some(now);
+                                therapy_end_time = None;
+                                force_new_session = false;
+                                info!(
+                                    "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy START detected (id={therapy_id})"
+                                );
                             }
+                            Err(e) => error!(
+                                "[DB] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Failed to open therapy: {e}"
+                            ),
                         }
                     }
 
                     if !was_in_therapy && current_therapy_id.is_some() {
-                        therapy_start_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
-                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia reanudada");
+                        therapy_start_time =
+                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                        info!(
+                            "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy resumed"
+                        );
                     }
                 } else if was_in_therapy {
                     let is_state_3 = therapy_state_value.is_some_and(|v| (v - 3.0).abs() < 0.1);
                     if is_state_3 {
                         if let Some(tid) = current_therapy_id.take() {
-                            info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] FIN de terapia detectado (state=3). Cerrando terapia {tid}...");
+                            info!(
+                                "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy END detected (state=3). Closing therapy {tid}..."
+                            );
                             let _ = interactor.end_therapy(tid).await;
                         }
-                        therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
-                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Terapia finalizada. Sesión serial continúa en modo post-terapia.");
+                        therapy_end_time =
+                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                        info!(
+                            "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy finished. Serial session continues in post-therapy mode."
+                        );
                     } else {
-                        info!("[Therapy] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Pausa de terapia (sesión serial continúa)");
-                        therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                        info!(
+                            "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy paused (serial session continues)"
+                        );
+                        therapy_end_time =
+                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
                     }
                 }
                 was_in_therapy = is_in_therapy;
@@ -429,7 +482,10 @@ async fn run_reader_session(
                     match &r.physical_value {
                         TelemetryValue::Number(n) => {
                             if let Some(disp) = &r.display_value {
-                                debug!("  {:<30} = {:>10.2} {} ({})", r.internal_name, n, r.unit, disp);
+                                debug!(
+                                    "  {:<30} = {:>10.2} {} ({})",
+                                    r.internal_name, n, r.unit, disp
+                                );
                             } else {
                                 debug!("  {:<30} = {:>10.2} {}", r.internal_name, n, r.unit);
                             }
@@ -449,16 +505,22 @@ async fn run_reader_session(
                     therapy_start: therapy_start_time.clone(),
                     therapy_end: therapy_end_time.clone(),
                     persistence_enabled,
-                    persistence_status: if persistence_enabled { "persisting" } else { "not_persisting" },
+                    persistence_status: if persistence_enabled {
+                        "persisting"
+                    } else {
+                        "not_persisting"
+                    },
                 };
                 if let Err(e) = ws_hub.broadcast_json(&event) {
-                    error!("[WS] [Ciclo {cycle}] No se pudo broadcast: {e}");
+                    error!("[WS] [Cycle {cycle}] Broadcast failed: {e}");
                 }
 
                 if last_save.elapsed() >= save_interval {
                     if !persistence_enabled {
                         if !persistence_warned {
-                            warn!("[Persistencia] DESHABILITADA: datos en tiempo real pero no se guardan en BD.");
+                            warn!(
+                                "[Persistencia] DESHABILITADA: datos en tiempo real pero no se guardan en BD."
+                            );
                             persistence_warned = true;
                         }
                         last_save = tokio::time::Instant::now();
@@ -468,35 +530,51 @@ async fn run_reader_session(
 
                     if is_in_therapy {
                         if let Some(therapy_id) = current_therapy_id {
-                            info!("[DB] [Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Guardando snapshot de terapia ({count} lecturas)...", count = readings.len());
+                            info!(
+                                "[DB] [Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Saving therapy snapshot ({count} readings)...",
+                                count = readings.len()
+                            );
                             let mut readings_to_save = readings.clone();
                             for reading in &mut readings_to_save {
                                 reading.therapy_id = Some(therapy_id);
                             }
                             if let Err(e) = interactor.save_telemetry(&readings_to_save).await {
-                                error!("[DB] [Ciclo {cycle}] ERROR al persistir snapshot de terapia: {e}");
+                                error!(
+                                    "[DB] [Cycle {cycle}] Error persisting therapy snapshot: {e}"
+                                );
                             }
                         }
                     } else if let Some(session_id) = current_session_id {
-                        info!("[DB] [Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] Guardando snapshot pre/post terapia ({count} lecturas, phase=non_therapy)...", count = readings.len());
-                        if let Err(e) = interactor.save_session_readings(session_id, &readings, "non_therapy").await {
-                            error!("[DB] [Ciclo {cycle}] ERROR al persistir snapshot pre/post terapia: {e}");
+                        info!(
+                            "[DB] [Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Saving pre/post therapy snapshot ({count} readings, phase=non_therapy)...",
+                            count = readings.len()
+                        );
+                        if let Err(e) = interactor
+                            .save_session_readings(session_id, &readings, "non_therapy")
+                            .await
+                        {
+                            error!(
+                                "[DB] [Cycle {cycle}] Error persisting pre/post therapy snapshot: {e}"
+                            );
                         }
                     }
                     last_save = tokio::time::Instant::now();
                 }
             }
             Err(e) => {
-                use crate::domain::device::DeviceError;
                 use crate::application::use_cases::UseCaseError;
+                use crate::domain::device::DeviceError;
 
-                let is_connection_error = matches!(&e,
+                let is_connection_error = matches!(
+                    &e,
                     UseCaseError::Device(DeviceError::IoError(_))
-                    | UseCaseError::Device(DeviceError::Timeout)
+                        | UseCaseError::Device(DeviceError::Timeout)
                 );
 
                 if is_connection_error {
-                    error!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ERROR de conexión: {e}");
+                    error!(
+                        "[Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Connection error: {e}"
+                    );
                     if serial_manager.record_failure().await {
                         error!(
                             "[Serial] Límite de {max} fallos consecutivos alcanzado. Suspendiendo lectura.",
@@ -506,7 +584,9 @@ async fn run_reader_session(
                         return;
                     }
                 } else {
-                    warn!("[Ciclo {cycle}] [Máq: {ctx_machine}] [Pac: {ctx_patient}] ADVERTENCIA de datos: {e}");
+                    warn!(
+                        "[Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Data warning: {e}"
+                    );
                     serial_manager.record_warning().await;
                 }
             }
@@ -526,7 +606,7 @@ async fn run_reader_session(
             info!("[Session] Deteniendo lectura SIN cerrar terapia (close_therapy_on_stop=false)");
         }
         if let Some(session_id) = current_session_id {
-            info!("[Session] Cerrando sesión serial {session_id}");
+            info!("[Session] Closing serial session {session_id}");
             let _ = interactor.end_serial_session(session_id).await;
         }
     }
@@ -570,17 +650,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Base de datos
     let db_config = config.database_config();
-    let (repos, persistence_enabled) = match database::initialize_db(&db_config, &config.admin_password).await {
-        Ok(repos) => {
-            info!("[DB] Conectada: {url}", url = config.get_database_url_redacted());
-            (repos, true)
-        }
-        Err(e) => {
-            error!("[DB] ERROR de conexión: {}", e);
-            error!("[DB] Persistencia deshabilitada: lectura serial continuará sin guardar datos.");
-            (database::initialize_without_persistence(), false)
-        }
-    };
+    let (repos, persistence_enabled) =
+        match database::initialize_db(&db_config, &config.admin_password).await {
+            Ok(repos) => {
+                info!(
+                    "[DB] Conectada: {url}",
+                    url = config.get_database_url_redacted()
+                );
+                (repos, true)
+            }
+            Err(e) => {
+                error!("[DB] ERROR de conexión: {}", e);
+                error!(
+                    "[DB] Persistencia deshabilitada: lectura serial continuará sin guardar datos."
+                );
+                (database::initialize_without_persistence(), false)
+            }
+        };
 
     // 3. Serial Reader Manager — starts stopped; user must start manually from dashboard
     let (serial_manager, mut cmd_rx, _state_arc) =

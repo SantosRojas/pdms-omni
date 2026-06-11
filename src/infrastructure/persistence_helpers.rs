@@ -1,5 +1,5 @@
-use crate::domain::entities::TelemetryValue;
 use crate::domain::entities::TelemetryReading;
+use crate::domain::entities::TelemetryValue;
 
 #[derive(Debug, Clone)]
 pub struct GenericRow {
@@ -8,7 +8,10 @@ pub struct GenericRow {
 
 impl GenericRow {
     pub fn get_string(&self, idx: usize) -> String {
-        self.values.get(idx).and_then(|v| v.clone()).unwrap_or_default()
+        self.values
+            .get(idx)
+            .and_then(|v| v.clone())
+            .unwrap_or_default()
     }
 
     pub fn get_i64(&self, idx: usize) -> i64 {
@@ -70,6 +73,7 @@ fn flag_from_bool(value: bool) -> Option<String> {
     Some(if value { "1" } else { "0" }.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_user_row(
     id: i64,
     username: String,
@@ -180,6 +184,7 @@ pub fn build_therapy_comment_row(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_therapy_row(
     id: i64,
     started_at: String,
@@ -226,6 +231,7 @@ pub fn build_export_row(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_telemetry_reading(
     id: Option<i64>,
     timestamp: String,
