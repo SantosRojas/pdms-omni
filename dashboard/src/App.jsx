@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LoginPage } from './presentation/pages/LoginPage';
 import { Dashboard } from './presentation/pages/Dashboard';
 import { HistoryView } from './presentation/pages/HistoryView';
@@ -7,6 +7,8 @@ import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
 import { SettingsPage } from './presentation/pages/SettingsPage';
 import { Sidebar } from './presentation/components/Sidebar';
+import { NotFoundPage } from './presentation/pages/NotFoundPage';
+import { ErrorBoundary } from './presentation/components/ErrorBoundary';
 import { apiService } from './infrastructure/api';
 import { Activity, Menu, X } from 'lucide-react';
 import './index.css';
@@ -31,8 +33,10 @@ const parseHash = () => {
     return { view: 'settings', historyTherapy: null, dashboardTherapyId: null };
   } else if (hash === '#/live') {
     return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: 'live' };
+  } else if (hash === '#/' || hash === '#') {
+    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
   }
-  return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
+  return { view: 'not-found', historyTherapy: null, dashboardTherapyId: null };
 };
 
 function App() {
@@ -43,8 +47,10 @@ function App() {
   const [view, setView] = useState(initialRoute.view);
   const [historyTherapy, setHistoryTherapy] = useState(initialRoute.historyTherapy);
   const [dashboardTherapyId, setDashboardTherapyId] = useState(initialRoute.dashboardTherapyId);
+  const [currentHash, setCurrentHash] = useState(window.location.hash || '#/');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth > 768);
+  const historySource = useRef(null);
 
   useEffect(() => {
     const onResize = () => setIsDesktop(window.innerWidth > 768);
@@ -75,6 +81,7 @@ function App() {
       setView(route.view);
       setHistoryTherapy(route.historyTherapy);
       setDashboardTherapyId(route.dashboardTherapyId);
+      setCurrentHash(window.location.hash || '#/');
       setSidebarOpen(false);
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -134,7 +141,7 @@ function App() {
   const renderContent = () => {
     switch (view) {
       case 'history':
-        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = historyTherapy?.id ? `#/therapy/${historyTherapy.id}` : '#/'; }} />;
+        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = historySource.current?.startsWith('#/therapy/') ? historySource.current : '#/'; historySource.current = null; }} />;
       case 'admin':
         return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':
@@ -143,12 +150,15 @@ function App() {
         return <ProfilePage currentUser={user} onBack={() => { window.location.hash = '#/'; }} onUpdateUser={setUser} />;
       case 'settings':
         return <SettingsPage onBack={() => { window.location.hash = '#/'; }} />;
+      case 'not-found':
+        return <NotFoundPage onBack={() => { window.location.hash = '#/'; }} />;
       default:
         return (
           <Dashboard
             user={user}
             therapyId={dashboardTherapyId}
             onNavigateHistory={(therapy) => {
+              historySource.current = window.location.hash;
               window.location.hash = `#/history/${therapy.id}`;
             }}
           />
@@ -158,7 +168,7 @@ function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} />
+      <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} currentHash={currentHash} />
       {sidebarOpen && !isDesktop && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <button
         className={`sidebar-toggle${sidebarOpen && isDesktop ? ' shifted' : ''}`}
@@ -171,7 +181,9 @@ function App() {
         className={`main-with-sidebar${sidebarOpen && isDesktop ? ' sidebar-pushed' : ''}`}
         onClick={() => { if (sidebarOpen && !isDesktop) setSidebarOpen(false); }}
       >
-        {renderContent()}
+        <ErrorBoundary>
+          {renderContent()}
+        </ErrorBoundary>
       </main>
     </div>
   );

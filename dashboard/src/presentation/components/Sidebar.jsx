@@ -10,44 +10,20 @@ const NAV_ITEMS = [
   { hash: '#/settings', label: 'Ajustes', icon: Settings, roles: null },
 ];
 
-export const Sidebar = ({ user, onLogout, open }) => {
-  const currentHash = window.location.hash || '#/';
+export const Sidebar = ({ user, onLogout, open, currentHash }) => {
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
       {/* Logo / Brand */}
-      <div style={{
-        padding: '24px 20px 20px',
-        borderBottom: '1px solid var(--border-default)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-      }}>
-        <div style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '10px',
-          background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: 'var(--primary-shadow-sm)',
-        }}>
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-icon">
           <Activity size={20} color="#0f172a" />
         </div>
-        <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-          PDMS Omni
-        </span>
+        <span className="sidebar-logo-text">PDMS Omni</span>
       </div>
 
       {/* Navigation */}
-      <nav style={{
-        flex: 1,
-        padding: '16px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-      }}>
+      <nav className="sidebar-nav">
         {NAV_ITEMS.map(item => {
           if (item.roles && !item.roles.includes(user.role)) return null;
           const active = currentHash === item.hash || 
@@ -73,49 +49,14 @@ export const Sidebar = ({ user, onLogout, open }) => {
       </nav>
 
       {/* User info + Theme + Logout */}
-      <div style={{
-        padding: '16px',
-        borderTop: '1px solid var(--border-default)',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          marginBottom: '12px',
-        }}>
-          <div style={{
-            width: '34px',
-            height: '34px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, var(--primary), #6366f1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontSize: '0.8rem',
-            fontWeight: 700,
-            flexShrink: 0,
-          }}>
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <div className="sidebar-avatar">
             {(user.full_name || user.username || '?')[0].toUpperCase()}
           </div>
-          <div style={{ overflow: 'hidden', flex: 1 }}>
-            <div style={{
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-              {user.full_name || user.username}
-            </div>
-            <div style={{
-              fontSize: '0.7rem',
-              color: 'var(--text-tertiary)',
-              textTransform: 'capitalize',
-            }}>
-              {user.role}
-            </div>
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">{user.full_name || user.username}</div>
+            <div className="sidebar-user-role">{user.role}</div>
           </div>
           <ThemeToggle />
         </div>

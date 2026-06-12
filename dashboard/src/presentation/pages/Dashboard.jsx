@@ -165,12 +165,21 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
     }
   }, [therapyId, therapies]);
 
+  // Track when therapies have been loaded at least once (avoid decisions on empty list)
+  const therapiesLoaded = useRef(false);
+  useEffect(() => {
+    if (therapies.length > 0) therapiesLoaded.current = true;
+  }, [therapies]);
+
   // Auto-select: when serial transitions to Running, go to #/live (or latest open therapy if viewing a specific one)
   const prevSerialStatus = useRef(serialStatus.status);
   const browsingRef = useRef(false);
   useEffect(() => {
     const prev = prevSerialStatus.current;
     prevSerialStatus.current = serialStatus.status;
+    // Skip on initial mount: serial starts as 'Unknown' and transitions via REST fetch,
+    // not a real state change. Also wait until therapies are loaded.
+    if (prev === 'Unknown' || !therapiesLoaded.current) return;
     if (prev !== 'Running' && serialStatus.status === 'Running' && !therapyId) {
       browsingRef.current = false;
       const openTherapies = therapies
