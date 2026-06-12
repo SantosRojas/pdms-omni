@@ -1,18 +1,27 @@
 import React from 'react';
-import { ChevronLeft, Settings, Palette, Sun, Moon, Monitor } from 'lucide-react';
+import { ChevronLeft, Settings, Palette, Gauge, RotateCcw, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
+import { useCylinderConfig } from '../../application/useCylinderConfig';
 
 const PRESET_COLORS = ['#00d2ff', '#3b82f6', '#8b5cf6', '#f43f5e', '#10b981', '#f59e0b'];
 
 const THEME_LABELS = { system: 'Sistema', light: 'Claro', dark: 'Oscuro' };
 const THEME_ICONS = { system: Monitor, light: Sun, dark: Moon };
 
+const CYLINDER_LABELS = {
+  arterial: 'Arterial (AP)',
+  venoso: 'Venoso (VP)',
+  tmp: 'TMP (PTM)',
+  filtro: 'Filtro (FP)',
+};
+
 export const SettingsPage = ({ onBack }) => {
   const {
     accentColor, setAccentColor,
     customPresets, addCustomPreset, removeCustomPreset,
-    theme, setTheme,
   } = useTheme();
+
+  const { configs, updateConfig, resetConfigs } = useCylinderConfig();
 
   return (
     <div className="app-container app-container-sm" style={{ gap: '20px' }}>
@@ -133,6 +142,62 @@ export const SettingsPage = ({ onBack }) => {
           </div>
         </div>
 
+      </div>
+
+      <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Gauge size={14} /> Configuración de Cilindros
+          </label>
+          <button onClick={resetConfigs} className="btn btn-ghost btn-sm">
+            <RotateCcw size={14} /> Restablecer valores
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          {Object.entries(CYLINDER_LABELS).map(([key, label]) => (
+            <div key={key} className="glass-panel" style={{ padding: '16px' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                {label}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                  Mínimo
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={configs[key]?.min ?? 0}
+                    onChange={e => updateConfig(key, 'min', e.target.value)}
+                    className="input"
+                    style={{ width: '100%', marginTop: '4px' }}
+                  />
+                </label>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                  Máximo
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={configs[key]?.max ?? 500}
+                    onChange={e => updateConfig(key, 'max', e.target.value)}
+                    className="input"
+                    style={{ width: '100%', marginTop: '4px' }}
+                  />
+                </label>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                  Paso
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={configs[key]?.step ?? 100}
+                    onChange={e => updateConfig(key, 'step', e.target.value)}
+                    className="input"
+                    style={{ width: '100%', marginTop: '4px' }}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

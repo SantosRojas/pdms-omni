@@ -2,6 +2,7 @@ import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { Droplets, Thermometer, TrendingUp, Waves, Download, Maximize, Minimize } from 'lucide-react';
 import { Cylinder } from './Cylinder';
 import { StatCard } from './StatCard';
+import { useCylinderConfig } from '../../application/useCylinderConfig';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
 
@@ -121,28 +122,19 @@ const LiveTrendChart = memo(({ title, icon, data, lines, chartId }) => {
 });
 
 export const PressurePanel = memo(({ data }) => {
+  const { configs } = useCylinderConfig();
+
   return (
     <>
-      {/* <div className="glass-panel animate-slide-up" style={{ padding: '24px' }}>
-        <h3 className="section-title">
-          <Droplets size={20} color="var(--primary)" /> Dinámica de Flujos
-        </h3>
-        <div className="card-grid-3">
-          <StatCard title="Flujo Sanguíneo" value={data.flows.c_pump_bs_bl_flow_act.value} unit={data.flows.c_pump_bs_bl_flow_act.unit} iconName="HeartPulse" color="var(--art-color)" />
-          <StatCard title="Flujo de Diálisis" value={data.flows.c_pump_fs_mid_flow_act.value} unit={data.flows.c_pump_fs_mid_flow_act.unit} iconName="Droplets" color="var(--tmp-color)" />
-          <StatCard title="Remoción Neta" value={data.flows.c_net_rem_flow_act.value} unit={data.flows.c_net_rem_flow_act.unit} iconName="Wind" color="var(--fil-color)" />
-        </div>
-      </div> */}
-
       <div className="glass-panel animate-slide-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
         <h3 className="section-title">
           <Thermometer size={20} color="var(--accent)" /> Presiones en Tiempo Real
         </h3>
         <div className="cylinder-gauges">
-          <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
-          <Cylinder label="Venoso (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={300} min={-400} colorVar="--ven-color" />
-          <Cylinder label="TMP (PTM)" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} max={80} min={0} colorVar="--tmp-color" />
-          <Cylinder label="Filtro (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} max={500} min={0} colorVar="--fil-color" />
+          <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} config={configs.arterial} colorVar="--art-color" />
+          <Cylinder label="Venoso (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} config={configs.venoso} colorVar="--ven-color" />
+          <Cylinder label="TMP (PTM)" value={data.pressures.c_press_tmp_act.value} unit={data.pressures.c_press_tmp_act.unit} config={configs.tmp} colorVar="--tmp-color" />
+          <Cylinder label="Filtro (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} config={configs.filtro} colorVar="--fil-color" />
         </div>
 
         <LiveTrendChart
