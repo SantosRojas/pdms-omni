@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
 import { DataTable } from '../components/DataTable';
-import { Download, Clock, ChevronLeft } from 'lucide-react';
+import { Download, ChevronLeft, Table2, BarChart3 } from 'lucide-react';
 import { CommentsSection } from '../components/CommentsSection';
 import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
 import { AccumulatedFlowChart } from '../components/AccumulatedFlowChart';
@@ -11,6 +11,8 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showTable, setShowTable] = useState(true);
+  const [showCharts, setShowCharts] = useState(true);
 
   useEffect(() => {
     if (!therapy?.id) return;
@@ -96,11 +98,29 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
           </h2>
         </div>
 
-        {userRole !== 'viewer' && (
-          <button onClick={handleDownload} className="btn btn-primary">
-            <Download size={16} /> Exportar Excel (CSV)
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowTable(s => !s)}
+            title={showTable ? 'Ocultar tabla' : 'Mostrar tabla'}
+            style={{ opacity: showTable ? 1 : 0.5 }}
+          >
+            <Table2 size={16} /> Tabla
           </button>
-        )}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowCharts(s => !s)}
+            title={showCharts ? 'Ocultar gráficas' : 'Mostrar gráficas'}
+            style={{ opacity: showCharts ? 1 : 0.5 }}
+          >
+            <BarChart3 size={16} /> Gráficas
+          </button>
+          {userRole !== 'viewer' && (
+            <button onClick={handleDownload} className="btn btn-primary">
+              <Download size={16} /> Exportar Excel (CSV)
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -108,7 +128,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
       )}
       <CommentsSection therapyId={therapy?.id} />
 
-      {loading ? (
+      {showTable && (loading ? (
         <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
           <div className="spinner spinner-lg" style={{ margin: '0 auto 16px' }} />
           <p style={{ color: 'var(--text-tertiary)' }}>Cargando historial...</p>
@@ -122,10 +142,14 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
           pageSizeOptions={[25, 50, 100, 200]}
           emptyMessage="No se encontraron datos."
         />
-      )}
+      ))}
 
-      <AccumulatedPresureChart therapyId={therapy.id} isActive={true} />
-      <AccumulatedFlowChart therapyId={therapy.id} isActive={true} />
+      {showCharts && (
+        <>
+          <AccumulatedPresureChart therapyId={therapy.id} isActive={true} />
+          <AccumulatedFlowChart therapyId={therapy.id} isActive={true} />
+        </>
+      )}
 
     </div>
   );
