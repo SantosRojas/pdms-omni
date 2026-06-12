@@ -4,6 +4,8 @@ import { toLocalDatetime } from '../../infrastructure/time';
 import { DataTable } from '../components/DataTable';
 import { Download, Clock, ChevronLeft } from 'lucide-react';
 import { CommentsSection } from '../components/CommentsSection';
+import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
+import { AccumulatedFlowChart } from '../components/AccumulatedFlowChart';
 
 export const HistoryView = ({ therapy, userRole, onBack }) => {
   const [rows, setRows] = useState([]);
@@ -121,6 +123,9 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
           emptyMessage="No se encontraron datos."
         />
       )}
+
+      <AccumulatedPresureChart therapyId={therapy.id} isActive={true} />
+      <AccumulatedFlowChart therapyId={therapy.id} isActive={true} />
 
     </div>
   );
