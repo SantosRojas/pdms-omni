@@ -1606,6 +1606,15 @@ label {
   border-color: var(--border-hover) !important;
 }
 
+/* ── Fullscreen charts ──────────────────────────────────── */
+.chart-container:fullscreen {
+  background: var(--bg-base) !important;
+  backdrop-filter: none !important;
+  padding: 24px !important;
+  width: 100%;
+  height: 100%;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Responsive Design
    ═══════════════════════════════════════════════════════════════ */

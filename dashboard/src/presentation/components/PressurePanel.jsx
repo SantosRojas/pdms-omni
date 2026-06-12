@@ -1,17 +1,129 @@
-import React, { memo } from 'react';
-import { Droplets, Thermometer, TrendingUp } from 'lucide-react';
+import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
+import { Droplets, Thermometer, TrendingUp, Waves, Download, Maximize, Minimize } from 'lucide-react';
 import { Cylinder } from './Cylinder';
 import { StatCard } from './StatCard';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import html2canvas from 'html2canvas';
 
-const areEqual = (prev, next) => prev.data.history === next.data.history
-  && prev.data.pressures === next.data.pressures
-  && prev.data.flows === next.data.flows;
+const tooltipStyle = {
+  borderRadius: '12px',
+  border: '1px solid var(--border-default)',
+  boxShadow: 'var(--shadow-lg)',
+  background: 'var(--bg-elevated)',
+};
+
+const LiveTrendChart = memo(({ title, icon, data, lines, chartId }) => {
+  const Icon = icon;
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  const exportAsSVG = useCallback(() => {
+    const svg = containerRef.current?.querySelector('svg');
+    if (!svg) return;
+    const clone = svg.cloneNode(true);
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(clone);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${chartId}.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [chartId]);
+
+  const exportAsPNG = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, {
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-elevated').trim() || null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `${chartId}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      console.error('Error exporting PNG:', e);
+    }
+  }, [chartId]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (e) {
+      console.error('Error toggling fullscreen:', e);
+    }
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      id={chartId}
+      className="chart-container"
+      style={{
+        flex: 1,
+        minHeight: isFullscreen ? '100%' : '300px',
+        width: '100%',
+        marginTop: 'auto',
+        borderTop: '1px solid var(--border-default)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '16px' }}>
+        <h4 className="section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+          <Icon size={16} /> {title}
+        </h4>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button className="btn btn-ghost btn-sm" onClick={exportAsSVG} title="Exportar SVG">
+            <Download size={14} /> SVG
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={exportAsPNG} title="Exportar PNG">
+            <Download size={14} /> PNG
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={toggleFullscreen} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+          </button>
+        </div>
+      </div>
+      <div style={{ width: '100%', height: isFullscreen ? '100%' : '250px', flex: isFullscreen ? 1 : 'none' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
+            <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis stroke="var(--text-tertiary)" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+            <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }} />
+            <Legend />
+            {lines.map(line => (
+              <Line key={line.key} type="monotone" dataKey={line.key} stroke={line.color} name={line.name} dot={false} strokeWidth={3} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
 
 export const PressurePanel = memo(({ data }) => {
   return (
     <>
-      <div className="glass-panel animate-slide-up" style={{ padding: '24px' }}>
+      {/* <div className="glass-panel animate-slide-up" style={{ padding: '24px' }}>
         <h3 className="section-title">
           <Droplets size={20} color="var(--primary)" /> Dinámica de Flujos
         </h3>
@@ -20,13 +132,12 @@ export const PressurePanel = memo(({ data }) => {
           <StatCard title="Flujo de Diálisis" value={data.flows.c_pump_fs_mid_flow_act.value} unit={data.flows.c_pump_fs_mid_flow_act.unit} iconName="Droplets" color="var(--tmp-color)" />
           <StatCard title="Remoción Neta" value={data.flows.c_net_rem_flow_act.value} unit={data.flows.c_net_rem_flow_act.unit} iconName="Wind" color="var(--fil-color)" />
         </div>
-      </div>
+      </div> */}
 
-      <div className="glass-panel animate-slide-up" style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div className="glass-panel animate-slide-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
         <h3 className="section-title">
           <Thermometer size={20} color="var(--accent)" /> Presiones en Tiempo Real
         </h3>
-
         <div className="cylinder-gauges">
           <Cylinder label="Arterial (AP)" value={data.pressures.c_press_ap_act.value} unit={data.pressures.c_press_ap_act.unit} max={500} min={-400} colorVar="--art-color" />
           <Cylinder label="Venoso (VP)" value={data.pressures.c_press_vp_act.value} unit={data.pressures.c_press_vp_act.unit} max={300} min={-400} colorVar="--ven-color" />
@@ -34,34 +145,41 @@ export const PressurePanel = memo(({ data }) => {
           <Cylinder label="Filtro (FP)" value={data.pressures.c_press_fp_act.value} unit={data.pressures.c_press_fp_act.unit} max={500} min={0} colorVar="--fil-color" />
         </div>
 
-        <div style={{ flex: 1, minHeight: '300px', width: '100%', marginTop: 'auto', borderTop: '1px solid var(--border-default)' }}>
-          <h4 className="section-title" style={{ marginTop: '20px', border: 'none', padding: '0 0 16px' }}>
-            <TrendingUp size={16} /> Tendencia de Presiones (Serie Temporal)
-          </h4>
-          <div style={{ width: '100%', height: '250px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.history}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" vertical={false} />
-                <XAxis dataKey="time" stroke="var(--text-tertiary)" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="var(--text-tertiary)" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid var(--border-default)',
-                    boxShadow: 'var(--shadow-lg)',
-                    background: 'var(--bg-elevated)',
-                  }}
-                  labelStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
-                />
-                <Legend />
-                <Line type="monotone" dataKey="c_press_ap_act" stroke="var(--art-color)" name="Arterial" dot={false} strokeWidth={3} isAnimationActive={false} />
-                <Line type="monotone" dataKey="c_press_vp_act" stroke="var(--ven-color)" name="Venoso" dot={false} strokeWidth={3} isAnimationActive={false} />
-                <Line type="monotone" dataKey="c_press_tmp_act" stroke="var(--tmp-color)" name="TMP" dot={false} strokeWidth={3} isAnimationActive={false} />
-                <Line type="monotone" dataKey="c_press_fp_act" stroke="var(--fil-color)" name="Filtro" dot={false} strokeWidth={3} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <LiveTrendChart
+          title="Tendencia de Presiones"
+          icon={TrendingUp}
+          data={data.history}
+          chartId="live-pressure-trend"
+          lines={[
+            { key: 'c_press_ap_act', name: 'Arterial', color: 'var(--art-color)' },
+            { key: 'c_press_vp_act', name: 'Venoso', color: 'var(--ven-color)' },
+            { key: 'c_press_tmp_act', name: 'TMP', color: 'var(--tmp-color)' },
+            { key: 'c_press_fp_act', name: 'Filtro', color: 'var(--fil-color)' },
+          ]}
+        />
+      </div>
+
+      <div className="glass-panel animate-slide-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+        <h3 className="section-title">
+          <Waves size={20} color="var(--primary)" /> Flujo en Tiempo Real
+        </h3>
+        <div className="card-grid-3" style={{ marginBottom: '16px' }}>
+          <StatCard title="Flujo Sanguíneo" value={data.flows.c_pump_bs_bl_flow_act.value} unit={data.flows.c_pump_bs_bl_flow_act.unit} iconName="HeartPulse" color="var(--art-color)" />
+          <StatCard title="Flujo de Diálisis" value={data.flows.c_pump_fs_mid_flow_act.value} unit={data.flows.c_pump_fs_mid_flow_act.unit} iconName="Droplets" color="var(--tmp-color)" />
+          <StatCard title="Remoción Neta" value={data.flows.c_net_rem_flow_act.value} unit={data.flows.c_net_rem_flow_act.unit} iconName="Wind" color="var(--fil-color)" />
         </div>
+
+        <LiveTrendChart
+          title="Tendencia de Flujos (Serie Temporal)"
+          icon={Waves}
+          data={data.history}
+          chartId="live-flow-trend"
+          lines={[
+            { key: 'c_pump_bs_bl_flow_act', name: 'Flujo Sanguíneo', color: 'var(--art-color)' },
+            { key: 'c_pump_fs_mid_flow_act', name: 'Flujo Diálisis', color: 'var(--tmp-color)' },
+            { key: 'c_net_rem_flow_act', name: 'Remoción Neta', color: 'var(--fil-color)' },
+          ]}
+        />
       </div>
     </>
   );

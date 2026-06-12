@@ -44,6 +44,9 @@ function buildSnapshot(readings, prev) {
     c_press_vp_act: prev.pressures.c_press_vp_act.value,
     c_press_fp_act: prev.pressures.c_press_fp_act.value,
     c_press_tmp_act: prev.pressures.c_press_tmp_act.value,
+    c_pump_bs_bl_flow_act: prev.flows.c_pump_bs_bl_flow_act.value,
+    c_pump_fs_mid_flow_act: prev.flows.c_pump_fs_mid_flow_act.value,
+    c_net_rem_flow_act: prev.flows.c_net_rem_flow_act.value,
   };
 
   readings.forEach(item => {
@@ -53,6 +56,7 @@ function buildSnapshot(readings, prev) {
       newPoint[item.internal_name] = val;
     } else if (flows[item.internal_name] !== undefined) {
       flows[item.internal_name] = { value: val, unit: item.unit };
+      newPoint[item.internal_name] = val;
     } else if (info[item.internal_name] !== undefined) {
       info[item.internal_name] = { value: val, unit: item.unit || '' };
     }
