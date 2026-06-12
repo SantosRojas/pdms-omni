@@ -57,7 +57,7 @@ impl DataAttributeRepository for SqlxDataAttrRepository {
         let signal_id = get_or_create_signal_id(&self.pool, &attr.internal_name).await?;
 
         sqlx::query(
-            "INSERT OR REPLACE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
+            "INSERT OR IGNORE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
         )
         .bind(attr.handle)
@@ -159,7 +159,7 @@ impl DictionaryRepository for SqlxDictionaryRepository {
         entry: &DictionaryEntry,
         version_fingerprint: &str,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
+        sqlx::query("INSERT OR IGNORE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
             .bind(entry.dict_id)
             .bind(&entry.text)
             .bind(version_fingerprint)
@@ -180,7 +180,7 @@ impl DictionaryRepository for SqlxDictionaryRepository {
 
         let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         for entry in entries {
-            sqlx::query("INSERT OR REPLACE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
+            sqlx::query("INSERT OR IGNORE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)")
                 .bind(entry.dict_id)
                 .bind(&entry.text)
                 .bind(version_fingerprint)
@@ -600,6 +600,91 @@ impl VersionRepository for SqlxVersionRepository {
         .execute(&self.pool)
         .await
         .map_err(map_db_err)?;
+        Ok(())
+    }
+
+    async fn save_initialization(
+        &self,
+        version: &VersionInfo,
+        attrs: &[DataAttribute],
+        dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
+
+        for attr in attrs {
+            sqlx::query("INSERT OR IGNORE INTO signals (internal_name) VALUES (?1)")
+                .bind(&attr.internal_name)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_db_err)?;
+        }
+
+        for attr in attrs {
+            let signal_id: i64 = sqlx::query_scalar(
+                "SELECT id FROM signals WHERE internal_name = ?1",
+            )
+            .bind(&attr.internal_name)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+
+            sqlx::query(
+                "INSERT OR IGNORE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+            )
+            .bind(attr.handle)
+            .bind(attr.data_type as u16)
+            .bind(attr.size)
+            .bind(attr.conversion_factor)
+            .bind(attr.label_did)
+            .bind(attr.unit_did)
+            .bind(signal_id)
+            .bind(&fp)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        for entry in dict_entries {
+            sqlx::query(
+                "INSERT OR IGNORE INTO dictionary (dict_id, text, version_fingerprint) VALUES (?1, ?2, ?3)"
+            )
+            .bind(entry.dict_id)
+            .bind(&entry.text)
+            .bind(&fp)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        sqlx::query(
+            "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(fingerprint) DO UPDATE SET
+                 language_id=excluded.language_id, system_sw=excluded.system_sw,
+                 dss_fw=excluded.dss_fw, dss_hw=excluded.dss_hw,
+                 css_fw=excluded.css_fw, css_hw=excluded.css_hw,
+                 pss_fw=excluded.pss_fw, pss_hw=excluded.pss_hw,
+                 lang1=excluded.lang1, lang2=excluded.lang2, lang3=excluded.lang3"
+        )
+        .bind(&fp)
+        .bind(version.language_id)
+        .bind(&version.system_sw)
+        .bind(&version.dss_fw)
+        .bind(&version.dss_hw)
+        .bind(&version.css_fw)
+        .bind(&version.css_hw)
+        .bind(&version.pss_fw)
+        .bind(&version.pss_hw)
+        .bind(&version.language1)
+        .bind(&version.language2)
+        .bind(&version.language3)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+
+        tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 

@@ -71,8 +71,7 @@ impl DataAttributeRepository for MssqlDataAttrRepository {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
             "MERGE data_attributes AS tgt \
-             USING (SELECT @P1 AS handle) AS src ON tgt.handle = src.handle \
-             WHEN MATCHED THEN UPDATE SET data_type=@P2, size=@P3, conversion_factor=@P4, label_did=@P5, unit_did=@P6, signal_id=@P7, version_fingerprint=@P8 \
+             USING (SELECT @P1 AS handle, @P8 AS vfp) AS src ON tgt.handle = src.handle AND tgt.version_fingerprint = src.vfp \
              WHEN NOT MATCHED THEN INSERT (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint) VALUES (@P1,@P2,@P3,@P4,@P5,@P6,@P7,@P8);",
         );
         q.bind(attr.handle as i32);
@@ -168,8 +167,7 @@ impl DictionaryRepository for MssqlDictionaryRepository {
     ) -> Result<(), RepositoryError> {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         let mut q = Query::new(
-            "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id) AS src ON tgt.dict_id = src.dict_id \
-             WHEN MATCHED THEN UPDATE SET text = @P2, version_fingerprint = @P3 \
+            "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id, @P3 AS vfp) AS src ON tgt.dict_id = src.dict_id AND tgt.version_fingerprint = src.vfp \
              WHEN NOT MATCHED THEN INSERT (dict_id, text, version_fingerprint) VALUES (@P1, @P2, @P3);",
         );
         q.bind(entry.dict_id as i32);
@@ -191,8 +189,7 @@ impl DictionaryRepository for MssqlDictionaryRepository {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
         for entry in entries {
             let mut q = Query::new(
-                "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id) AS src ON tgt.dict_id = src.dict_id \
-                 WHEN MATCHED THEN UPDATE SET text = @P2, version_fingerprint = @P3 \
+                "MERGE dictionary AS tgt USING (SELECT @P1 AS dict_id, @P3 AS vfp) AS src ON tgt.dict_id = src.dict_id AND tgt.version_fingerprint = src.vfp \
                  WHEN NOT MATCHED THEN INSERT (dict_id, text, version_fingerprint) VALUES (@P1, @P2, @P3);",
             );
             q.bind(entry.dict_id as i32);
@@ -627,6 +624,113 @@ impl VersionRepository for MssqlVersionRepository {
         q.bind(version.language3.as_str());
         q.execute(&mut *conn).await.map_err(map_db_err)?;
         Ok(())
+    }
+
+    async fn save_initialization(
+        &self,
+        version: &VersionInfo,
+        attrs: &[DataAttribute],
+        dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+
+        conn.simple_query("BEGIN TRANSACTION")
+            .await
+            .map_err(map_db_err)?;
+
+        let r = async {
+            for attr in attrs {
+                let mut q = Query::new(
+                    "IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)",
+                );
+                q.bind(attr.internal_name.as_str());
+                q.execute(&mut *conn).await.map_err(map_db_err)?;
+            }
+
+            for attr in attrs {
+                let mut q = Query::new("SELECT id FROM signals WHERE internal_name = @P1");
+                q.bind(attr.internal_name.as_str());
+                let stream = q.query(&mut *conn).await.map_err(map_db_err)?;
+                let rows: Vec<Row> = stream.into_first_result().await.map_err(map_db_err)?;
+                let signal_id: i64 = rows
+                    .first()
+                    .and_then(|r: &Row| r.get::<i32, _>(0))
+                    .map(|id| id as i64)
+                    .ok_or_else(|| RepositoryError::DatabaseError("Signal not found".into()))?;
+
+                let mut q = Query::new(
+                    "MERGE data_attributes AS tgt \
+                     USING (SELECT @P1 AS handle, @P8 AS vfp) AS src ON tgt.handle = src.handle AND tgt.version_fingerprint = src.vfp \
+                     WHEN NOT MATCHED THEN INSERT (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint) \
+                     VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8);",
+                );
+                q.bind(attr.handle as i32);
+                q.bind(attr.data_type as i32);
+                q.bind(attr.size as i32);
+                q.bind(attr.conversion_factor as i32);
+                q.bind(attr.label_did as i32);
+                q.bind(attr.unit_did as i32);
+                q.bind(signal_id as i32);
+                q.bind(fp.as_str());
+                q.execute(&mut *conn).await.map_err(map_db_err)?;
+            }
+
+            for entry in dict_entries {
+                let mut q = Query::new(
+                    "MERGE dictionary AS tgt \
+                     USING (SELECT @P1 AS dict_id, @P3 AS vfp) AS src ON tgt.dict_id = src.dict_id AND tgt.version_fingerprint = src.vfp \
+                     WHEN NOT MATCHED THEN INSERT (dict_id, text, version_fingerprint) VALUES (@P1, @P2, @P3);",
+                );
+                q.bind(entry.dict_id as i32);
+                q.bind(entry.text.as_str());
+                q.bind(fp.as_str());
+                q.execute(&mut *conn).await.map_err(map_db_err)?;
+            }
+
+            {
+                let mut q = Query::new(
+                    "MERGE versions AS tgt \
+                     USING (SELECT @P1 AS fp) AS src ON tgt.fingerprint = src.fp \
+                     WHEN MATCHED THEN UPDATE SET \
+                         language_id=@P2, system_sw=@P3, dss_fw=@P4, dss_hw=@P5, \
+                         css_fw=@P6, css_hw=@P7, pss_fw=@P8, pss_hw=@P9, \
+                         lang1=@P10, lang2=@P11, lang3=@P12 \
+                     WHEN NOT MATCHED THEN INSERT \
+                         (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3) \
+                     VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10, @P11, @P12);",
+                );
+                q.bind(fp.as_str());
+                q.bind(version.language_id as i32);
+                q.bind(version.system_sw.as_str());
+                q.bind(version.dss_fw.as_str());
+                q.bind(version.dss_hw.as_str());
+                q.bind(version.css_fw.as_str());
+                q.bind(version.css_hw.as_str());
+                q.bind(version.pss_fw.as_str());
+                q.bind(version.pss_hw.as_str());
+                q.bind(version.language1.as_str());
+                q.bind(version.language2.as_str());
+                q.bind(version.language3.as_str());
+                q.execute(&mut *conn).await.map_err(map_db_err)?;
+            }
+
+            Ok::<_, RepositoryError>(())
+        }
+        .await;
+
+        match r {
+            Ok(()) => {
+                conn.simple_query("COMMIT")
+                    .await
+                    .map_err(map_db_err)?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = conn.simple_query("ROLLBACK").await;
+                Err(e)
+            }
+        }
     }
 
     async fn get_by_fingerprint(

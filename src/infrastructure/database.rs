@@ -97,20 +97,22 @@ async fn initialize_sqlite(
             internal_name TEXT UNIQUE
         );
         CREATE TABLE IF NOT EXISTS data_attributes (
-            handle INTEGER PRIMARY KEY,
+            handle INTEGER NOT NULL,
             data_type INTEGER,
             size INTEGER,
             conversion_factor INTEGER,
             label_did INTEGER,
             unit_did INTEGER,
             signal_id INTEGER,
-            version_fingerprint TEXT,
+            version_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (handle, version_fingerprint),
             FOREIGN KEY(signal_id) REFERENCES signals(id)
         );
         CREATE TABLE IF NOT EXISTS dictionary (
-            dict_id INTEGER PRIMARY KEY,
+            dict_id INTEGER NOT NULL,
             text TEXT,
-            version_fingerprint TEXT
+            version_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (dict_id, version_fingerprint)
         );
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -275,6 +277,61 @@ async fn initialize_sqlite(
     .execute(&pool)
     .await;
 
+    // Migrate existing databases: change to composite PK (handle + version_fingerprint)
+    let has_old_da_pk: bool = sqlx::query_scalar(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info WHERE tbl_name='data_attributes' AND pk>0 AND name='handle' AND (SELECT COUNT(*) FROM pragma_table_info WHERE tbl_name='data_attributes' AND pk>0 AND name='version_fingerprint') = 0"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap_or(false);
+    if has_old_da_pk {
+        info!("  [DB] Migrating data_attributes to composite PK...");
+        let _ = sqlx::query(
+            "CREATE TABLE data_attributes_new (
+                handle INTEGER NOT NULL,
+                data_type INTEGER,
+                size INTEGER,
+                conversion_factor INTEGER,
+                label_did INTEGER,
+                unit_did INTEGER,
+                signal_id INTEGER,
+                version_fingerprint TEXT NOT NULL,
+                PRIMARY KEY (handle, version_fingerprint),
+                FOREIGN KEY(signal_id) REFERENCES signals(id)
+            )"
+        ).execute(&pool).await;
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO data_attributes_new SELECT handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, COALESCE(version_fingerprint, 'migrated') FROM data_attributes"
+        ).execute(&pool).await;
+        let _ = sqlx::query("DROP TABLE data_attributes").execute(&pool).await;
+        let _ = sqlx::query("ALTER TABLE data_attributes_new RENAME TO data_attributes").execute(&pool).await;
+        info!("  [DB] data_attributes migration complete.");
+    }
+
+    let has_old_dict_pk: bool = sqlx::query_scalar(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info WHERE tbl_name='dictionary' AND pk>0 AND name='dict_id' AND (SELECT COUNT(*) FROM pragma_table_info WHERE tbl_name='dictionary' AND pk>0 AND name='version_fingerprint') = 0"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap_or(false);
+    if has_old_dict_pk {
+        info!("  [DB] Migrating dictionary to composite PK...");
+        let _ = sqlx::query(
+            "CREATE TABLE dictionary_new (
+                dict_id INTEGER NOT NULL,
+                text TEXT,
+                version_fingerprint TEXT NOT NULL,
+                PRIMARY KEY (dict_id, version_fingerprint)
+            )"
+        ).execute(&pool).await;
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO dictionary_new SELECT dict_id, text, COALESCE(version_fingerprint, 'migrated') FROM dictionary"
+        ).execute(&pool).await;
+        let _ = sqlx::query("DROP TABLE dictionary").execute(&pool).await;
+        let _ = sqlx::query("ALTER TABLE dictionary_new RENAME TO dictionary").execute(&pool).await;
+        info!("  [DB] dictionary migration complete.");
+    }
+
     // Seed default admin user if no users exist
     let row = sqlx::query("SELECT COUNT(*) FROM users")
         .fetch_one(&pool)
@@ -361,19 +418,21 @@ async fn initialize_postgres(
             internal_name TEXT UNIQUE
         )",
         "CREATE TABLE IF NOT EXISTS data_attributes (
-            handle INTEGER PRIMARY KEY,
+            handle INTEGER NOT NULL,
             data_type INTEGER,
             size INTEGER,
             conversion_factor INTEGER,
             label_did INTEGER,
             unit_did INTEGER,
             signal_id BIGINT REFERENCES signals(id),
-            version_fingerprint TEXT
+            version_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (handle, version_fingerprint)
         )",
         "CREATE TABLE IF NOT EXISTS dictionary (
-            dict_id INTEGER PRIMARY KEY,
+            dict_id INTEGER NOT NULL,
             text TEXT,
-            version_fingerprint TEXT
+            version_fingerprint TEXT NOT NULL,
+            PRIMARY KEY (dict_id, version_fingerprint)
         )",
         "CREATE TABLE IF NOT EXISTS patients (
             id BIGSERIAL PRIMARY KEY,
@@ -505,6 +564,29 @@ async fn initialize_postgres(
     .execute(&pool)
     .await;
 
+    // Migrate existing databases: change to composite PK
+    let _ = sqlx::query(
+        "DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'data_attributes'::regclass AND conname LIKE '%pkey%' AND contype = 'p')
+               AND NOT EXISTS (SELECT 1 FROM pg_index WHERE indrelid = 'data_attributes'::regclass AND indkey LIKE '%3%')
+            THEN
+                ALTER TABLE data_attributes DROP CONSTRAINT data_attributes_pkey;
+                ALTER TABLE data_attributes ADD PRIMARY KEY (handle, version_fingerprint);
+            END IF;
+        END $$;"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query(
+        "DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'dictionary'::regclass AND conname LIKE '%pkey%' AND contype = 'p')
+               AND NOT EXISTS (SELECT 1 FROM pg_index WHERE indrelid = 'dictionary'::regclass AND indkey LIKE '%2%')
+            THEN
+                ALTER TABLE dictionary DROP CONSTRAINT dictionary_pkey;
+                ALTER TABLE dictionary ADD PRIMARY KEY (dict_id, version_fingerprint);
+            END IF;
+        END $$;"
+    ).execute(&pool).await;
+
     let row = sqlx::query("SELECT COUNT(*) FROM users")
         .fetch_one(&pool)
         .await?;
@@ -606,17 +688,19 @@ async fn initialize_mssql(
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'data_attributes')
              CREATE TABLE data_attributes (
-                 handle INT PRIMARY KEY,
+                 handle INT NOT NULL,
                  data_type INT, size INT, conversion_factor INT,
                  label_did INT, unit_did INT, signal_id INT,
-                 version_fingerprint NVARCHAR(64),
+                 version_fingerprint NVARCHAR(64) NOT NULL,
+                 PRIMARY KEY (handle, version_fingerprint),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'dictionary')
              CREATE TABLE dictionary (
-                 dict_id INT PRIMARY KEY,
+                 dict_id INT NOT NULL,
                  text NVARCHAR(MAX),
-                 version_fingerprint NVARCHAR(64)
+                 version_fingerprint NVARCHAR(64) NOT NULL,
+                 PRIMARY KEY (dict_id, version_fingerprint)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'patients')
              CREATE TABLE patients (
@@ -800,6 +884,38 @@ async fn initialize_mssql(
         );
         if let Err(e) = q.execute(&mut *c).await {
             warn!("  [DB] Index creation warning: {}", e);
+        }
+    }
+
+    // Migrate existing databases: change to composite PK
+    {
+        let mut c = pool.get().await?;
+        let q = TibQuery::new(
+            "IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('data_attributes') AND is_primary_key = 1
+                        AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = OBJECT_ID('data_attributes') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE object_id = OBJECT_ID('data_attributes') AND is_primary_key = 1) AND ic.column_id = (SELECT column_id FROM sys.columns WHERE object_id = OBJECT_ID('data_attributes') AND name = 'version_fingerprint')))
+             BEGIN
+                 DECLARE @pk_name NVARCHAR(128) = (SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('data_attributes') AND is_primary_key = 1);
+                 EXEC('ALTER TABLE data_attributes DROP CONSTRAINT ' + @pk_name);
+                 ALTER TABLE data_attributes ADD PRIMARY KEY (handle, version_fingerprint);
+             END"
+        );
+        if let Err(e) = q.execute(&mut *c).await {
+            warn!("  [DB] MSSQL data_attributes PK migration warning: {}", e);
+        }
+    }
+    {
+        let mut c = pool.get().await?;
+        let q = TibQuery::new(
+            "IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dictionary') AND is_primary_key = 1
+                        AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = OBJECT_ID('dictionary') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE object_id = OBJECT_ID('dictionary') AND is_primary_key = 1) AND ic.column_id = (SELECT column_id FROM sys.columns WHERE object_id = OBJECT_ID('dictionary') AND name = 'version_fingerprint')))
+             BEGIN
+                 DECLARE @pk_name NVARCHAR(128) = (SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('dictionary') AND is_primary_key = 1);
+                 EXEC('ALTER TABLE dictionary DROP CONSTRAINT ' + @pk_name);
+                 ALTER TABLE dictionary ADD PRIMARY KEY (dict_id, version_fingerprint);
+             END"
+        );
+        if let Err(e) = q.execute(&mut *c).await {
+            warn!("  [DB] MSSQL dictionary PK migration warning: {}", e);
         }
     }
 

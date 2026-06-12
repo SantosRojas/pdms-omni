@@ -61,14 +61,7 @@ impl DataAttributeRepository for PgDataAttrRepository {
         sqlx::query(
             "INSERT INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (handle) DO UPDATE SET
-                 data_type = EXCLUDED.data_type,
-                 size = EXCLUDED.size,
-                 conversion_factor = EXCLUDED.conversion_factor,
-                 label_did = EXCLUDED.label_did,
-                 unit_did = EXCLUDED.unit_did,
-                 signal_id = EXCLUDED.signal_id,
-                 version_fingerprint = EXCLUDED.version_fingerprint"
+             ON CONFLICT (handle, version_fingerprint) DO NOTHING"
         )
         .bind(attr.handle as i32)
         .bind(attr.data_type as i32)
@@ -166,7 +159,7 @@ impl DictionaryRepository for PgDictionaryRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query(
             "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
-             ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text, version_fingerprint = EXCLUDED.version_fingerprint"
+             ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
         )
         .bind(entry.dict_id as i32)
         .bind(&entry.text)
@@ -190,7 +183,7 @@ impl DictionaryRepository for PgDictionaryRepository {
         for entry in entries {
             sqlx::query(
                 "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
-                 ON CONFLICT (dict_id) DO UPDATE SET text = EXCLUDED.text, version_fingerprint = EXCLUDED.version_fingerprint"
+                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
             )
             .bind(entry.dict_id as i32)
             .bind(&entry.text)
@@ -610,6 +603,95 @@ impl VersionRepository for PgVersionRepository {
         .execute(&self.pool)
         .await
         .map_err(map_db_err)?;
+        Ok(())
+    }
+
+    async fn save_initialization(
+        &self,
+        version: &VersionInfo,
+        attrs: &[DataAttribute],
+        dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError> {
+        let fp = version.fingerprint();
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
+
+        for attr in attrs {
+            sqlx::query(
+                "INSERT INTO signals (internal_name) VALUES ($1) ON CONFLICT (internal_name) DO NOTHING",
+            )
+            .bind(&attr.internal_name)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        for attr in attrs {
+            let signal_id: i64 = sqlx::query_scalar(
+                "SELECT id FROM signals WHERE internal_name = $1",
+            )
+            .bind(&attr.internal_name)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+
+            sqlx::query(
+                "INSERT INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (handle, version_fingerprint) DO NOTHING"
+            )
+            .bind(attr.handle as i32)
+            .bind(attr.data_type as i32)
+            .bind(attr.size as i32)
+            .bind(attr.conversion_factor as i32)
+            .bind(attr.label_did as i32)
+            .bind(attr.unit_did as i32)
+            .bind(signal_id)
+            .bind(&fp)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        for entry in dict_entries {
+            sqlx::query(
+                "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
+                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
+            )
+            .bind(entry.dict_id as i32)
+            .bind(&entry.text)
+            .bind(&fp)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
+        }
+
+        sqlx::query::<sqlx::Postgres>(
+            "INSERT INTO versions (fingerprint, language_id, system_sw, dss_fw, dss_hw, css_fw, css_hw, pss_fw, pss_hw, lang1, lang2, lang3)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             ON CONFLICT (fingerprint) DO UPDATE SET
+                 language_id=EXCLUDED.language_id, system_sw=EXCLUDED.system_sw,
+                 dss_fw=EXCLUDED.dss_fw, dss_hw=EXCLUDED.dss_hw,
+                 css_fw=EXCLUDED.css_fw, css_hw=EXCLUDED.css_hw,
+                 pss_fw=EXCLUDED.pss_fw, pss_hw=EXCLUDED.pss_hw,
+                 lang1=EXCLUDED.lang1, lang2=EXCLUDED.lang2, lang3=EXCLUDED.lang3"
+        )
+        .bind(&fp)
+        .bind(version.language_id as i32)
+        .bind(&version.system_sw)
+        .bind(&version.dss_fw)
+        .bind(&version.dss_hw)
+        .bind(&version.css_fw)
+        .bind(&version.css_hw)
+        .bind(&version.pss_fw)
+        .bind(&version.pss_hw)
+        .bind(&version.language1)
+        .bind(&version.language2)
+        .bind(&version.language3)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_db_err)?;
+
+        tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 

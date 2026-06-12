@@ -223,6 +223,15 @@ impl VersionRepository for NullVersionRepository {
         Ok(())
     }
 
+    async fn save_initialization(
+        &self,
+        _version: &VersionInfo,
+        _attrs: &[DataAttribute],
+        _dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+
     async fn get_by_fingerprint(
         &self,
         _fingerprint: &str,

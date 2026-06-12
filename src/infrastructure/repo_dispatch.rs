@@ -337,6 +337,19 @@ impl VersionRepository for DynVersionRepo {
             Self::Null(r) => r.save(version).await,
         }
     }
+    async fn save_initialization(
+        &self,
+        version: &VersionInfo,
+        attrs: &[DataAttribute],
+        dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError> {
+        match self {
+            Self::Sqlite(r) => r.save_initialization(version, attrs, dict_entries).await,
+            Self::Postgres(r) => r.save_initialization(version, attrs, dict_entries).await,
+            Self::Mssql(r) => r.save_initialization(version, attrs, dict_entries).await,
+            Self::Null(r) => r.save_initialization(version, attrs, dict_entries).await,
+        }
+    }
     async fn get_by_fingerprint(
         &self,
         fingerprint: &str,

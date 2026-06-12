@@ -130,6 +130,12 @@ pub trait TelemetryRepository: Send + Sync {
 /// Persists version information for caching/comparison.
 pub trait VersionRepository: Send + Sync {
     async fn save(&self, version: &VersionInfo) -> Result<(), RepositoryError>;
+    async fn save_initialization(
+        &self,
+        version: &VersionInfo,
+        attrs: &[DataAttribute],
+        dict_entries: &[DictionaryEntry],
+    ) -> Result<(), RepositoryError>;
     async fn get_by_fingerprint(
         &self,
         fingerprint: &str,

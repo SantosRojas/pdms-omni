@@ -217,10 +217,9 @@ where
     //  PHASE 2b: INITIALIZATION — Get Data Attributes (per handle)
     // ═══════════════════════════════════════════════════════════════
     /// Gets attributes for ALL handles previously discovered.
-    /// Saves each attribute with the given `version_fingerprint` for scoped caching.
     pub async fn get_all_data_attributes(
         &mut self,
-        version_fingerprint: &str,
+        _version_fingerprint: &str,
     ) -> Result<Vec<DataAttribute>, UseCaseError> {
         let handles = self.handles.clone();
         println!(
@@ -228,9 +227,6 @@ where
             handles.len()
         );
 
-        self.attr_repo
-            .delete_by_fingerprint(version_fingerprint)
-            .await?;
         let mut attrs = Vec::with_capacity(handles.len());
         self.attr_cache.clear();
 
@@ -283,26 +279,18 @@ where
                 internal_name,
             };
 
-            self.attr_repo.save(&attr, version_fingerprint).await?;
-
-            let saved_attr = self.attr_repo.get_by_handle(handle).await?.ok_or_else(|| {
-                UseCaseError::Protocol(format!(
-                    "Saved attribute handle=0x{handle:04X} not found after insert"
-                ))
-            })?;
-
             println!(
                 "      [{}/{}] handle=0x{:04X} name={:30} type={:?} size={} factor={}",
                 i + 1,
                 handles.len(),
                 handle,
-                saved_attr.internal_name,
-                saved_attr.data_type,
-                saved_attr.size,
-                saved_attr.conversion_factor
+                attr.internal_name,
+                attr.data_type,
+                attr.size,
+                attr.conversion_factor
             );
-            self.attr_cache.insert(handle, saved_attr.clone());
-            attrs.push(saved_attr);
+            self.attr_cache.insert(handle, attr.clone());
+            attrs.push(attr);
         }
 
         Ok(attrs)
@@ -319,14 +307,11 @@ where
     /// Start with prev_dict_id=0. When dict_id in answer == 0, dictionary is complete.
     pub async fn get_dictionary(
         &mut self,
-        version_fingerprint: &str,
+        _version_fingerprint: &str,
     ) -> Result<Vec<DictionaryEntry>, UseCaseError> {
         println!("  [4] CMD_GET_NEXT_DICT_STR (building dictionary)...");
 
         const MAX_DICT_ENTRIES: usize = 20_000;
-        self.dict_repo
-            .delete_by_fingerprint(version_fingerprint)
-            .await?;
         let mut entries = Vec::new();
         self.dict_cache.clear();
         let mut prev_id: u16 = 0;
@@ -403,9 +388,6 @@ where
             prev_id = dict_id;
         }
 
-        self.dict_repo
-            .save_batch(&entries, version_fingerprint)
-            .await?;
         println!("      Dictionary complete: {} entries", entries.len());
         Ok(entries)
     }
@@ -677,30 +659,34 @@ where
                 fp
             );
             let loaded = self.load_configuration_from_db(&fp).await?;
-            if !loaded {
-                println!("  [i] Database cache is empty/incomplete. Fetching from device...");
-                self.get_data_handles().await?;
-                self.get_all_data_attributes(&fp).await?;
-                self.get_dictionary(&fp).await?;
-                self.version_repo.save(&version).await?;
-            } else {
+            if loaded {
                 println!("  [i] Cache hit. Skipping device fetch. Moving to cyclic loop.");
+                println!("  [eq] Loading value equivalences from database...");
+                self.load_equiv_cache().await?;
+                println!("\n══ INITIALIZATION COMPLETE ══\n");
+                return Ok(version);
             }
+            println!("  [i] Database cache is empty/incomplete. Fetching from device...");
         } else {
             println!(
                 "  [i] Fingerprint {} is new (not found in DB). Fetching from device...",
                 fp
             );
-            self.get_data_handles().await?;
-            self.get_all_data_attributes(&fp).await?;
-            self.get_dictionary(&fp).await?;
-            self.version_repo.save(&version).await?;
         }
 
-        // Always load the equivalence cache from DB after initialization,
-        // regardless of whether we fetched from device or loaded from local cache.
-        // Equivalences are pre-populated via the Python loader and are independent
-        // of OMNI firmware versions.
+        // Fetch from device (memory only — no DB writes yet)
+        self.get_data_handles().await?;
+        let attrs = self.get_all_data_attributes(&fp).await?;
+        let dict = self.get_dictionary(&fp).await?;
+
+        // Persist everything atomically — if this fails, nothing is committed
+        self.version_repo
+            .save_initialization(&version, &attrs, &dict)
+            .await?;
+
+        // Reload the in-memory cache from DB (gets real signal_ids from DB)
+        self.load_configuration_from_db(&fp).await?;
+
         println!("  [eq] Loading value equivalences from database...");
         self.load_equiv_cache().await?;
 
