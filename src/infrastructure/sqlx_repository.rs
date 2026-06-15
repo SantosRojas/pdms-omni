@@ -500,6 +500,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
         readings: &[TelemetryReading],
         phase: &str,
     ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         for reading in readings {
             let physical_value = telemetry_value_to_storage(&reading.physical_value);
             sqlx::query(
@@ -513,10 +514,11 @@ impl TelemetryRepository for SqlxTelemetryRepository {
             .bind(&reading.unit)
             .bind(&reading.display_value)
             .bind(phase)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_db_err)?;
         }
+        tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 

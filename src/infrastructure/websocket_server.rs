@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::response::IntoResponse;
 use axum::routing::{delete, get, post, put};
 use serde::Serialize;
 use tokio::sync::broadcast;
@@ -10,8 +11,17 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing::{error, info};
 
+use super::auth::decode_token;
 use super::db_pool::DbPool;
 use super::http_api::{self, ApiState};
+
+async fn api_not_found() -> axum::response::Response {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        axum::Json(serde_json::json!({"error": "API endpoint not found"})),
+    )
+        .into_response()
+}
 
 #[derive(Clone)]
 pub struct WebSocketHub {
@@ -50,13 +60,16 @@ impl WebSocketHub {
                     .allow_headers(Any)
             };
 
+            let ws_jwt_secret = jwt_secret.clone();
             let ws_route = move |ws: WebSocketUpgrade| {
                 let tx = app_tx.clone();
-                async move { ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe())) }
+                let secret = ws_jwt_secret.clone();
+                async move {
+                    ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe(), secret))
+                }
             };
 
             // Build a 503-returning fallback for all API routes when the DB is unavailable.
-            // This ensures the frontend always gets a meaningful response instead of a 404/connection error.
             fn db_unavailable() -> impl axum::response::IntoResponse {
                 (
                     axum::http::StatusCode::SERVICE_UNAVAILABLE,
@@ -67,7 +80,9 @@ impl WebSocketHub {
                 )
             }
 
-            let app = if let Some(db) = db {
+            // Build a nested /api router with its own fallback for unknown API routes
+            // (returns JSON 404 instead of falling through to the SPA).
+            let api_router: Router<()> = if let Some(db) = db {
                 let api_state = ApiState {
                     db,
                     jwt_secret,
@@ -76,9 +91,8 @@ impl WebSocketHub {
                 };
 
                 Router::new()
-                    .route("/ws", get(ws_route))
                     .route(
-                        "/api/status",
+                        "/status",
                         get({
                             let persistence_enabled = persistence_enabled;
                             move || async move {
@@ -90,105 +104,92 @@ impl WebSocketHub {
                         }),
                     )
                     // Auth
-                    .route("/api/auth/login", post(http_api::login))
-                    .route("/api/auth/logout", post(http_api::logout))
-                    .route("/api/auth/me", get(http_api::get_me))
+                    .route("/auth/login", post(http_api::login))
+                    .route("/auth/logout", post(http_api::logout))
+                    .route("/auth/me", get(http_api::get_me))
                     // Users CRUD
-                    .route("/api/users", get(http_api::list_users))
-                    .route("/api/users", post(http_api::create_user))
-                    .route("/api/users/{id}", put(http_api::update_user))
-                    .route("/api/users/{id}", delete(http_api::delete_user))
+                    .route("/users", get(http_api::list_users))
+                    .route("/users", post(http_api::create_user))
+                    .route("/users/{id}", put(http_api::update_user))
+                    .route("/users/{id}", delete(http_api::delete_user))
                     // Equivalences CRUD
-                    .route("/api/equivalences", get(http_api::list_equivalences))
-                    .route("/api/equivalences", post(http_api::create_equivalence))
-                    .route("/api/equivalences", put(http_api::update_equivalence))
-                    .route("/api/equivalences", delete(http_api::delete_equivalence))
+                    .route("/equivalences", get(http_api::list_equivalences))
+                    .route("/equivalences", post(http_api::create_equivalence))
+                    .route("/equivalences", put(http_api::update_equivalence))
+                    .route("/equivalences", delete(http_api::delete_equivalence))
                     // Telemetry
-                    .route("/api/patients", get(http_api::list_patients))
-                    .route("/api/therapies", get(http_api::list_therapies))
-                    .route("/api/history", get(http_api::patient_history))
-                    .route("/api/export", get(http_api::export_csv))
-                    .route("/api/therapy-history", get(http_api::therapy_history))
-                    .route("/api/therapy-export", get(http_api::export_therapy_csv))
+                    .route("/patients", get(http_api::list_patients))
+                    .route("/therapies", get(http_api::list_therapies))
+                    .route("/history", get(http_api::patient_history))
+                    .route("/export", get(http_api::export_csv))
+                    .route("/therapy-history", get(http_api::therapy_history))
+                    .route("/therapy-export", get(http_api::export_therapy_csv))
                     // Serial Reader Control
-                    .route("/api/serial/status", get(http_api::serial_status))
-                    .route("/api/serial/start", post(http_api::serial_start))
-                    .route("/api/serial/stop", post(http_api::serial_stop))
+                    .route("/serial/status", get(http_api::serial_status))
+                    .route("/serial/start", post(http_api::serial_start))
+                    .route("/serial/stop", post(http_api::serial_stop))
                     // Session Readings
                     .route(
-                        "/api/sessions/{id}/readings",
+                        "/sessions/{id}/readings",
                         get(http_api::get_session_readings),
                     )
                     // Therapy Comments
-                    .route("/api/therapies/{id}/comments", get(http_api::list_comments))
+                    .route("/therapies/{id}/comments", get(http_api::list_comments))
                     .route(
-                        "/api/therapies/{id}/comments",
+                        "/therapies/{id}/comments",
                         post(http_api::create_comment),
                     )
                     .route(
-                        "/api/therapies/comments/{comment_id}",
+                        "/therapies/comments/{comment_id}",
                         delete(http_api::delete_comment),
                     )
                     .with_state(api_state)
-                    .layer(cors)
-                    .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
+                    .fallback(api_not_found)
             } else {
-                // DB not available: register all API routes but respond with 503 so the
-                // frontend knows the service is degraded (not a network error or 404).
+                // DB not available: all API routes return 503.
                 Router::new()
-                    .route("/ws", get(ws_route))
-                    .route(
-                        "/api/status",
-                        get({
-                            let persistence_enabled = persistence_enabled;
-                            move || async move {
-                                axum::Json(serde_json::json!({
-                                    "ok": true,
-                                    "persistence_enabled": persistence_enabled,
-                                    "message": "Base de datos no disponible"
-                                }))
-                            }
-                        }),
-                    )
-                    .route("/api/auth/login", post(|| async { db_unavailable() }))
-                    .route("/api/auth/logout", post(|| async { db_unavailable() }))
-                    .route("/api/auth/me", get(|| async { db_unavailable() }))
-                    .route("/api/users", get(|| async { db_unavailable() }))
-                    .route("/api/users", post(|| async { db_unavailable() }))
-                    .route("/api/users/{id}", put(|| async { db_unavailable() }))
-                    .route("/api/users/{id}", delete(|| async { db_unavailable() }))
-                    .route("/api/equivalences", get(|| async { db_unavailable() }))
-                    .route("/api/equivalences", post(|| async { db_unavailable() }))
-                    .route("/api/equivalences", put(|| async { db_unavailable() }))
-                    .route("/api/equivalences", delete(|| async { db_unavailable() }))
-                    .route("/api/patients", get(|| async { db_unavailable() }))
-                    .route("/api/therapies", get(|| async { db_unavailable() }))
-                    .route("/api/history", get(|| async { db_unavailable() }))
-                    .route("/api/export", get(|| async { db_unavailable() }))
-                    .route("/api/therapy-history", get(|| async { db_unavailable() }))
-                    .route("/api/therapy-export", get(|| async { db_unavailable() }))
-                    .route("/api/serial/status", get(|| async { db_unavailable() }))
-                    .route("/api/serial/start", post(|| async { db_unavailable() }))
-                    .route("/api/serial/stop", post(|| async { db_unavailable() }))
-                    .route(
-                        "/api/therapies/{id}/comments",
-                        get(|| async { db_unavailable() }),
-                    )
-                    .route(
-                        "/api/therapies/{id}/comments",
-                        post(|| async { db_unavailable() }),
-                    )
-                    .route(
-                        "/api/therapies/comments/{comment_id}",
-                        delete(|| async { db_unavailable() }),
-                    )
-                    .route(
-                        "/api/sessions/{id}/readings",
-                        get(|| async { db_unavailable() }),
-                    )
-                    .layer(cors)
-                    .fallback_service(dashboard_fallback(dashboard_dir.as_deref()))
+                    .route("/status", get({
+                        let persistence_enabled = persistence_enabled;
+                        move || async move {
+                            axum::Json(serde_json::json!({
+                                "ok": true,
+                                "persistence_enabled": persistence_enabled,
+                                "message": "Base de datos no disponible"
+                            }))
+                        }
+                    }))
+                    .route("/auth/login", post(|| async { db_unavailable() }))
+                    .route("/auth/logout", post(|| async { db_unavailable() }))
+                    .route("/auth/me", get(|| async { db_unavailable() }))
+                    .route("/users", get(|| async { db_unavailable() }))
+                    .route("/users", post(|| async { db_unavailable() }))
+                    .route("/users/{id}", put(|| async { db_unavailable() }))
+                    .route("/users/{id}", delete(|| async { db_unavailable() }))
+                    .route("/equivalences", get(|| async { db_unavailable() }))
+                    .route("/equivalences", post(|| async { db_unavailable() }))
+                    .route("/equivalences", put(|| async { db_unavailable() }))
+                    .route("/equivalences", delete(|| async { db_unavailable() }))
+                    .route("/patients", get(|| async { db_unavailable() }))
+                    .route("/therapies", get(|| async { db_unavailable() }))
+                    .route("/history", get(|| async { db_unavailable() }))
+                    .route("/export", get(|| async { db_unavailable() }))
+                    .route("/therapy-history", get(|| async { db_unavailable() }))
+                    .route("/therapy-export", get(|| async { db_unavailable() }))
+                    .route("/serial/status", get(|| async { db_unavailable() }))
+                    .route("/serial/start", post(|| async { db_unavailable() }))
+                    .route("/serial/stop", post(|| async { db_unavailable() }))
+                    .route("/therapies/{id}/comments", get(|| async { db_unavailable() }))
+                    .route("/therapies/{id}/comments", post(|| async { db_unavailable() }))
+                    .route("/therapies/comments/{comment_id}", delete(|| async { db_unavailable() }))
+                    .route("/sessions/{id}/readings", get(|| async { db_unavailable() }))
+                    .fallback(api_not_found)
             };
+
+            let app = Router::new()
+                .nest("/api", api_router)
+                .route("/ws", get(ws_route))
+                .layer(cors)
+                .fallback_service(dashboard_fallback(dashboard_dir.as_deref()));
 
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,
@@ -219,7 +220,6 @@ impl WebSocketHub {
 }
 
 /// Creates a fallback router that serves the built dashboard (SPA).
-/// If `dashboard_dir` is `None`, returns a simple 404 handler.
 fn dashboard_fallback(dir: Option<&std::path::Path>) -> Router {
     if let Some(dir) = dir {
         Router::new().fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
@@ -233,7 +233,63 @@ fn dashboard_fallback(dir: Option<&std::path::Path>) -> Router {
     }
 }
 
-async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<String>) {
+async fn handle_socket(
+    mut socket: WebSocket,
+    mut rx: broadcast::Receiver<String>,
+    jwt_secret: String,
+) {
+    // ── Require auth token as first message ──────────────────────
+    let is_authenticated = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        socket.recv(),
+    )
+    .await
+    {
+        Ok(Some(Ok(Message::Text(text)))) => {
+            match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(val) if val.get("type").and_then(|t| t.as_str()) == Some("auth") => {
+                    let token = val
+                        .get("token")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("");
+                    match decode_token(&jwt_secret, token) {
+                        Ok(_) => {
+                            let _ = socket
+                                .send(Message::Text(
+                                    r#"{"type":"auth_ok"}"#.into(),
+                                ))
+                                .await;
+                            true
+                        }
+                        Err(_) => {
+                            let _ = socket
+                                .send(Message::Text(
+                                    r#"{"type":"auth_error","error":"invalid_token"}"#.into(),
+                                ))
+                                .await;
+                            false
+                        }
+                    }
+                }
+                _ => {
+                    let _ = socket
+                        .send(Message::Text(
+                            r#"{"type":"auth_error","error":"expected_auth"}"#.into(),
+                        ))
+                        .await;
+                    false
+                }
+            }
+        }
+        _ => false,
+    };
+
+    if !is_authenticated {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    }
+
+    // ── Normal message loop ──────────────────────────────────────
     loop {
         tokio::select! {
             outbound = rx.recv() => {
@@ -243,7 +299,10 @@ async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<String
                             break;
                         }
                     }
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        tracing::warn!("[WS] Cliente perdió mensajes (broadcast lag)");
+                        continue;
+                    }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }

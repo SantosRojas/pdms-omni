@@ -526,21 +526,27 @@ impl DbPool {
     ) -> Result<(), String> {
         match self {
             DbPool::Sqlite(pool) => {
+                let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
                 sqlx::query("INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES (?1, ?2, ?3, ?4)")
-                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(pool).await.map_err(|e| e.to_string())?;
+                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(&mut *tx).await.map_err(|e| e.to_string())?;
                 sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = ?1 AND numeric_value = ?2")
-                    .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
+                    .bind(signal_id).bind(numeric_value).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                tx.commit().await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Postgres(pool) => {
+                let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
                 sqlx::query("INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES ($1, $2, $3, $4)")
-                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(pool).await.map_err(|e| e.to_string())?;
+                    .bind(signal_id).bind(numeric_value).bind(deleted_by).bind(deletion_reason).execute(&mut *tx).await.map_err(|e| e.to_string())?;
                 sqlx::query("DELETE FROM attribute_equivalences WHERE signal_id = $1 AND numeric_value = $2")
-                    .bind(signal_id).bind(numeric_value).execute(pool).await.map_err(|e| e.to_string())?;
+                    .bind(signal_id).bind(numeric_value).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                tx.commit().await.map_err(|e| e.to_string())?;
                 Ok(())
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                // Manual BEGIN/COMMIT for tiberius (no built-in transaction helper)
+                Query::new("BEGIN TRANSACTION").execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 let mut q1 = Query::new(
                     "INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES (@P1, @P2, @P3, @P4)",
                 );
@@ -548,13 +554,20 @@ impl DbPool {
                 q1.bind(numeric_value);
                 q1.bind(deleted_by);
                 q1.bind(deletion_reason);
-                q1.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                if let Err(e) = q1.execute(&mut *conn).await {
+                    let _ = Query::new("ROLLBACK").execute(&mut *conn).await;
+                    return Err(e.to_string());
+                }
                 let mut q2 = Query::new(
                     "DELETE FROM attribute_equivalences WHERE signal_id = @P1 AND numeric_value = @P2",
                 );
                 q2.bind(signal_id as i32);
                 q2.bind(numeric_value);
-                q2.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                if let Err(e) = q2.execute(&mut *conn).await {
+                    let _ = Query::new("ROLLBACK").execute(&mut *conn).await;
+                    return Err(e.to_string());
+                }
+                Query::new("COMMIT").execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
         }

@@ -3,11 +3,19 @@
 *.pdf
 *.doc
 *.xlsx
-*.db
 *.log
-*.db-shm
-*.db-wal
 
 /Back
 /logs
+
+# Runtime SQLite databases
+*.db
+*.db-shm
+*.db-wal
+omni_db
+omni_db-shm
+omni_db-wal
+database.db
+database.db-shm
+database.db-wal
 

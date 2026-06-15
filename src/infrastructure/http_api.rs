@@ -36,7 +36,7 @@ async fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> 
     Some(claims)
 }
 
-fn unauthorized() -> impl IntoResponse {
+fn unauthorized() -> axum::response::Response {
     (
         StatusCode::UNAUTHORIZED,
         Json(serde_json::json!({"error": "Unauthorized"})),
@@ -44,7 +44,7 @@ fn unauthorized() -> impl IntoResponse {
         .into_response()
 }
 
-fn forbidden() -> impl IntoResponse {
+fn forbidden() -> axum::response::Response {
     (
         StatusCode::FORBIDDEN,
         Json(serde_json::json!({"error": "Forbidden: insufficient role"})),
@@ -52,7 +52,7 @@ fn forbidden() -> impl IntoResponse {
         .into_response()
 }
 
-fn db_err(msg: String) -> impl IntoResponse {
+fn db_err(msg: String) -> axum::response::Response {
     tracing::error!("[API] Internal error: {}", msg);
     (
         StatusCode::INTERNAL_SERVER_ERROR,
@@ -627,7 +627,13 @@ pub struct TherapyExportQuery {
 }
 
 /// GET /api/patients
-pub async fn list_patients(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn list_patients(
+    headers: HeaderMap,
+    State(state): State<ApiState>,
+) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized();
+    }
     match state.db.list_patients().await {
         Ok(rows) => {
             let pts: Vec<PatientDto> = rows
@@ -670,9 +676,13 @@ pub struct TherapiesResponse {
 
 /// GET /api/therapies?search=&status=&page=1&page_size=30
 pub async fn list_therapies(
+    headers: HeaderMap,
     State(state): State<ApiState>,
     Query(params): Query<TherapiesQuery>,
 ) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized();
+    }
     match state
         .db
         .list_therapies(
@@ -713,9 +723,13 @@ pub async fn list_therapies(
 
 /// GET /api/history?patient=XYZ&limit=500
 pub async fn patient_history(
+    headers: HeaderMap,
     State(state): State<ApiState>,
     Query(params): Query<HistoryQuery>,
 ) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized();
+    }
     match state
         .db
         .patient_history(&params.patient, params.limit)
@@ -749,9 +763,13 @@ pub async fn patient_history(
 
 /// GET /api/therapy-history?therapy_id=123&limit=500
 pub async fn therapy_history(
+    headers: HeaderMap,
     State(state): State<ApiState>,
     Query(params): Query<TherapyHistoryQuery>,
 ) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized();
+    }
     match state
         .db
         .therapy_history(params.therapy_id, params.limit)
@@ -860,10 +878,14 @@ pub struct SessionReadingsQuery {
 
 /// GET /api/sessions/{id}/readings?limit=500
 pub async fn get_session_readings(
+    headers: HeaderMap,
     State(state): State<ApiState>,
     Path(session_id): Path<i64>,
     Query(params): Query<SessionReadingsQuery>,
 ) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized();
+    }
     match state
         .db
         .list_session_readings(session_id, params.limit)

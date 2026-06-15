@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Search, X, ChevronRight, Loader } from 'lucide-react';
 import { toLocalDatetime } from '../../infrastructure/time';
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{Mutex, mpsc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReaderCommand {
@@ -18,7 +18,7 @@ pub struct SerialReaderStatus {
 }
 
 pub struct SerialReaderManager {
-    cmd_tx: watch::Sender<ReaderCommand>,
+    cmd_tx: mpsc::Sender<ReaderCommand>,
     state: Arc<Mutex<SerialReaderStatus>>,
 }
 
@@ -28,7 +28,7 @@ impl SerialReaderManager {
         start_active: bool,
     ) -> (
         Self,
-        watch::Receiver<ReaderCommand>,
+        mpsc::Receiver<ReaderCommand>,
         Arc<Mutex<SerialReaderStatus>>,
     ) {
         let initial_status = if start_active {
@@ -44,6 +44,8 @@ impl SerialReaderManager {
             close_therapy_on_stop: true,
         }));
 
+        let (cmd_tx, cmd_rx) = mpsc::channel(16);
+        // Pre-seed with the initial command so the reader thread always has a command to process
         let initial_cmd = if start_active {
             ReaderCommand::Start {
                 id: chrono::Utc::now().timestamp_millis() as u64,
@@ -52,8 +54,7 @@ impl SerialReaderManager {
         } else {
             ReaderCommand::Stop
         };
-
-        let (cmd_tx, cmd_rx) = watch::channel(initial_cmd);
+        let _ = cmd_tx.try_send(initial_cmd);
 
         (
             Self {
@@ -75,14 +76,14 @@ impl SerialReaderManager {
         s.consecutive_failures = 0;
         s.data_warnings = 0;
         let id = chrono::Utc::now().timestamp_millis() as u64;
-        let _ = self.cmd_tx.send(ReaderCommand::Start { id, new_therapy });
+        let _ = self.cmd_tx.send(ReaderCommand::Start { id, new_therapy }).await;
     }
 
     pub async fn stop(&self, close_therapy: bool) {
         let mut s = self.state.lock().await;
         s.status = "Stopped".to_string();
         s.close_therapy_on_stop = close_therapy;
-        let _ = self.cmd_tx.send(ReaderCommand::Stop);
+        let _ = self.cmd_tx.send(ReaderCommand::Stop).await;
     }
 
     /// Mark session as actively running (after successful init).
@@ -114,7 +115,7 @@ impl SerialReaderManager {
         let mut s = self.state.lock().await;
         s.status = "FailedLimit".to_string();
         s.close_therapy_on_stop = true;
-        let _ = self.cmd_tx.send(ReaderCommand::Stop);
+        let _ = self.cmd_tx.send(ReaderCommand::Stop).await;
     }
 
     /// Record one connection failure (I/O error, timeout).
@@ -125,7 +126,7 @@ impl SerialReaderManager {
         if s.consecutive_failures >= s.max_failures {
             s.status = "FailedLimit".to_string();
             s.close_therapy_on_stop = true;
-            let _ = self.cmd_tx.send(ReaderCommand::Stop);
+            let _ = self.cmd_tx.send(ReaderCommand::Stop).await;
             return true;
         }
         false

@@ -48,7 +48,6 @@ export const useSerialStatus = () => {
     setError(null);
     try {
       await apiService.startSerial(newTherapy);
-      // Optimistic update – the WS event will confirm
       setSerialStatus(prev => ({ ...prev, status: 'Initializing', consecutive_failures: 0, data_warnings: 0 }));
     } catch (e) {
       setError(e.message);

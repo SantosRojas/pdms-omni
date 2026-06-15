@@ -795,10 +795,42 @@ impl AttributeEquivalenceRepository for MssqlAttributeEquivalenceRepository {
     }
 
     async fn save_batch(&self, equivs: &[AttributeEquivalence]) -> Result<(), RepositoryError> {
-        for eq in equivs {
-            self.save(eq).await?;
+        let mut conn = self.pool.get().await.map_err(map_db_err)?;
+        Query::new("BEGIN TRANSACTION")
+            .execute(&mut *conn)
+            .await
+            .map_err(map_db_err)?;
+        let result = async {
+            for eq in equivs {
+                let signal_id = get_or_create_signal_id(&self.pool, &eq.internal_name).await? as i32;
+                let mut q = Query::new(
+                    "MERGE attribute_equivalences AS tgt \
+                     USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src \
+                     ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value \
+                     WHEN MATCHED THEN UPDATE SET display_name = @P3 \
+                     WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);",
+                );
+                q.bind(signal_id);
+                q.bind(eq.numeric_value);
+                q.bind(eq.display_name.as_str());
+                q.execute(&mut *conn).await.map_err(map_db_err)?;
+            }
+            Ok::<_, RepositoryError>(())
         }
-        Ok(())
+        .await;
+        match result {
+            Ok(_) => {
+                Query::new("COMMIT")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(map_db_err)?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = Query::new("ROLLBACK").execute(&mut *conn).await;
+                Err(e)
+            }
+        }
     }
 
     async fn get_by_internal_name(

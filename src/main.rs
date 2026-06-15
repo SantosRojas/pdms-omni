@@ -700,19 +700,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .build()
                 .expect("rt for serial thread");
 
-            let wait_for_command = |rx: &mut tokio::sync::watch::Receiver<ReaderCommand>| -> bool {
-                rt.block_on(rx.changed()).is_ok()
-            };
-
-            loop {
-                let cmd = *cmd_rx.borrow_and_update();
-
+            while let Some(cmd) = rt.block_on(cmd_rx.recv()) {
                 match cmd {
                     ReaderCommand::Start { id, new_therapy } => {
                         if current_session_id == Some(id) {
-                            if !wait_for_command(&mut cmd_rx) {
-                                break;
-                            }
                             continue;
                         }
                         current_session_id = Some(id);
@@ -732,16 +723,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             rt.block_on(sm_thread.stop(false));
                         }
                         rt.block_on(broadcast_serial_status(&ws_hub_thread, &sm_thread));
-
-                        if !wait_for_command(&mut cmd_rx) {
-                            break;
-                        }
                     }
                     ReaderCommand::Stop => {
                         current_session_id = None;
-                        if !wait_for_command(&mut cmd_rx) {
-                            break;
-                        }
                     }
                 }
             }

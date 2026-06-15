@@ -1,7 +1,16 @@
 use dotenvy;
 use std::collections::HashSet;
 use std::env;
+use std::sync::OnceLock;
 use tracing::warn;
+
+static CONFIG_WARNED: OnceLock<()> = OnceLock::new();
+
+fn warn_once(msg: &str) {
+    if CONFIG_WARNED.set(()).is_ok() {
+        warn!("[Config] {}", msg);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureMode {
@@ -90,6 +99,24 @@ impl AppConfig {
         let db_host = env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let db_port = env::var("DB_PORT").unwrap_or_else(|_| "1433".to_string());
 
+        // Warn or fail early for invalid/missing configuration
+        let driver_lc = db_connection.to_ascii_lowercase();
+        if driver_lc != "sqlite" && db_password.is_empty() {
+            warn!(
+                "[Config] DB_PASSWORD no está definido para '{}'. Verifica tu archivo .env",
+                db_connection
+            );
+        }
+        if driver_lc != "sqlite"
+            && (db_host == "127.0.0.1" && db_port == "1433" && db_username == "root")
+        {
+            warn!(
+                "[Config] Parece que DB_HOST/DB_PORT/DB_USERNAME usan valores por defecto para '{}'. \
+                 Verifica tu archivo .env",
+                db_connection
+            );
+        }
+
         let db_raw = env::var("DB_DATABASE").unwrap_or_else(|_| "database.db".to_string());
         // For sqlite, resolve relative to .env directory, else use raw name
         let db_database = if db_connection == "sqlite" {
@@ -102,16 +129,37 @@ impl AppConfig {
             db_raw
         };
 
+        // Log invalid config values for production safety
+        let baudrate_raw = env::var("SERIAL_BAUDRATE").unwrap_or_default();
+        let baudrate: u32 = baudrate_raw.parse().unwrap_or_else(|_| {
+            if !baudrate_raw.is_empty() {
+                warn_once(&format!("SERIAL_BAUDRATE '{}' inválido, usando 19200", baudrate_raw));
+            }
+            19200
+        });
+        let serial_timeout_secs = env::var("SERIAL_TIMEOUT")
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or(2);
+        let cycle_interval_secs: u64 = env::var("CYCLE_INTERVAL")
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or(1);
+        let db_save_interval_secs: u64 = env::var("DB_SAVE_INTERVAL")
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or(60);
+        if db_save_interval_secs < cycle_interval_secs {
+            warn_once(&format!(
+                "DB_SAVE_INTERVAL ({}) < CYCLE_INTERVAL ({}); los datos nunca se guardarán",
+                db_save_interval_secs, cycle_interval_secs
+            ));
+        }
+
         Self {
             port_name: env::var("SERIAL_PORT").unwrap_or_else(|_| "COM6".to_string()),
-            baudrate: env::var("SERIAL_BAUDRATE")
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or(19200),
-            serial_timeout_secs: env::var("SERIAL_TIMEOUT")
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or(2),
+            baudrate,
+            serial_timeout_secs,
             db_connection,
             db_host,
             db_port,
@@ -131,14 +179,8 @@ impl AppConfig {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(9001),
-            cycle_interval_secs: env::var("CYCLE_INTERVAL")
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or(1),
-            db_save_interval_secs: env::var("DB_SAVE_INTERVAL")
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or(60),
+            cycle_interval_secs,
+            db_save_interval_secs,
             device_init_retry_max_attempts: env::var("DEVICE_INIT_RETRY_MAX_ATTEMPTS")
                 .unwrap_or_default()
                 .parse()
@@ -210,7 +252,9 @@ impl AppConfig {
                 database: self.db_database.clone(),
                 username: self.db_username.clone(),
                 password: self.db_password.clone(),
-                trust_server_certificate: true,
+                trust_server_certificate: env::var("DB_TRUST_SERVER_CERTIFICATE")
+                    .map(|v| v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(true),
             }),
             "postgres" | "pgsql" | "postgresql" => DatabaseConfig::Postgres(PostgresSettings {
                 host: self.db_host.clone(),

@@ -5,12 +5,7 @@ export function setWsToken(token) {
 }
 
 function buildWsUrl() {
-  const base = import.meta.env.VITE_WS_URL || '/ws';
-  if (_token) {
-    const sep = base.includes('?') ? '&' : '?';
-    return `${base}${sep}token=${encodeURIComponent(_token)}`;
-  }
-  return base;
+  return import.meta.env.VITE_WS_URL || '/ws';
 }
 
 export const socketService = {
@@ -20,6 +15,7 @@ export const socketService = {
   _onConnect: null,
   _onDisconnect: null,
   _reconnectTimer: null,
+  _authenticated: false,
 
   _connectors: new Set(),
 
@@ -41,6 +37,8 @@ export const socketService = {
       this.ws.close();
     }
 
+    this._authenticated = false;
+
     try {
       this.ws = new WebSocket(buildWsUrl());
     } catch (e) {
@@ -50,23 +48,33 @@ export const socketService = {
     }
 
     this.ws.onopen = () => {
-      console.log('[WS] Connected');
+      // Send auth token as first message (never in URL)
+      if (_token) {
+        this.ws.send(JSON.stringify({ type: 'auth', token: _token }));
+      }
       if (this._onConnect) this._onConnect();
     };
 
     this.ws.onclose = () => {
-      console.log('[WS] Disconnected');
+      this._authenticated = false;
       if (this._onDisconnect) this._onDisconnect();
       this._scheduleReconnect();
-    };
-
-    this.ws.onerror = (e) => {
-      console.error('[WS] Error:', e);
     };
 
     this.ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
+
+        // Handle auth response
+        if (payload.type === 'auth_error') {
+          console.warn('[WS] Auth failed:', payload.error);
+          this.ws.close();
+          return;
+        }
+        if (payload.type === 'auth_ok') {
+          this._authenticated = true;
+          return;
+        }
 
         if (payload.type === 'telemetry' && payload.readings && this._onTelemetry) {
           this._onTelemetry(payload.readings);
@@ -84,7 +92,6 @@ export const socketService = {
   _scheduleReconnect() {
     if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
     this._reconnectTimer = setTimeout(() => {
-      console.log('[WS] Attempting reconnect...');
       this._doConnect();
     }, 3000);
   },

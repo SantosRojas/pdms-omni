@@ -944,7 +944,7 @@ async fn initialize_mssql(
         }
     }
 
-    // Seed equivalences
+    // Seed equivalences (single connection + explicit transaction)
     {
         let mut conn = pool.get().await?;
         let q = TibQuery::new("SELECT COUNT(*) FROM attribute_equivalences");
@@ -957,37 +957,51 @@ async fn initialize_mssql(
 
         if count == 0 {
             use crate::infrastructure::equivalences_data::EQUIVALENCES;
-            for eq in EQUIVALENCES {
-                let mut c = pool.get().await?;
+            TibQuery::new("BEGIN TRANSACTION")
+                .execute(&mut *conn)
+                .await?;
+            let result: Result<(), Box<dyn std::error::Error>> = async {
+                for eq in EQUIVALENCES {
+                    let mut q1 = TibQuery::new(
+                        "IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)",
+                    );
+                    q1.bind(eq.internal_name);
+                    q1.execute(&mut *conn).await?;
 
-                let mut q1 = TibQuery::new(
-                    "IF NOT EXISTS (SELECT 1 FROM signals WHERE internal_name = @P1) INSERT INTO signals (internal_name) VALUES (@P1)",
-                );
-                q1.bind(eq.internal_name);
-                q1.execute(&mut *c).await?;
+                    let mut q2 = TibQuery::new("SELECT id FROM signals WHERE internal_name = @P1");
+                    q2.bind(eq.internal_name);
+                    let stream = q2.query(&mut *conn).await?;
+                    let rows: Vec<TibRow> = stream.into_first_result().await?;
+                    let signal_id = rows
+                        .first()
+                        .and_then(|r: &TibRow| r.get::<i32, _>(0))
+                        .unwrap_or(0);
 
-                let mut q2 = TibQuery::new("SELECT id FROM signals WHERE internal_name = @P1");
-                q2.bind(eq.internal_name);
-                let stream = q2.query(&mut *c).await?;
-                let rows: Vec<TibRow> = stream.into_first_result().await?;
-                let signal_id = rows
-                    .first()
-                    .and_then(|r: &TibRow| r.get::<i32, _>(0))
-                    .unwrap_or(0);
-
-                let mut q3 = TibQuery::new(
-                    "MERGE attribute_equivalences AS tgt \
-                     USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src \
-                     ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value \
-                     WHEN MATCHED THEN UPDATE SET display_name = @P3 \
-                     WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);",
-                );
-                q3.bind(signal_id);
-                q3.bind(eq.numeric_value);
-                q3.bind(eq.display_name);
-                q3.execute(&mut *c).await?;
+                    let mut q3 = TibQuery::new(
+                        "MERGE attribute_equivalences AS tgt \
+                         USING (SELECT @P1 AS signal_id, @P2 AS numeric_value) AS src \
+                         ON tgt.signal_id = src.signal_id AND tgt.numeric_value = src.numeric_value \
+                         WHEN MATCHED THEN UPDATE SET display_name = @P3 \
+                         WHEN NOT MATCHED THEN INSERT (signal_id, numeric_value, display_name) VALUES (@P1, @P2, @P3);",
+                    );
+                    q3.bind(signal_id);
+                    q3.bind(eq.numeric_value);
+                    q3.bind(eq.display_name);
+                    q3.execute(&mut *conn).await?;
+                }
+                Ok(())
             }
-            info!("  [DB] Embedded equivalences initialized.");
+            .await;
+            match result {
+                Ok(_) => {
+                    TibQuery::new("COMMIT").execute(&mut *conn).await?;
+                    info!("  [DB] Embedded equivalences initialized.");
+                }
+                Err(e) => {
+                    let _ = TibQuery::new("ROLLBACK").execute(&mut *conn).await;
+                    return Err(e);
+                }
+            }
         }
     }
 

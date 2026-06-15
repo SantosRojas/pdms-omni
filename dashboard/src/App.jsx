@@ -64,6 +64,7 @@ function App() {
       if (token) {
         try {
           const userData = await apiService.getMe();
+          apiService.setToken(token);
           setUser(userData);
         } catch (err) {
           console.error('Error al recuperar sesión:', err);

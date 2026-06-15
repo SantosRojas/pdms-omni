@@ -757,9 +757,22 @@ impl AttributeEquivalenceRepository for PgAttributeEquivalenceRepository {
     }
 
     async fn save_batch(&self, equivs: &[AttributeEquivalence]) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(map_db_err)?;
         for eq in equivs {
-            self.save(eq).await?;
+            let signal_id = get_or_create_signal_id(&self.pool, &eq.internal_name).await? as i32;
+            sqlx::query(
+                "INSERT INTO attribute_equivalences (signal_id, numeric_value, display_name) \
+                 VALUES ($1, $2, $3) \
+                 ON CONFLICT (signal_id, numeric_value) DO UPDATE SET display_name = EXCLUDED.display_name",
+            )
+            .bind(signal_id)
+            .bind(eq.numeric_value)
+            .bind(&eq.display_name)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_db_err)?;
         }
+        tx.commit().await.map_err(map_db_err)?;
         Ok(())
     }
 
