@@ -1,4 +1,5 @@
-import React, { createContext, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { ThemeContext, DEFAULT_ACCENT } from './themeContext';
 
 function hexToHsl(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -21,20 +22,6 @@ function hexToHsl(hex) {
     l: Math.round(l * 100),
   };
 }
-
-const DEFAULT_ACCENT = '#00d2ff';
-
-const ThemeContext = createContext({
-  theme: 'system',
-  setTheme: () => null,
-  accentColor: DEFAULT_ACCENT,
-  setAccentColor: () => null,
-  customPresets: [],
-  addCustomPreset: () => null,
-  removeCustomPreset: () => null,
-  density: 'compact',
-  setDensity: () => null,
-});
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {

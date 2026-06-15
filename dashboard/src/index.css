@@ -1551,6 +1551,77 @@ label {
   color: var(--danger);
 }
 
+/* ── Profile Page ──────────────────────────────────────── */
+.profile-avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: var(--space-6) var(--space-6) 24px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-hero);
+  font-weight: bold;
+  color: #fff;
+  box-shadow: var(--primary-shadow-md);
+  flex-shrink: 0;
+}
+
+.profile-role-badge {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-section-divider {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-default);
+}
+
+.form-hint {
+  font-size: var(--fs-xxs);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.profile-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.password-strength-bar {
+  height: 4px;
+  border-radius: 2px;
+  transition: width 0.2s, background 0.2s;
+  flex: 1;
+  max-width: 120px;
+}
+
 /* ── Comment Card ──────────────────────────────────────── */
 .comment-card {
   transition: border-color 0.15s;
