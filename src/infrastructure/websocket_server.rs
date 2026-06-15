@@ -143,6 +143,7 @@ impl WebSocketHub {
                         "/therapies/comments/{comment_id}",
                         delete(http_api::delete_comment),
                     )
+                    .route("/therapies/{id}/close", post(http_api::close_therapy))
                     .with_state(api_state)
                     .fallback(api_not_found)
             } else {
@@ -181,6 +182,7 @@ impl WebSocketHub {
                     .route("/therapies/{id}/comments", get(|| async { db_unavailable() }))
                     .route("/therapies/{id}/comments", post(|| async { db_unavailable() }))
                     .route("/therapies/comments/{comment_id}", delete(|| async { db_unavailable() }))
+                    .route("/therapies/{id}/close", post(|| async { db_unavailable() }))
                     .route("/sessions/{id}/readings", get(|| async { db_unavailable() }))
                     .fallback(api_not_found)
             };

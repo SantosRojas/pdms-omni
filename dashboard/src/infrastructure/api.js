@@ -234,6 +234,19 @@ export const apiService = {
     return res.json();
   },
 
+  // ─── Close Therapy ────────────────────────────
+  async closeTherapy(therapyId) {
+    const res = await fetch(`${API_BASE}/api/therapies/${therapyId}/close`, {
+      method: 'POST',
+      headers: this._headers(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   // ─── Session Readings ─────────────────────────
   async getSessionReadings(sessionId, limit = 500) {
     const params = new URLSearchParams({ limit: String(limit) });

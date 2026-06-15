@@ -11,15 +11,26 @@ function useDebouncedValue(value, delay = 200) {
   return debounced;
 }
 
-const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory }) => {
+const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory, onCloseTherapy, closingTherapyId }) => {
   const isOpen = !therapy.ended_at && therapy.status !== 'completed';
   const badgeLabel = active ? 'Activa' : isOpen ? 'Sin cerrar' : 'Finalizada';
+  const isClosing = closingTherapyId === therapy.id;
+
+  const handleClose = (e) => {
+    e.stopPropagation();
+    const msg = active
+      ? `¿Cerrar terapia #${therapy.id}? Está actualmente activa. La terapia se marcará como finalizada y se detendrá la telemetría en vivo. Esta acción no se puede deshacer.`
+      : `¿Cerrar terapia #${therapy.id}? La terapia se marcará como finalizada. Esta acción no se puede deshacer.`;
+    if (window.confirm(msg)) {
+      onCloseTherapy(therapy.id);
+    }
+  };
 
   return (
-    <button
-      className="detail-card animate-fade-in"
-      onClick={() => active ? onSelect(String(therapy.id)) : onNavigateHistory(therapy)}
-      style={{ textAlign: 'left', display: 'grid', gap: '10px' }}
+    <div
+      className={`detail-card animate-fade-in${isClosing ? ' card-disabled' : ''}`}
+      onClick={() => { if (!isClosing) { active ? onSelect(String(therapy.id)) : onNavigateHistory(therapy); } }}
+      style={{ textAlign: 'left', display: 'grid', gap: '10px', cursor: isClosing ? 'default' : undefined, opacity: isClosing ? 0.6 : undefined }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px' }}>
         <div>
@@ -37,14 +48,26 @@ const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory }) => {
       <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
         Inició: {toLocalDatetime(therapy.started_at)}
       </div>
-      <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-        {therapy.ended_at ? toLocalDatetime(therapy.ended_at) : 'Aún sin cierre'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+          {therapy.ended_at ? toLocalDatetime(therapy.ended_at) : 'Aún sin cierre'}
+        </div>
+        {isOpen && onCloseTherapy && (
+          <button
+            onClick={handleClose}
+            disabled={isClosing}
+            className="btn btn-sm btn-danger"
+            style={{ fontSize: '0.75rem', padding: '4px 10px', whiteSpace: 'nowrap', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isClosing ? 'not-allowed' : 'pointer' }}
+          >
+            {isClosing ? 'Cerrando...' : 'Cerrar'}
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 };
 
-const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHistory }) => {
+const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHistory, onCloseTherapy, closingTherapyId }) => {
   const activeTherapies = machine.therapies.filter(t => activeTherapyIds.has(String(t.id)));
   const openTherapies = machine.therapies.filter(t => !t.ended_at && t.status !== 'completed');
 
@@ -79,6 +102,8 @@ const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHi
                 active={active}
                 onSelect={onSelectTherapy}
                 onNavigateHistory={onNavigateHistory}
+                onCloseTherapy={onCloseTherapy}
+                closingTherapyId={closingTherapyId}
               />
             );
           })}
@@ -99,6 +124,8 @@ export const TherapySelector = ({
   hasMore,
   loadingMore,
   onLoadMore,
+  onCloseTherapy,
+  closingTherapyId,
 }) => {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const debouncedQuery = useDebouncedValue(localQuery, 200);
@@ -144,14 +171,16 @@ export const TherapySelector = ({
       </div>
 
       <div style={{ display: 'grid', gap: '14px' }}>
-        {machineGroups.length > 0 ? machineGroups.map(machine => (
-          <MachineGroup
-            key={machine.key}
-            machine={machine}
-            activeTherapyIds={activeTherapyIds}
-            onSelectTherapy={onSelectTherapy}
-            onNavigateHistory={onNavigateHistory}
-          />
+          {machineGroups.length > 0 ? machineGroups.map(machine => (
+            <MachineGroup
+              key={machine.key}
+              machine={machine}
+              activeTherapyIds={activeTherapyIds}
+              onSelectTherapy={onSelectTherapy}
+              onNavigateHistory={onNavigateHistory}
+              onCloseTherapy={onCloseTherapy}
+              closingTherapyId={closingTherapyId}
+            />
         )) : (
           <div className="empty-state">
             <div className="empty-state-icon">

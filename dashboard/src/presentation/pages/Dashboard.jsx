@@ -20,6 +20,7 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
   const [therapyError, setTherapyError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
+  const [closingTherapyId, setClosingTherapyId] = useState(null);
   const [showStartModal, setShowStartModal] = useState(false);
   const [showStopModal, setShowStopModal] = useState(false);
   const { serialStatus, loading: serialLoading, error: serialError, startReader, stopReader } = useSerialStatus();
@@ -223,6 +224,23 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
     window.location.hash = `#/therapy/${id}`;
   }, []);
 
+  const handleCloseTherapy = useCallback(async (id) => {
+    setClosingTherapyId(id);
+    try {
+      await apiService.closeTherapy(id);
+      const result = await loadPage(1, searchQuery);
+      if (result) {
+        setTherapies(result.therapies);
+        setTotal(result.total);
+        setPage(1);
+      }
+    } catch (e) {
+      setTherapyError(e.message);
+    } finally {
+      setClosingTherapyId(null);
+    }
+  }, [searchQuery, loadPage]);
+
   const handleStopClick = useCallback(() => {
     setShowStopModal(true);
   }, []);
@@ -268,6 +286,8 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               hasMore={hasMore}
               loadingMore={loadingMore}
               onLoadMore={loadMore}
+              onCloseTherapy={handleCloseTherapy}
+              closingTherapyId={closingTherapyId}
             />
           </div>
         </>

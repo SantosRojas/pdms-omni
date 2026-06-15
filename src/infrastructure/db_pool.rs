@@ -1330,6 +1330,32 @@ impl DbPool {
         }
     }
 
+    pub async fn close_therapy(&self, therapy_id: i64) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE id = ?1 AND ended_at IS NULL"
+                ).bind(therapy_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE id = $1 AND ended_at IS NULL"
+                ).bind(therapy_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' WHERE id = @P1 AND ended_at IS NULL",
+                );
+                q.bind(therapy_id as i32);
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
     pub async fn soft_delete_therapy_comment(
         &self,
         comment_id: i64,

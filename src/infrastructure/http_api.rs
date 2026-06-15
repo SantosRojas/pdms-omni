@@ -1189,3 +1189,27 @@ pub async fn delete_comment(
         Err(e) => db_err(e).into_response(),
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  CLOSE THERAPY
+// ═══════════════════════════════════════════════════════════════
+
+/// POST /api/therapies/{id}/close
+pub async fn close_therapy(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(therapy_id): Path<i64>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state).await {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" && session.role != "operator" {
+        return forbidden().into_response();
+    }
+
+    match state.db.close_therapy(therapy_id).await {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => db_err(e).into_response(),
+    }
+}
