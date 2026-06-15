@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiService } from '../../infrastructure/api';
-import { Activity, AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle, LogIn } from 'lucide-react';
+import { Button } from '../components/Button';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 const MIN_USERNAME = 3;
@@ -118,7 +119,7 @@ export const LoginPage = ({ onLogin }) => {
             <Activity size={32} color="#0f172a" />
           </div>
           <h1 style={{
-            fontSize: '1.75rem',
+            fontSize: 'var(--fs-hero)',
             fontWeight: 700,
             background: 'linear-gradient(135deg, var(--text-primary), var(--primary))',
             WebkitBackgroundClip: 'text',
@@ -128,7 +129,7 @@ export const LoginPage = ({ onLogin }) => {
           }}>
             OMNI PDMS
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)' }}>
             Inicia sesión para continuar
           </p>
         </div>
@@ -171,23 +172,9 @@ export const LoginPage = ({ onLogin }) => {
               <span className="field-error">{errors.password}</span>
             )}
           </div>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading}
-            style={{
-              justifyContent: 'center',
-              padding: '12px',
-              fontSize: '1rem',
-              marginTop: '4px',
-            }}
-          >
-            {loading ? (
-              <><div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }} /> Ingresando...</>
-            ) : (
-              'Iniciar Sesión'
-            )}
-          </button>
+          <Button type="submit" variant="primary" size="lg" fullWidth centered loading={loading} icon={LogIn}>
+            Ingresar
+          </Button>
         </form>
       </div>
     </div>

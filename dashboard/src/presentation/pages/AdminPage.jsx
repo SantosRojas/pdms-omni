@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
-import { Users, Plus, Trash2, Edit3, ShieldCheck, Eye, Settings, ChevronLeft, X, Check } from 'lucide-react';
+import { Users, Plus, Trash2, Edit, ShieldCheck, Eye, Settings, ChevronLeft, X, Check } from 'lucide-react';
+import { Button } from '../components/Button';
 
 const ROLE_COLORS = {
   admin: '#ef4444',
@@ -62,7 +63,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
             <ChevronLeft size={18} /> Volver
           </button>
           <Users size={22} color="var(--secondary)" />
-          <h2 style={{ fontSize: '1.25rem' }}>Gestión de Usuarios</h2>
+          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Gestión de Usuarios</h2>
         </div>
         <button onClick={() => setShowCreate(true)} className="btn btn-primary">
           <Plus size={16} /> Nuevo Usuario
@@ -75,7 +76,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
 
       {showCreate && (
         <div className="glass-panel animate-slide-down" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--fs-body)' }}>
             <Plus size={18} color="var(--primary)" /> Crear Nuevo Usuario
           </h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -132,7 +133,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
                             placeholder="Nueva contraseña (opcional)"
                             value={editData.password || ''}
                             onChange={e => setEditData({ ...editData, password: e.target.value })}
-                            style={{ width: '100%', padding: '4px 8px', fontSize: '0.8rem' }}
+                            style={{ width: '100%', padding: '4px 8px', fontSize: 'var(--fs-xs)' }}
                           />
                         )}
                       </div>
@@ -145,7 +146,7 @@ export const AdminPage = ({ currentUser, onBack }) => {
                           <option value="viewer">Visor</option>
                         </select>
                       ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: '6px', fontSize: '0.8rem', background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '2px 10px', borderRadius: '6px', fontSize: 'var(--fs-xs)', background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] }}>
                           <RoleIcon size={14} /> {u.role}
                         </span>
                       )}
@@ -157,12 +158,12 @@ export const AdminPage = ({ currentUser, onBack }) => {
                           <option value="false">Deshabilitado</option>
                         </select>
                       ) : (
-                        <span style={{ color: u.active ? 'var(--success)' : 'var(--danger)', fontSize: '0.85rem' }}>
+                        <span style={{ color: u.active ? 'var(--success)' : 'var(--danger)', fontSize: 'var(--fs-sm)' }}>
                           {u.active ? '● Activo' : '○ Deshabilitado'}
                         </span>
                       )}
                     </td>
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{toLocalDatetime(u.created_at)}</td>
+                    <td style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-xs)' }}>{toLocalDatetime(u.created_at)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {isEditing ? (
@@ -172,13 +173,9 @@ export const AdminPage = ({ currentUser, onBack }) => {
                           </>
                         ) : (
                           <>
-                            <button onClick={() => { setEditId(u.id); setEditData({}); }} className="btn btn-sm" style={{ background: 'var(--btn-nav-history)', color: 'var(--btn-nav-history-text)', border: 'none' }}>
-                              <Edit3 size={12} /> Editar
-                            </button>
+                            <Button variant="ghost" size="sm" icon={Edit} onClick={() => { setEditId(u.id); setEditData({}); }} style={{ background: 'var(--btn-nav-history)', color: 'var(--btn-nav-history-text)', border: '1px solid rgba(59,130,246,0.2)' }}>Editar</Button>
                             {u.id !== currentUser.id && (
-                              <button onClick={() => handleDelete(u.id)} className="btn btn-sm" style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: 'none' }}>
-                                <Trash2 size={12} /> Eliminar
-                              </button>
+                              <Button variant="danger" size="sm" icon={Trash2} onClick={() => handleDelete(u.id)}>Eliminar</Button>
                             )}
                           </>
                         )}

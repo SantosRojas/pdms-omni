@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Square, AlertTriangle, Radio } from 'lucide-react';
+import { Button } from './Button';
 
 export const SerialPanel = ({
   serialStatus,
@@ -16,11 +17,11 @@ export const SerialPanel = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 auto', minWidth: '200px' }}>
         <div className={`status-dot ${serialStatus.status === 'Running' ? 'connected' : serialStatus.status === 'Initializing' ? 'initializing' : serialStatus.status === 'FailedLimit' ? 'disconnected' : 'stopped'}`} />
         <div>
-          <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Radio size={14} />
             Puerto Serial
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {serialStatus.status === 'Running' && 'Lectura activa'}
             {serialStatus.status === 'Initializing' && 'Inicializando...'}
             {serialStatus.status === 'Stopped' && 'Lectura detenida'}
@@ -40,24 +41,14 @@ export const SerialPanel = ({
       {canControlSerial && (
         <div style={{ display: 'flex', gap: '8px' }}>
           {(serialStatus.status === 'Stopped' || serialStatus.status === 'FailedLimit' || serialStatus.status === 'Unknown') && (
-            <button
-              className="btn btn-primary"
-              onClick={() => hasOpenTherapies ? onStart() : onStartDirect(true)}
-              disabled={serialLoading}
-              style={{ opacity: serialLoading ? 0.6 : 1 }}
-            >
-              <Play size={14} /> Iniciar
-            </button>
+            <Button variant="primary" icon={Play} disabled={serialLoading} loading={serialLoading} onClick={() => hasOpenTherapies ? onStart() : onStartDirect(true)}>
+              Iniciar
+            </Button>
           )}
           {(serialStatus.status === 'Running' || serialStatus.status === 'Initializing') && (
-            <button
-              className="btn btn-danger"
-              onClick={onStop}
-              disabled={serialLoading}
-              style={{ opacity: serialLoading ? 0.6 : 1 }}
-            >
-              <Square size={14} /> Detener
-            </button>
+            <Button variant="danger" icon={Square} disabled={serialLoading} loading={serialLoading} onClick={onStop}>
+              Detener
+            </Button>
           )}
         </div>
       )}

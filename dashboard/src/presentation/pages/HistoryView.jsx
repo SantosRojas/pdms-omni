@@ -3,6 +3,7 @@ import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
 import { DataTable } from '../components/DataTable';
 import { Download, ChevronLeft, Table2, BarChart3 } from 'lucide-react';
+import { Button } from '../components/Button';
 import { CommentsSection } from '../components/CommentsSection';
 import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
 import { AccumulatedFlowChart } from '../components/AccumulatedFlowChart';
@@ -37,7 +38,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
       key: 'timestamp',
       label: 'Fecha/Hora',
       render: (r) => (
-        <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
+        <span style={{ color: 'var(--text-tertiary)', whiteSpace: 'nowrap', fontSize: 'var(--fs-xs)' }}>
           {toLocalDatetime(r.timestamp)}
         </span>
       ),
@@ -46,7 +47,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
       key: 'internal_name',
       label: 'Parámetro',
       render: (r) => (
-        <span className="font-mono" style={{ fontSize: '0.82rem', fontWeight: 500 }}>
+        <span className="font-mono" style={{ fontSize: 'var(--fs-xs)', fontWeight: 500 }}>
           {r.internal_name}
         </span>
       ),
@@ -69,7 +70,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
           color: 'var(--btn-nav-history-text)',
           padding: '2px 10px',
           borderRadius: '6px',
-          fontSize: '0.8rem',
+          fontSize: 'var(--fs-xs)',
         }}>
           {r.display_value}
         </span>
@@ -93,7 +94,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
           <button onClick={onBack} className="btn btn-ghost">
             <ChevronLeft size={18} /> Volver
           </button>
-          <h2 style={{ fontSize: '1.25rem' }}>
+          <h2 style={{ fontSize: 'var(--fs-xl)' }}>
             Datos Históricos — Terapia <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong>
           </h2>
         </div>

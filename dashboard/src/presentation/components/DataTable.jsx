@@ -8,7 +8,7 @@ const inputStyle = {
   borderRadius: '6px',
   padding: '5px 8px 5px 26px',
   color: 'var(--text-primary)',
-  fontSize: '0.78rem',
+  fontSize: 'var(--fs-xxs)',
   fontFamily: 'var(--font-family)',
   outline: 'none',
   boxSizing: 'border-box',
@@ -61,7 +61,7 @@ export const DataTable = ({
     <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div className="table-toolbar">
         <div className="table-toolbar-left">
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-xs)' }}>
             {filtered.length} / {data.length} registros
           </span>
           {hasActiveFilters && (
@@ -75,12 +75,12 @@ export const DataTable = ({
           )}
         </div>
         <div className="table-toolbar-right">
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>Filas:</span>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-xxs)' }}>Filas:</span>
           <select
             className="input"
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }}
-            style={{ width: 'auto', padding: '4px 28px 4px 8px', fontSize: '0.8rem', borderRadius: '6px' }}
+            style={{ width: 'auto', padding: '4px 28px 4px 8px', fontSize: 'var(--fs-xs)', borderRadius: '6px' }}
           >
             {pageSizeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
@@ -139,7 +139,7 @@ export const DataTable = ({
         padding: '10px 16px',
         borderTop: '1px solid var(--border-default)',
         color: 'var(--text-tertiary)',
-        fontSize: '0.82rem',
+        fontSize: 'var(--fs-xs)',
       }}>
         <span>Página {page + 1} de {totalPages}</span>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>

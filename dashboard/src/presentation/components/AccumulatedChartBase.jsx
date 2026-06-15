@@ -143,7 +143,7 @@ export const AccumulatedChartBase = memo(({ title, icon, therapyId, isActive, em
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px' }}>
         <h3 className="section-title" style={{ margin: 0, border: 'none', padding: 0, flexShrink: 0 }}>
           <Icon size={20} color="var(--primary)" /> {title}
-          {accDate && <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>{accDate}</span>}
+          {accDate && <span style={{ fontSize: 'var(--fs-xs)', fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '8px' }}>{accDate}</span>}
         </h3>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {isZoomed && (

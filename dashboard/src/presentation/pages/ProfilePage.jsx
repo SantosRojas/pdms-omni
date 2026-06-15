@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { ChevronLeft, User, Mail, Shield, Check, Key } from 'lucide-react';
+import { Button } from '../components/Button';
 
 export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
   const [formData, setFormData] = useState({
@@ -54,7 +55,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
             <ChevronLeft size={18} /> Volver
           </button>
           <User size={22} color="var(--primary)" />
-          <h2 style={{ fontSize: '1.25rem' }}>Mi Perfil</h2>
+          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Mi Perfil</h2>
         </div>
       </div>
 
@@ -76,7 +77,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '1.75rem',
+            fontSize: 'var(--fs-hero)',
             fontWeight: 'bold',
             color: '#fff',
             boxShadow: 'var(--primary-shadow-md)',
@@ -84,9 +85,9 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
             {currentUser.username.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h3 style={{ fontSize: '1.5rem', margin: 0 }}>{currentUser.username}</h3>
+            <h3 style={{ fontSize: 'var(--fs-xxl)', margin: 0 }}>{currentUser.username}</h3>
             <span style={{
-              fontSize: '0.85rem',
+              fontSize: 'var(--fs-sm)',
               color: 'var(--text-tertiary)',
               display: 'flex',
               alignItems: 'center',
@@ -134,7 +135,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Key size={14} /> Nueva Contraseña
             </label>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
+            <p style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
               Déjelo en blanco para mantener la contraseña actual.
             </p>
             <input
@@ -147,9 +148,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '10px 28px' }}>
-              <Check size={16} /> {loading ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
+            <Button type="submit" variant="primary" loading={loading} icon={Check}>Guardar Cambios</Button>
           </div>
         </form>
       </div>

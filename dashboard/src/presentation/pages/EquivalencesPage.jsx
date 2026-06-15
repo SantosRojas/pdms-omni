@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { DataTable } from '../components/DataTable';
-import { Plus, Layers, X, Check, Trash2, ChevronLeft, Edit3 } from 'lucide-react';
+import { Plus, Layers, X, Check, Trash2, ChevronLeft, Edit } from 'lucide-react';
+import { Button } from '../components/Button';
+import { Modal } from '../components/Modal';
 
 export const EquivalencesPage = ({ userRole, onBack }) => {
   const [rows, setRows] = useState([]);
@@ -109,7 +111,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       key: 'internal_name',
       label: 'Parámetro',
       render: (r) => (
-        <span className="font-mono" style={{ fontSize: '0.82rem' }}>
+        <span className="font-mono" style={{ fontSize: 'var(--fs-xs)' }}>
           {r.internal_name}
         </span>
       ),
@@ -132,7 +134,7 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
           color: 'var(--btn-nav-equiv-text)',
           padding: '2px 10px',
           borderRadius: '6px',
-          fontSize: '0.8rem',
+          fontSize: 'var(--fs-xs)',
         }}>
           {r.display_name}
         </span>
@@ -145,18 +147,11 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       render: (r) => (
         <div style={{ display: 'flex', gap: '6px' }}>
           {canEdit && (
-            <button onClick={() => handleEditStart(r)}
-              className="btn btn-sm"
-              style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: 'none' }}>
-              <Edit3 size={12} /> Editar
-            </button>
+            <Button variant="ghost" size="sm" icon={Edit} onClick={() => handleEditStart(r)}
+              style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)' }}>Editar</Button>
           )}
           {canDelete && (
-            <button onClick={() => handleDeleteStart(r)}
-              className="btn btn-sm"
-              style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', border: 'none' }}>
-              <Trash2 size={12} /> Eliminar
-            </button>
+            <Button variant="danger" size="sm" icon={Trash2} onClick={() => handleDeleteStart(r)}>Eliminar</Button>
           )}
         </div>
       ),
@@ -171,19 +166,12 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
             <ChevronLeft size={18} /> Volver
           </button>
           <Layers size={22} color="#a855f7" />
-          <h2 style={{ fontSize: '1.25rem' }}>Equivalencias de Valores</h2>
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>({rows.length} total)</span>
+          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Equivalencias de Valores</h2>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>({rows.length} total)</span>
         </div>
 
         {canEdit && (
-          <button onClick={() => setShowCreate(true)} className="btn" style={{
-            background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-            color: 'white',
-            border: 'none',
-            boxShadow: '0 4px 15px rgba(168,85,247,0.3)',
-          }}>
-            <Plus size={16} /> Añadir Equivalencia
-          </button>
+          <Button variant="purple" icon={Plus} onClick={() => setShowCreate(true)}>Añadir Equivalencia</Button>
         )}
       </div>
 
@@ -191,99 +179,82 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
         <div className="message-box message-error">{error}</div>
       )}
 
-      {showCreate && (
-        <div className="glass-panel animate-slide-down" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
-            <Plus size={18} color="#a855f7" /> Añadir Nueva Equivalencia
-          </h3>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <Modal show={showCreate} onClose={() => setShowCreate(false)} title="Añadir Nueva Equivalencia" icon={Plus} iconColor="#a855f7" size="sm">
+        <Modal.Body>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <label>Nombre del Parámetro</label>
-              <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '220px' }} placeholder="ej. g_therapy_mode_set" />
+              <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '100%' }} placeholder="ej. g_therapy_mode_set" />
             </div>
             <div>
               <label>Valor Numérico</label>
-              <input type="number" step="any" className="input" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ width: '140px' }} placeholder="0.0" />
+              <input type="number" step="any" className="input" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ width: '100%' }} placeholder="0.0" />
             </div>
             <div>
               <label>Nombre Mostrado</label>
-              <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '220px' }} placeholder="ej. Preparación" />
+              <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '100%' }} placeholder="ej. Preparación" />
             </div>
-            <button onClick={handleCreate} className="btn btn-primary">
-              <Check size={16} /> Guardar
-            </button>
-            <button onClick={() => setShowCreate(false)} className="btn btn-ghost">
-              <X size={16} />
-            </button>
           </div>
-        </div>
-      )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
+            <Button variant="primary" icon={Check} onClick={handleCreate}>Guardar</Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
 
       {/* ─── Edit Modal ─── */}
-      {editingRow && (
-        <div className="modal-backdrop animate-fade-in" onClick={handleEditCancel}>
-          <div className="modal-content modal-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '24px', maxWidth: '480px' }}>
-            <div className="modal-header">
-              <h4 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Edit3 size={18} color="#a855f7" /> Editar Equivalencia
-              </h4>
-              <button onClick={handleEditCancel} className="modal-close"><X size={18} /></button>
+      <Modal show={editingRow !== null} onClose={handleEditCancel} title="Editar Equivalencia" icon={Edit} iconColor="#a855f7" size="sm">
+        <Modal.Body>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label>Parámetro</label>
+              <input className="input" value={editingRow?.internal_name || ''} disabled style={{ opacity: 0.6 }} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label>Parámetro</label>
-                <input className="input" value={editingRow.internal_name} disabled style={{ opacity: 0.6 }} />
-              </div>
-              <div>
-                <label>Valor Numérico</label>
-                <input className="input" value={editingRow.numeric_value} disabled style={{ opacity: 0.6 }} />
-              </div>
-              <div>
-                <label>Nombre Mostrado</label>
-                <input className="input" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)} placeholder="Nuevo nombre mostrado" />
-              </div>
+            <div>
+              <label>Valor Numérico</label>
+              <input className="input" value={editingRow?.numeric_value || ''} disabled style={{ opacity: 0.6 }} />
             </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button onClick={handleEditCancel} className="btn btn-ghost">Cancelar</button>
-              <button onClick={handleEditSave} className="btn btn-primary"><Check size={16} /> Guardar</button>
+            <div>
+              <label>Nombre Mostrado</label>
+              <input className="input" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)} placeholder="Nuevo nombre mostrado" />
             </div>
           </div>
-        </div>
-      )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={handleEditCancel}>Cancelar</Button>
+            <Button variant="primary" icon={Check} onClick={handleEditSave}>Guardar</Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
 
       {/* ─── Delete Confirmation Modal ─── */}
-      {deletingRow && (
-        <div className="modal-backdrop animate-fade-in" onClick={handleDeleteCancel}>
-          <div className="modal-content modal-slide-up" onClick={e => e.stopPropagation()} style={{ padding: '24px', maxWidth: '520px' }}>
-            <div className="modal-header">
-              <h4 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
-                <Trash2 size={18} color="var(--danger)" /> Confirmar Eliminación
-              </h4>
-              <button onClick={handleDeleteCancel} className="modal-close"><X size={18} /></button>
+      <Modal show={deletingRow !== null} onClose={handleDeleteCancel} title="Confirmar Eliminación" icon={Trash2} iconColor="var(--danger)" size="sm">
+        <Modal.Body>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)', marginBottom: '12px' }}>
+            Se eliminará la equivalencia <strong>{deletingRow?.internal_name} = {deletingRow?.numeric_value}</strong> ({deletingRow?.display_name}).
+            Esta acción queda registrada.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label>Nombre del usuario que elimina</label>
+              <input className="input" value={deleteUser} onChange={e => setDeleteUser(e.target.value)} placeholder="Tu nombre de usuario" />
             </div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px' }}>
-              Se eliminará la equivalencia <strong>{deletingRow.internal_name} = {deletingRow.numeric_value}</strong> ({deletingRow.display_name}).
-              Esta acción queda registrada.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label>Nombre del usuario que elimina</label>
-                <input className="input" value={deleteUser} onChange={e => setDeleteUser(e.target.value)} placeholder="Tu nombre de usuario" />
-              </div>
-              <div>
-                <label>Motivo de eliminación</label>
-                <textarea className="input" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} placeholder="Describe el motivo..." rows={3} style={{ resize: 'vertical' }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button onClick={handleDeleteCancel} className="btn btn-ghost">Cancelar</button>
-              <button onClick={handleDeleteConfirm} className="btn" style={{ background: 'var(--danger)', color: 'white', border: 'none' }}>
-                <Trash2 size={16} /> Confirmar Eliminación
-              </button>
+            <div>
+              <label>Motivo de eliminación</label>
+              <textarea className="input" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} placeholder="Describe el motivo..." rows={3} style={{ resize: 'vertical' }} />
             </div>
           </div>
-        </div>
-      )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={handleDeleteCancel}>Cancelar</Button>
+            <Button variant="danger" icon={Trash2} onClick={handleDeleteConfirm}>Confirmar Eliminación</Button>
+          </div>
+        </Modal.Footer>
+      </Modal>
 
       <DataTable
         columns={columns}

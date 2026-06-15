@@ -32,6 +32,8 @@ const ThemeContext = createContext({
   customPresets: [],
   addCustomPreset: () => null,
   removeCustomPreset: () => null,
+  density: 'compact',
+  setDensity: () => null,
 });
 
 export const ThemeProvider = ({ children }) => {
@@ -50,6 +52,10 @@ export const ThemeProvider = ({ children }) => {
     } catch {
       return [];
     }
+  });
+
+  const [density, setDensity] = useState(() => {
+    return localStorage.getItem('omni-density') || 'compact';
   });
 
   // Sync accent color → HSL CSS variables
@@ -91,6 +97,17 @@ export const ThemeProvider = ({ children }) => {
     return () => mediaQueryList.removeEventListener('change', listener);
   }, [theme]);
 
+  // Sync density → data-density attribute
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (density === 'normal') {
+      root.removeAttribute('data-density');
+    } else {
+      root.setAttribute('data-density', density);
+    }
+    localStorage.setItem('omni-density', density);
+  }, [density]);
+
   const addCustomPreset = useCallback((color) => {
     setCustomPresets(prev => {
       if (prev.includes(color)) return prev;
@@ -113,6 +130,7 @@ export const ThemeProvider = ({ children }) => {
       theme, setTheme,
       accentColor, setAccentColor: setAccentColorState,
       customPresets, addCustomPreset, removeCustomPreset,
+      density, setDensity,
     }}>
       {children}
     </ThemeContext.Provider>

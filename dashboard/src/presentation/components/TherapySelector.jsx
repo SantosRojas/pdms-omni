@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Search, X, ChevronRight, Loader } from 'lucide-react';
+import { Search, X, ChevronRight } from 'lucide-react';
+import { Button } from './Button';
 import { toLocalDatetime } from '../../infrastructure/time';
 
 function useDebouncedValue(value, delay = 200) {
@@ -34,10 +35,10 @@ const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory, onCloseTher
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px' }}>
         <div>
-          <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: 'var(--fs-xxs)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>
             Terapia #{therapy.id}
           </div>
-          <div style={{ fontSize: '1rem', fontWeight: 700, marginTop: '4px' }}>
+          <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, marginTop: '4px' }}>
             {therapy.patient_id_str}
           </div>
         </div>
@@ -45,22 +46,17 @@ const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory, onCloseTher
           {badgeLabel}
         </span>
       </div>
-      <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+      <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
         Inició: {toLocalDatetime(therapy.started_at)}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
           {therapy.ended_at ? toLocalDatetime(therapy.ended_at) : 'Aún sin cierre'}
         </div>
         {isOpen && onCloseTherapy && (
-          <button
-            onClick={handleClose}
-            disabled={isClosing}
-            className="btn btn-sm btn-danger"
-            style={{ fontSize: '0.75rem', padding: '4px 10px', whiteSpace: 'nowrap', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isClosing ? 'not-allowed' : 'pointer' }}
-          >
-            {isClosing ? 'Cerrando...' : 'Cerrar'}
-          </button>
+          <Button variant="danger" size="sm" disabled={isClosing} loading={isClosing} onClick={handleClose}>
+            Cerrar
+          </Button>
         )}
       </div>
     </div>
@@ -76,14 +72,14 @@ const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHi
       <summary>
         <div style={{ display: 'grid', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: '1rem' }}>Máquina {machine.serial_number}</strong>
+            <strong style={{ fontSize: 'var(--fs-body)' }}>Máquina {machine.serial_number}</strong>
             <span className={`badge ${activeTherapies.length ? 'badge-active' : openTherapies.length ? 'badge-open' : 'badge-closed'}`}>
               {activeTherapies.length ? `${activeTherapies.length} activa${activeTherapies.length > 1 ? 's' : ''}`
                 : openTherapies.length ? `${openTherapies.length} sin cerrar`
                   : 'Sin actividad'}
             </span>
           </div>
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
             SW {machine.software_version} · {machine.therapies.length} terapia{machine.therapies.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -91,7 +87,7 @@ const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHi
       </summary>
 
       <div style={{ padding: '20px', display: 'grid', gap: '12px' }}>
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>Selecciona una terapia de esta máquina:</div>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>Selecciona una terapia de esta máquina:</div>
         <div className="card-grid">
           {machine.therapies.map(therapy => {
             const active = activeTherapyIds.has(String(therapy.id));
@@ -165,7 +161,7 @@ export const TherapySelector = ({
             </button>
           )}
         </div>
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
           {machineGroups.length} máquina{machineGroups.length === 1 ? '' : 's'}
         </div>
       </div>
@@ -193,15 +189,9 @@ export const TherapySelector = ({
 
       {hasMore && (
         <div style={{ textAlign: 'center', marginTop: '16px' }}>
-          <button
-            onClick={onLoadMore}
-            disabled={loadingMore}
-            className="btn btn-ghost"
-            style={{ padding: '10px 32px', fontSize: '0.85rem' }}
-          >
-            {loadingMore ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+          <Button variant="ghost" loading={loadingMore} disabled={loadingMore} onClick={onLoadMore}>
             {loadingMore ? 'Cargando...' : 'Cargar más terapias'}
-          </button>
+          </Button>
         </div>
       )}
     </>

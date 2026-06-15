@@ -1,7 +1,8 @@
 import React from 'react';
-import { ChevronLeft, Settings, Palette, Gauge, RotateCcw, Sun, Moon, Monitor } from 'lucide-react';
+import { ChevronLeft, Settings, Palette, Gauge, RotateCcw, Sun, Moon, Monitor, Type, Minimize2, Maximize2 } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
 import { useCylinderConfig } from '../../application/useCylinderConfig';
+import { Card } from '../components/Card';
 
 const PRESET_COLORS = ['#00d2ff', '#3b82f6', '#8b5cf6', '#f43f5e', '#10b981', '#f59e0b'];
 
@@ -15,10 +16,14 @@ const CYLINDER_LABELS = {
   filtro: 'Filtro (FP)',
 };
 
+const DENSITY_LABELS = { compact: 'Normal', normal: 'Mediano', large: 'Grande' };
+const DENSITY_ICONS = { compact: Minimize2, normal: Type, large: Maximize2 };
+
 export const SettingsPage = ({ onBack }) => {
   const {
     accentColor, setAccentColor,
     customPresets, addCustomPreset, removeCustomPreset,
+    density, setDensity,
   } = useTheme();
 
   const { configs, updateConfig, resetConfigs } = useCylinderConfig();
@@ -31,11 +36,11 @@ export const SettingsPage = ({ onBack }) => {
             <ChevronLeft size={18} /> Volver
           </button>
           <Settings size={22} color="var(--primary)" />
-          <h2 style={{ fontSize: '1.25rem' }}>Ajustes</h2>
+          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Ajustes</h2>
         </div>
       </div>
 
-      <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
+      <Card elevated className="animate-slide-up" style={{ padding: '32px' }}>
 
         {/* Tema */}
         {/* <div style={{ paddingBottom: '24px', marginBottom: '24px', borderBottom: '1px solid var(--border-default)' }}>
@@ -68,7 +73,7 @@ export const SettingsPage = ({ onBack }) => {
           </label>
 
           <div style={{ marginBottom: '12px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Colores predefinidos:</div>
+            <div style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Colores predefinidos:</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {PRESET_COLORS.map(color => (
                 <button
@@ -89,7 +94,7 @@ export const SettingsPage = ({ onBack }) => {
 
           {customPresets.length > 0 && (
             <div style={{ marginBottom: '12px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Mis colores:</div>
+              <div style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Mis colores:</div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {customPresets.map(color => (
                   <div key={color} style={{ position: 'relative' }}>
@@ -111,7 +116,7 @@ export const SettingsPage = ({ onBack }) => {
                         position: 'absolute', top: '-4px', right: '-4px',
                         width: '16px', height: '16px', borderRadius: '50%',
                         background: 'var(--danger)', color: 'white', border: 'none',
-                        fontSize: '10px', cursor: 'pointer', display: 'flex',
+                        fontSize: 'var(--fs-xxs)', cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1,
                       }}
                     >×</button>
@@ -142,9 +147,33 @@ export const SettingsPage = ({ onBack }) => {
           </div>
         </div>
 
-      </div>
+      </Card>
 
-      <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
+      <Card elevated className="animate-slide-up" style={{ padding: '32px' }}>
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <Type size={14} /> Tamaño
+          </label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {['compact', 'normal', 'large'].map(mode => {
+              const Icon = DENSITY_ICONS[mode];
+              const active = density === mode;
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setDensity(mode)}
+                  className={`btn btn-sm${active ? ' btn-primary' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Icon size={14} /> {DENSITY_LABELS[mode]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
+
+      <Card elevated className="animate-slide-up" style={{ padding: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Gauge size={14} /> Configuración de Cilindros
@@ -157,11 +186,11 @@ export const SettingsPage = ({ onBack }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {Object.entries(CYLINDER_LABELS).map(([key, label]) => (
             <div key={key} className="glass-panel" style={{ padding: '16px' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '12px', color: 'var(--text-primary)' }}>
+              <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', marginBottom: '12px', color: 'var(--text-primary)' }}>
                 {label}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                <label style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)' }}>
                   Mínimo
                   <input
                     type="text"
@@ -172,7 +201,7 @@ export const SettingsPage = ({ onBack }) => {
                     style={{ width: '100%', marginTop: '4px' }}
                   />
                 </label>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                <label style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)' }}>
                   Máximo
                   <input
                     type="text"
@@ -183,7 +212,7 @@ export const SettingsPage = ({ onBack }) => {
                     style={{ width: '100%', marginTop: '4px' }}
                   />
                 </label>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                <label style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)' }}>
                   Paso
                   <input
                     type="text"
@@ -198,7 +227,7 @@ export const SettingsPage = ({ onBack }) => {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

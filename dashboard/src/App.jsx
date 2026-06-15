@@ -130,7 +130,7 @@ function App() {
           <Activity size={32} color="#0f172a" />
         </div>
         <div className="spinner spinner-lg" style={{ borderColor: 'rgba(0,210,255,0.15)', borderTopColor: 'var(--primary)' }} />
-        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.95rem' }}>Restaurando sesión...</p>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-input)' }}>Restaurando sesión...</p>
       </div>
     );
   }

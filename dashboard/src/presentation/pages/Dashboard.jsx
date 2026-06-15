@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTelemetry } from '../../application/useTelemetry';
 import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
-import { Activity, Database, ArrowLeft } from 'lucide-react';
+import { Activity, Database, ArrowLeft, History } from 'lucide-react';
+import { Button } from '../components/Button';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { SerialPanel } from '../components/SerialPanel';
 import { TherapySelector } from '../components/TherapySelector';
@@ -302,10 +303,10 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
             </div> */}
 
             <div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {therapyId === 'live' ? 'Monitor en vivo' : isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: 700 }}>
+              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>
                 {selectedTherapy
                   ? `${selectedTherapy.patient_id_str} · Máquina ${selectedTherapy.serial_number}`
                   : therapyId === 'live'
@@ -331,17 +332,9 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
               )}
 
               {selectedTherapy && therapyId !== 'live' && (
-                <button
-                  className="btn btn-sm"
-                  style={{
-                    background: 'var(--btn-nav-history)',
-                    border: '1px solid rgba(59,130,246,0.2)',
-                    color: 'var(--btn-nav-history-text)',
-                  }}
-                  onClick={() => onNavigateHistory(selectedTherapy)}
-                >
-                  <Database size={14} /> Historial
-                </button>
+                <Button variant="history" size="sm" icon={History} onClick={() => onNavigateHistory(selectedTherapy)}>
+                  Historial
+                </Button>
               )}
 
               <div className="connection-status">
@@ -360,17 +353,17 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
 
           {/* <div className="glass-panel animate-fade-in" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {isPreTherapy ? 'Pre-terapia' : 'Terapia seleccionada'}
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: 700 }}>
+              <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>
                 {selectedTherapy
                   ? `${selectedTherapy.patient_id_str} · Máquina ${selectedTherapy.serial_number}`
                   : `Paciente ${data.info.g_patient_id_str.value} · Máquina ${data.info.d_serial_number_to_odi.value}`
                 }
               </div>
             </div>
-            <div style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+            <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
               {isPreTherapy ? 'Monitorizando en tiempo real — esperando inicio de terapia.'
                 : therapyIsActive ? 'Terapia en curso: se muestran datos en tiempo real y el historial.'
                   : selectedTherapyIsOpen ? 'Sesión abierta sin cierre: solo se muestra historial.'

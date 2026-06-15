@@ -1,5 +1,6 @@
 import React from 'react';
 import { Home, Layers, Users, User, Settings, LogOut, Activity } from 'lucide-react';
+import { Button } from './Button';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV_ITEMS = [
@@ -61,13 +62,9 @@ export const Sidebar = ({ user, onLogout, open, currentHash }) => {
           <ThemeToggle />
         </div>
 
-        <button
-          onClick={onLogout}
-          className="btn-logout"
-        >
-          <LogOut size={16} />
+        <Button variant="ghost" fullWidth onClick={onLogout} icon={LogOut} className="btn-logout">
           Cerrar sesión
-        </button>
+        </Button>
       </div>
     </aside>
   );
