@@ -4,21 +4,21 @@ import { toLocalDatetime } from '../../infrastructure/time';
 import { DataTable } from '../components/DataTable';
 import { Download, ChevronLeft, Table2, BarChart3 } from 'lucide-react';
 import { Button } from '../components/Button';
+import { PageHeader } from '../components/PageHeader';
+import { LoadingState } from '../components/FeedbackState';
 import { CommentsSection } from '../components/CommentsSection';
 import { AccumulatedPresureChart } from '../components/AccumulatedPresureChart';
 import { AccumulatedFlowChart } from '../components/AccumulatedFlowChart';
 
 export const HistoryView = ({ therapy, userRole, onBack }) => {
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showTable, setShowTable] = useState(true);
   const [showCharts, setShowCharts] = useState(true);
 
   useEffect(() => {
     if (!therapy?.id) return;
-    setLoading(true);
-    setError(null);
     apiService.getTherapyHistory(therapy.id, 2000)
       .then(data => { setRows(data); })
       .catch(e => setError(e.message))
@@ -88,41 +88,23 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
   ];
 
   return (
-    <div className="app-container" style={{ gap: '20px' }}>
-      <div className="glass-panel page-header animate-slide-up">
-        <div className="page-header-left">
-          <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Volver
-          </button>
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>
-            Datos Históricos — Terapia <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong>
-          </h2>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowTable(s => !s)}
-            title={showTable ? 'Ocultar tabla' : 'Mostrar tabla'}
-            style={{ opacity: showTable ? 1 : 0.5 }}
-          >
-            <Table2 size={16} /> Tabla
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowCharts(s => !s)}
-            title={showCharts ? 'Ocultar gráficas' : 'Mostrar gráficas'}
-            style={{ opacity: showCharts ? 1 : 0.5 }}
-          >
-            <BarChart3 size={16} /> Gráficas
-          </button>
-          {userRole !== 'viewer' && (
-            <button onClick={handleDownload} className="btn btn-primary">
-              <Download size={16} /> Exportar Excel (CSV)
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="app-container">
+      <PageHeader
+        onBack={onBack}
+        title={<>Datos Históricos — Terapia <strong style={{ color: 'var(--primary)' }}>#{therapy?.id}</strong></>}
+      >
+        <Button variant="ghost" size="sm" icon={Table2}
+          onClick={() => setShowTable(s => !s)}
+          style={{ opacity: showTable ? 1 : 0.5 }}
+        >Tabla</Button>
+        <Button variant="ghost" size="sm" icon={BarChart3}
+          onClick={() => setShowCharts(s => !s)}
+          style={{ opacity: showCharts ? 1 : 0.5 }}
+        >Gráficas</Button>
+        {userRole !== 'viewer' && (
+          <Button variant="primary" size="sm" icon={Download} onClick={handleDownload}>Exportar Excel (CSV)</Button>
+        )}
+      </PageHeader>
 
       {error && (
         <div className="message-box message-error">{error}</div>
@@ -130,10 +112,7 @@ export const HistoryView = ({ therapy, userRole, onBack }) => {
       <CommentsSection therapyId={therapy?.id} />
 
       {showTable && (loading ? (
-        <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
-          <div className="spinner spinner-lg" style={{ margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--text-tertiary)' }}>Cargando historial...</p>
-        </div>
+        <LoadingState message="Cargando historial..." padding="60px" />
       ) : (
         <DataTable
           columns={columns}

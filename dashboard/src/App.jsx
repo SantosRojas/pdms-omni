@@ -10,7 +10,9 @@ import { Sidebar } from './presentation/components/Sidebar';
 import { NotFoundPage } from './presentation/pages/NotFoundPage';
 import { ErrorBoundary } from './presentation/components/ErrorBoundary';
 import { apiService } from './infrastructure/api';
-import { Activity, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import { Button } from './presentation/components/Button';
+import { LogoIcon } from './presentation/components/LogoIcon';
 import './index.css';
 
 const parseHash = () => {
@@ -116,19 +118,7 @@ function App() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <div style={{
-          width: '72px',
-          height: '72px',
-          borderRadius: '18px',
-          background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: 'var(--primary-shadow-lg)',
-          marginBottom: '8px',
-        }}>
-          <Activity size={32} color="#0f172a" />
-        </div>
+        <LogoIcon size={72} variant="primary" />
         <div className="spinner spinner-lg" style={{ borderColor: 'rgba(0,210,255,0.15)', borderTopColor: 'var(--primary)' }} />
         <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-input)' }}>Restaurando sesión...</p>
       </div>
@@ -171,13 +161,14 @@ function App() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} currentHash={currentHash} />
       {sidebarOpen && !isDesktop && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-      <button
-        className={`sidebar-toggle${sidebarOpen && isDesktop ? ' shifted' : ''}`}
+      <Button
+        variant="ghost"
+        size="icon"
+        icon={sidebarOpen ? X : Menu}
         onClick={() => setSidebarOpen(!sidebarOpen)}
+        className={`sidebar-toggle${sidebarOpen && isDesktop ? ' shifted' : ''}`}
         aria-label="Toggle menu"
-      >
-        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
+      />
       <main
         className={`main-with-sidebar${sidebarOpen && isDesktop ? ' sidebar-pushed' : ''}`}
         onClick={() => { if (sidebarOpen && !isDesktop) setSidebarOpen(false); }}

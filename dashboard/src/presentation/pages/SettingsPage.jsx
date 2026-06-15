@@ -1,8 +1,10 @@
 import React from 'react';
-import { ChevronLeft, Settings, Palette, Gauge, RotateCcw, Sun, Moon, Monitor, Type, Minimize2, Maximize2 } from 'lucide-react';
-import { useTheme } from '../components/ThemeContext';
+import { Settings, Palette, Gauge, RotateCcw, Sun, Moon, Monitor, Type, Minimize2, Maximize2 } from 'lucide-react';
+import { useTheme } from '../components/useTheme';
 import { useCylinderConfig } from '../../application/useCylinderConfig';
 import { Card } from '../components/Card';
+import { PageHeader } from '../components/PageHeader';
+import { Button } from '../components/Button';
 
 const PRESET_COLORS = ['#00d2ff', '#3b82f6', '#8b5cf6', '#f43f5e', '#10b981', '#f59e0b'];
 
@@ -29,16 +31,8 @@ export const SettingsPage = ({ onBack }) => {
   const { configs, updateConfig, resetConfigs } = useCylinderConfig();
 
   return (
-    <div className="app-container app-container-sm" style={{ gap: '20px' }}>
-      <div className="glass-panel page-header animate-slide-up" style={{ marginTop: '20px' }}>
-        <div className="page-header-left">
-          <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Volver
-          </button>
-          <Settings size={22} color="var(--primary)" />
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Ajustes</h2>
-        </div>
-      </div>
+    <div className="app-container app-container-sm">
+      <PageHeader icon={Settings} onBack={onBack} title="Ajustes" />
 
       <Card elevated className="animate-slide-up" style={{ padding: '32px' }}>
 
@@ -137,13 +131,13 @@ export const SettingsPage = ({ onBack }) => {
                 background: 'none', padding: 0,
               }}
             />
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Palette}
               onClick={() => addCustomPreset(accentColor)}
               disabled={customPresets.includes(accentColor)}
-              className="btn btn-ghost btn-sm"
-            >
-              <Palette size={14} /> Guardar color
-            </button>
+            >Guardar color</Button>
           </div>
         </div>
 
@@ -157,16 +151,14 @@ export const SettingsPage = ({ onBack }) => {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['compact', 'normal', 'large'].map(mode => {
               const Icon = DENSITY_ICONS[mode];
-              const active = density === mode;
               return (
-                <button
+                <Button
                   key={mode}
+                  variant={density === mode ? 'primary' : 'ghost'}
+                  size="sm"
+                  icon={Icon}
                   onClick={() => setDensity(mode)}
-                  className={`btn btn-sm${active ? ' btn-primary' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Icon size={14} /> {DENSITY_LABELS[mode]}
-                </button>
+                >{DENSITY_LABELS[mode]}</Button>
               );
             })}
           </div>
@@ -178,9 +170,7 @@ export const SettingsPage = ({ onBack }) => {
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Gauge size={14} /> Configuración de Cilindros
           </label>
-          <button onClick={resetConfigs} className="btn btn-ghost btn-sm">
-            <RotateCcw size={14} /> Restablecer valores
-          </button>
+          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={resetConfigs}>Restablecer valores</Button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>

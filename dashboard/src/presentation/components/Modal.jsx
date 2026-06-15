@@ -19,17 +19,8 @@ const ModalBody = ({ children, style, ...props }) => (
   <div style={style} {...props}>{children}</div>
 );
 
-const ModalFooter = ({ children, style, ...props }) => (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '12px',
-      marginTop: '24px',
-      ...style,
-    }}
-    {...props}
-  >
+const ModalFooter = ({ children, align = 'flex-end', style, ...props }) => (
+  <div className="modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: align, marginTop: '24px', ...style }} {...props}>
     {children}
   </div>
 );

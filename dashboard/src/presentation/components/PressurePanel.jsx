@@ -2,6 +2,7 @@ import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { Droplets, Thermometer, TrendingUp, Waves, Download, Maximize, Minimize } from 'lucide-react';
 import { Cylinder } from './Cylinder';
 import { StatCard } from './StatCard';
+import { Button } from './Button';
 import { useCylinderConfig } from '../../application/useCylinderConfig';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
@@ -92,15 +93,9 @@ const LiveTrendChart = memo(({ title, icon, data, lines, chartId }) => {
           <Icon size={16} /> {title}
         </h4>
         <div style={{ display: 'flex', gap: '6px' }}>
-          <button className="btn btn-ghost btn-sm" onClick={exportAsSVG} title="Exportar SVG">
-            <Download size={14} /> SVG
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={exportAsPNG} title="Exportar PNG">
-            <Download size={14} /> PNG
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={toggleFullscreen} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
-          </button>
+          <Button variant="ghost" size="sm" icon={Download} onClick={exportAsSVG}>SVG</Button>
+          <Button variant="ghost" size="sm" icon={Download} onClick={exportAsPNG}>PNG</Button>
+          <Button variant="ghost" size="sm" icon={isFullscreen ? Minimize : Maximize} onClick={toggleFullscreen} />
         </div>
       </div>
       <div style={{ width: '100%', height: isFullscreen ? '100%' : '250px', flex: isFullscreen ? 1 : 'none' }}>

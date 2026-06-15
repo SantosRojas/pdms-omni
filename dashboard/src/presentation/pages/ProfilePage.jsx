@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
-import { ChevronLeft, User, Mail, Shield, Check, Key } from 'lucide-react';
+import { User, Mail, Shield, Check, Lock, UserCheck } from 'lucide-react';
 import { Button } from '../components/Button';
+import { PageHeader } from '../components/PageHeader';
+import { FormField } from '../components/FormField';
+import { Card } from '../components/Card';
 
 export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
   const [formData, setFormData] = useState({
@@ -48,19 +51,11 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
   };
 
   return (
-    <div className="app-container app-container-sm" style={{ gap: '20px' }}>
-      <div className="glass-panel page-header animate-slide-up" style={{ marginTop: '20px' }}>
-        <div className="page-header-left">
-          <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Volver
-          </button>
-          <User size={22} color="var(--primary)" />
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Mi Perfil</h2>
-        </div>
-      </div>
+    <div className="app-container app-container-sm">
+      <PageHeader icon={User} onBack={onBack} title="Mi Perfil" />
 
-      <div className="glass-panel-elevated animate-slide-up" style={{ padding: '32px' }}>
-        
+      <Card elevated padding="lg" className="animate-slide-up">
+
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -106,10 +101,7 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <User size={14} /> Nombre Completo
-            </label>
+          <FormField label="Nombre Completo" icon={UserCheck}>
             <input
               type="text"
               className="input"
@@ -117,11 +109,8 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
               onChange={e => setFormData({ ...formData, full_name: e.target.value })}
               placeholder="ej. Juan Pérez"
             />
-          </div>
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Mail size={14} /> Correo Electrónico
-            </label>
+          </FormField>
+          <FormField label="Correo Electrónico" icon={Mail}>
             <input
               type="email"
               className="input"
@@ -129,29 +118,28 @@ export const ProfilePage = ({ currentUser, onBack, onUpdateUser }) => {
               onChange={e => setFormData({ ...formData, email: e.target.value })}
               placeholder="usuario@ejemplo.com"
             />
-          </div>
-          
+          </FormField>
+
           <div style={{ paddingTop: '20px', borderTop: '1px solid var(--border-default)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Key size={14} /> Nueva Contraseña
-            </label>
-            <p style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
-              Déjelo en blanco para mantener la contraseña actual.
-            </p>
-            <input
-              type="password"
-              className="input"
-              value={formData.password}
-              onChange={e => setFormData({ ...formData, password: e.target.value })}
-              placeholder="Ingrese nueva contraseña"
-            />
+            <FormField label="Nueva Contraseña" icon={Lock}>
+              <p style={{ fontSize: 'var(--fs-xxs)', color: 'var(--text-tertiary)', marginTop: '4px', marginBottom: '8px' }}>
+                Déjelo en blanco para mantener la contraseña actual.
+              </p>
+              <input
+                type="password"
+                className="input"
+                value={formData.password}
+                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Ingrese nueva contraseña"
+              />
+            </FormField>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button type="submit" variant="primary" loading={loading} icon={Check}>Guardar Cambios</Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };

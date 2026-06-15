@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
-import { MessageSquare, Send, Trash2, User, Clock } from 'lucide-react';
+import { MessageSquare, Send, Trash2, User, Clock, MessageCircle } from 'lucide-react';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { LoadingState, EmptyState } from './FeedbackState';
 
 export const CommentsSection = ({ therapyId }) => {
   const [comments, setComments] = useState([]);
@@ -97,15 +98,10 @@ export const CommentsSection = ({ therapyId }) => {
         gap: '12px',
       }}>
         {loading && (
-          <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px' }}>
-            <Clock size={20} style={{ animation: 'pulse 1.5s infinite' }} />
-            <p style={{ marginTop: '8px', fontSize: 'var(--fs-sm)' }}>Cargando comentarios...</p>
-          </div>
+          <LoadingState message="Cargando comentarios..." padding="20px" />
         )}
         {!loading && comments.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px', fontSize: 'var(--fs-sm)' }}>
-            No hay comentarios aún. Añada el primer comentario usando el formulario de abajo.
-          </div>
+          <EmptyState icon={MessageCircle} message="Sin comentarios todavía" padding="20px" />
         )}
         {!loading && comments.map(comment => (
           <div key={comment.id} className="comment-card" style={{
@@ -176,12 +172,10 @@ export const CommentsSection = ({ therapyId }) => {
           />
         </Modal.Body>
         <Modal.Footer>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <Button variant="ghost" onClick={() => { setDeleteTarget(null); setDeleteReason(''); }} disabled={deleting}>Cancelar</Button>
-            <Button variant="danger" onClick={handleDeleteConfirm} disabled={!deleteReason.trim() || deleting}>
-              {deleting ? 'Eliminando...' : 'Eliminar'}
-            </Button>
-          </div>
+          <Button variant="ghost" onClick={() => { setDeleteTarget(null); setDeleteReason(''); }} disabled={deleting}>Cancelar</Button>
+          <Button variant="danger" onClick={handleDeleteConfirm} disabled={!deleteReason.trim() || deleting}>
+            {deleting ? 'Eliminando...' : 'Eliminar'}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

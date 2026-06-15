@@ -84,10 +84,12 @@ export const useTelemetry = (connect) => {
     if (!connect) {
       socketService.offTelemetry();
       socketService.disconnect('telemetry');
-      setConnected(false);
-      setData(INITIAL_DATA);
       liveRef.current = INITIAL_DATA;
-      return;
+      const timer = setTimeout(() => {
+        setConnected(false);
+        setData(INITIAL_DATA);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     socketService.onConnect(() => setConnected(true));

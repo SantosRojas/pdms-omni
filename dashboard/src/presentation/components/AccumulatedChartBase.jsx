@@ -1,5 +1,7 @@
 import React, { memo, useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Maximize, Minimize, Download } from 'lucide-react';
+import { RefreshCw, Maximize, Minimize, Download, BarChart3 } from 'lucide-react';
+import { Button } from './Button';
+import { EmptyState } from './FeedbackState';
 import { apiService } from '../../infrastructure/api';
 import { toLocalTimeOnly, toLocalDate } from '../../infrastructure/time';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush } from 'recharts';
@@ -147,27 +149,15 @@ export const AccumulatedChartBase = memo(({ title, icon, therapyId, isActive, em
         </h3>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {isZoomed && (
-            <button className="btn btn-ghost btn-sm" onClick={resetZoom} title="Restaurar vista completa">
+            <Button variant="ghost" size="sm" onClick={resetZoom}>
               Reset Zoom
-            </button>
+            </Button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={exportAsSVG} title="Exportar como SVG">
-            <Download size={14} /> SVG
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={exportAsPNG} title="Exportar como PNG">
-            <Download size={14} /> PNG
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={toggleFullscreen} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={fetchData}
-            disabled={loading}
-            title="Actualizar datos"
-          >
-            <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          </button>
+          <Button variant="ghost" size="sm" icon={Download} onClick={exportAsSVG}>SVG</Button>
+          <Button variant="ghost" size="sm" icon={Download} onClick={exportAsPNG}>PNG</Button>
+          <Button variant="ghost" size="sm" icon={isFullscreen ? Minimize : Maximize} onClick={toggleFullscreen} />
+          <Button variant="ghost" size="sm" icon={RefreshCw} onClick={fetchData} disabled={loading}
+            style={loading ? { pointerEvents: 'none', opacity: 0.6 } : undefined} />
         </div>
       </div>
 
@@ -185,10 +175,7 @@ export const AccumulatedChartBase = memo(({ title, icon, therapyId, isActive, em
       )}
 
       {!loading && !hasData && !error && (
-        <div className="empty-state" style={{ padding: '32px' }}>
-          <Icon size={24} style={{ opacity: 0.3 }} />
-          <span>{emptyMessage}</span>
-        </div>
+        <EmptyState icon={BarChart3} message={emptyMessage} />
       )}
 
       {hasData && (

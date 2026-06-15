@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { toLocalDatetime } from '../../infrastructure/time';
-import { Users, Plus, Trash2, Edit, ShieldCheck, Eye, Settings, ChevronLeft, X, Check } from 'lucide-react';
+import { Users, Plus, Trash2, Edit, ShieldCheck, Eye, Settings, X, Check } from 'lucide-react';
 import { Button } from '../components/Button';
+import { PageHeader } from '../components/PageHeader';
+import { FormField } from '../components/FormField';
 
 const ROLE_COLORS = {
   admin: '#ef4444',
@@ -29,7 +31,11 @@ export const AdminPage = ({ currentUser, onBack }) => {
     catch (e) { setError(e.message); }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    apiService.getUsers()
+      .then(data => setUsers(data))
+      .catch(e => setError(e.message));
+  }, []);
 
   const handleCreate = async () => {
     setError('');
@@ -56,19 +62,10 @@ export const AdminPage = ({ currentUser, onBack }) => {
   };
 
   return (
-    <div className="app-container" style={{ gap: '20px' }}>
-      <div className="glass-panel page-header animate-slide-up">
-        <div className="page-header-left">
-          <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Volver
-          </button>
-          <Users size={22} color="var(--secondary)" />
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Gestión de Usuarios</h2>
-        </div>
-        <button onClick={() => setShowCreate(true)} className="btn btn-primary">
-          <Plus size={16} /> Nuevo Usuario
-        </button>
-      </div>
+    <div className="app-container">
+      <PageHeader icon={Users} iconColor="var(--secondary)" onBack={onBack} title="Gestión de Usuarios">
+        <Button variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>Nuevo Usuario</Button>
+      </PageHeader>
 
       {error && (
         <div className="message-box message-error">{error}</div>
@@ -80,28 +77,21 @@ export const AdminPage = ({ currentUser, onBack }) => {
             <Plus size={18} color="var(--primary)" /> Crear Nuevo Usuario
           </h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div>
-              <label>Nombre de Usuario</label>
+            <FormField label="Nombre de Usuario" required>
               <input className="input" value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} style={{ width: '200px' }} placeholder="usuario" />
-            </div>
-            <div>
-              <label>Contraseña</label>
+            </FormField>
+            <FormField label="Contraseña" required>
               <input type="password" className="input" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} style={{ width: '200px' }} placeholder="contraseña" />
-            </div>
-            <div>
-              <label>Rol</label>
+            </FormField>
+            <FormField label="Rol">
               <select className="input" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} style={{ width: '150px' }}>
                 <option value="admin">Admin</option>
                 <option value="operator">Operador</option>
                 <option value="viewer">Visor</option>
               </select>
-            </div>
-            <button onClick={handleCreate} className="btn btn-primary" style={{ marginBottom: '0' }}>
-              <Check size={16} /> Crear
-            </button>
-            <button onClick={() => setShowCreate(false)} className="btn btn-ghost" style={{ marginBottom: '0' }}>
-              <X size={16} />
-            </button>
+            </FormField>
+            <Button variant="primary" icon={Check} onClick={handleCreate}>Crear</Button>
+            <Button variant="ghost" icon={X} onClick={() => setShowCreate(false)}>Cancelar</Button>
           </div>
         </div>
       )}
@@ -168,8 +158,8 @@ export const AdminPage = ({ currentUser, onBack }) => {
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {isEditing ? (
                           <>
-                            <button onClick={() => handleUpdate(u.id)} className="btn btn-primary btn-sm">Guardar</button>
-                            <button onClick={() => setEditId(null)} className="btn btn-ghost btn-sm">Cancelar</button>
+                            <Button variant="primary" size="sm" icon={Check} onClick={() => handleUpdate(u.id)}>Guardar</Button>
+                            <Button variant="ghost" size="sm" icon={X} onClick={() => setEditId(null)}>Cancelar</Button>
                           </>
                         ) : (
                           <>

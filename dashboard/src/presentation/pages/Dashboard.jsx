@@ -4,6 +4,8 @@ import { useSerialStatus } from '../../application/useSerialStatus';
 import { apiService } from '../../infrastructure/api';
 import { Activity, Database, ArrowLeft, History } from 'lucide-react';
 import { Button } from '../components/Button';
+import { EmptyState, LoadingState } from '../components/FeedbackState';
+import { StatusBadge } from '../components/StatusBadge';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { SerialPanel } from '../components/SerialPanel';
 import { TherapySelector } from '../components/TherapySelector';
@@ -339,10 +341,9 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
 
               <div className="connection-status">
                 {connected && (therapyIsActive || isPreTherapy || therapyId === 'live') && data.info.g_trmt_main_state_set.value !== 'N/A' && (
-                  <span className={`badge ${therapyIsActive ? 'badge-active' : 'badge-warning'}`}
-                    style={{ marginRight: '8px' }}>
+                  <StatusBadge variant={therapyIsActive ? 'active' : 'warning'} style={{ marginRight: '8px' }}>
                     {data.info.g_trmt_main_state_set.value}
-                  </span>
+                  </StatusBadge>
                 )}
                 <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
                 {connected && (therapyIsActive || isPreTherapy || therapyId === 'live') ? 'EN VIVO' : connected ? 'CONECTADO' : 'HISTORIAL'}
@@ -400,15 +401,9 @@ export const Dashboard = ({ user, therapyId, onNavigateHistory }) => {
                   <PressurePanel data={data} />
                 </>
               ) : selectedTherapyIsOpen ? (
-                <div className="glass-panel empty-state" style={{ padding: '48px' }}>
-                  <Database size={32} style={{ opacity: 0.3 }} />
-                  <span>La sesión está abierta pero no se reciben datos en vivo. Esperando telemetría...</span>
-                </div>
+                <EmptyState icon={Database} message="La sesión está abierta pero no se reciben datos en vivo. Esperando telemetría..." />
               ) : (
-                <div className="glass-panel empty-state" style={{ padding: '48px' }}>
-                  <Database size={32} style={{ opacity: 0.3 }} />
-                  <span>La terapia seleccionada ya finalizó. Sólo se mostrará el historial desde la vista de terapia.</span>
-                </div>
+                <EmptyState icon={Database} message="La terapia seleccionada ya finalizó. Sólo se mostrará el historial desde la vista de terapia." />
               )}
             </div>
           </div>

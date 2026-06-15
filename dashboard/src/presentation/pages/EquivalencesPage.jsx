@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../infrastructure/api';
 import { DataTable } from '../components/DataTable';
-import { Plus, Layers, X, Check, Trash2, ChevronLeft, Edit } from 'lucide-react';
+import { Plus, Layers, X, Check, Trash2, Edit } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
+import { PageHeader } from '../components/PageHeader';
+import { FormField } from '../components/FormField';
 
 export const EquivalencesPage = ({ userRole, onBack }) => {
   const [rows, setRows] = useState([]);
@@ -159,21 +161,13 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
   ];
 
   return (
-    <div className="app-container" style={{ gap: '20px' }}>
-      <div className="glass-panel page-header animate-slide-up">
-        <div className="page-header-left">
-          <button onClick={onBack} className="btn btn-ghost">
-            <ChevronLeft size={18} /> Volver
-          </button>
-          <Layers size={22} color="#a855f7" />
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>Equivalencias de Valores</h2>
-          <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>({rows.length} total)</span>
-        </div>
-
+    <div className="app-container">
+      <PageHeader icon={Layers} iconColor="#a855f7" onBack={onBack} title="Equivalencias de Valores">
+        <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>({rows.length} total)</span>
         {canEdit && (
           <Button variant="purple" icon={Plus} onClick={() => setShowCreate(true)}>Añadir Equivalencia</Button>
         )}
-      </div>
+      </PageHeader>
 
       {error && (
         <div className="message-box message-error">{error}</div>
@@ -182,25 +176,20 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <Modal show={showCreate} onClose={() => setShowCreate(false)} title="Añadir Nueva Equivalencia" icon={Plus} iconColor="#a855f7" size="sm">
         <Modal.Body>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <label>Nombre del Parámetro</label>
+            <FormField label="Nombre del Parámetro">
               <input className="input" value={newEq.internal_name} onChange={e => setNewEq({ ...newEq, internal_name: e.target.value })} style={{ width: '100%' }} placeholder="ej. g_therapy_mode_set" />
-            </div>
-            <div>
-              <label>Valor Numérico</label>
+            </FormField>
+            <FormField label="Valor Numérico">
               <input type="number" step="any" className="input" value={newEq.numeric_value} onChange={e => setNewEq({ ...newEq, numeric_value: e.target.value })} style={{ width: '100%' }} placeholder="0.0" />
-            </div>
-            <div>
-              <label>Nombre Mostrado</label>
+            </FormField>
+            <FormField label="Nombre Mostrado">
               <input className="input" value={newEq.display_name} onChange={e => setNewEq({ ...newEq, display_name: e.target.value })} style={{ width: '100%' }} placeholder="ej. Preparación" />
-            </div>
+            </FormField>
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button variant="primary" icon={Check} onClick={handleCreate}>Guardar</Button>
-          </div>
         </Modal.Footer>
       </Modal>
 
@@ -208,25 +197,20 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
       <Modal show={editingRow !== null} onClose={handleEditCancel} title="Editar Equivalencia" icon={Edit} iconColor="#a855f7" size="sm">
         <Modal.Body>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <label>Parámetro</label>
+            <FormField label="Parámetro">
               <input className="input" value={editingRow?.internal_name || ''} disabled style={{ opacity: 0.6 }} />
-            </div>
-            <div>
-              <label>Valor Numérico</label>
+            </FormField>
+            <FormField label="Valor Numérico">
               <input className="input" value={editingRow?.numeric_value || ''} disabled style={{ opacity: 0.6 }} />
-            </div>
-            <div>
-              <label>Nombre Mostrado</label>
+            </FormField>
+            <FormField label="Nombre Mostrado">
               <input className="input" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)} placeholder="Nuevo nombre mostrado" />
-            </div>
+            </FormField>
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <Button variant="ghost" onClick={handleEditCancel}>Cancelar</Button>
             <Button variant="primary" icon={Check} onClick={handleEditSave}>Guardar</Button>
-          </div>
         </Modal.Footer>
       </Modal>
 
@@ -249,10 +233,8 @@ export const EquivalencesPage = ({ userRole, onBack }) => {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <Button variant="ghost" onClick={handleDeleteCancel}>Cancelar</Button>
             <Button variant="danger" icon={Trash2} onClick={handleDeleteConfirm}>Confirmar Eliminación</Button>
-          </div>
         </Modal.Footer>
       </Modal>
 

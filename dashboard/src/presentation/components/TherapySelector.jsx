@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Search, X, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
+import { StatusBadge } from './StatusBadge';
+import { LoadingState, EmptyState } from './FeedbackState';
 import { toLocalDatetime } from '../../infrastructure/time';
 
 function useDebouncedValue(value, delay = 200) {
@@ -42,9 +44,9 @@ const TherapyCard = ({ therapy, active, onSelect, onNavigateHistory, onCloseTher
             {therapy.patient_id_str}
           </div>
         </div>
-        <span className={`badge ${active ? 'badge-active' : isOpen ? 'badge-open' : 'badge-closed'}`}>
+        <StatusBadge variant={active ? 'active' : isOpen ? 'open' : 'closed'}>
           {badgeLabel}
-        </span>
+        </StatusBadge>
       </div>
       <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
         Inició: {toLocalDatetime(therapy.started_at)}
@@ -73,11 +75,11 @@ const MachineGroup = ({ machine, activeTherapyIds, onSelectTherapy, onNavigateHi
         <div style={{ display: 'grid', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <strong style={{ fontSize: 'var(--fs-body)' }}>Máquina {machine.serial_number}</strong>
-            <span className={`badge ${activeTherapies.length ? 'badge-active' : openTherapies.length ? 'badge-open' : 'badge-closed'}`}>
+            <StatusBadge variant={activeTherapies.length ? 'active' : openTherapies.length ? 'open' : 'closed'}>
               {activeTherapies.length ? `${activeTherapies.length} activa${activeTherapies.length > 1 ? 's' : ''}`
                 : openTherapies.length ? `${openTherapies.length} sin cerrar`
                   : 'Sin actividad'}
-            </span>
+            </StatusBadge>
           </div>
           <span style={{ color: 'var(--text-tertiary)', fontSize: 'var(--fs-sm)' }}>
             SW {machine.software_version} · {machine.therapies.length} terapia{machine.therapies.length > 1 ? 's' : ''}
@@ -177,13 +179,8 @@ export const TherapySelector = ({
               onCloseTherapy={onCloseTherapy}
               closingTherapyId={closingTherapyId}
             />
-        )) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <Search size={20} />
-            </div>
-            <span>No se encontraron máquinas ni terapias para esa búsqueda.</span>
-          </div>
+        )        ) : (
+          <EmptyState icon={Search} message="No se encontraron máquinas ni terapias para esa búsqueda." />
         )}
       </div>
 

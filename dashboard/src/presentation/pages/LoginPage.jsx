@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { apiService } from '../../infrastructure/api';
-import { Activity, AlertCircle, LogIn } from 'lucide-react';
+import { AlertCircle, LogIn } from 'lucide-react';
 import { Button } from '../components/Button';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { LogoIcon } from '../components/LogoIcon';
+import { FormField } from '../components/FormField';
 
 const MIN_USERNAME = 3;
 const MIN_PASSWORD = 6;
@@ -15,6 +17,12 @@ const validate = (username, password) => {
   else if (password.length < MIN_PASSWORD) errors.password = `Mínimo ${MIN_PASSWORD} caracteres`;
   return errors;
 };
+
+const BG_CIRCLES = [
+  { size: 600, color: 'hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.08)', top: '-200px', right: '-100px', delay: 0, duration: 4 },
+  { size: 400, color: 'rgba(59,130,246,0.06)', bottom: '-100px', left: '-80px', delay: 2, duration: 5 },
+  { size: 300, color: 'rgba(99,102,241,0.04)', bottom: '30%', right: '20%', delay: 1, duration: 6 },
+];
 
 export const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -58,41 +66,22 @@ export const LoginPage = ({ onLogin }) => {
       overflow: 'hidden',
     }}>
       {/* Animated background elements */}
-      <div style={{
-        position: 'absolute',
-        width: '600px',
-        height: '600px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.08) 0%, transparent 70%)',
-        top: '-200px',
-        right: '-100px',
-        animation: 'float 4s ease-in-out infinite',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        width: '400px',
-        height: '400px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%)',
-        bottom: '-100px',
-        left: '-80px',
-        animation: 'float 5s ease-in-out infinite',
-        animationDelay: '2s',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        width: '300px',
-        height: '300px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.04) 0%, transparent 70%)',
-        bottom: '30%',
-        right: '20%',
-        animation: 'float 6s ease-in-out infinite',
-        animationDelay: '1s',
-        pointerEvents: 'none',
-      }} />
+      {BG_CIRCLES.map((c, i) => (
+        <div key={i} style={{
+          position: 'absolute',
+          width: `${c.size}px`,
+          height: `${c.size}px`,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${c.color} 0%, transparent 70%)`,
+          top: c.top,
+          right: c.right,
+          bottom: c.bottom,
+          left: c.left,
+          animation: `float ${c.duration}s ease-in-out infinite`,
+          animationDelay: `${c.delay}s`,
+          pointerEvents: 'none',
+        }} />
+      ))}
 
       <div style={{ position: 'absolute', top: 24, right: 24 }}>
         <ThemeToggle />
@@ -105,18 +94,8 @@ export const LoginPage = ({ onLogin }) => {
         position: 'relative',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{
-            width: '72px',
-            height: '72px',
-            borderRadius: '18px',
-            background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 20px',
-            boxShadow: 'var(--primary-shadow-lg)',
-          }}>
-            <Activity size={32} color="#0f172a" />
+          <div style={{ margin: '0 auto 20px', width: 'fit-content' }}>
+            <LogoIcon size={72} variant="primary" />
           </div>
           <h1 style={{
             fontSize: 'var(--fs-hero)',
@@ -141,8 +120,7 @@ export const LoginPage = ({ onLogin }) => {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} noValidate>
-          <div>
-            <label htmlFor="username">Usuario</label>
+          <FormField label="Nombre de Usuario" error={errors.username} touched={touched.username} required>
             <input
               id="username"
               type="text"
@@ -153,12 +131,8 @@ export const LoginPage = ({ onLogin }) => {
               autoFocus
               placeholder="Ingresa tu usuario"
             />
-            {touched.username && errors.username && (
-              <span className="field-error">{errors.username}</span>
-            )}
-          </div>
-          <div>
-            <label htmlFor="password">Contraseña</label>
+          </FormField>
+          <FormField label="Contraseña" error={errors.password} touched={touched.password} required>
             <input
               id="password"
               type="password"
@@ -168,10 +142,7 @@ export const LoginPage = ({ onLogin }) => {
               onBlur={() => handleBlur('password')}
               placeholder="Ingresa tu contraseña"
             />
-            {touched.password && errors.password && (
-              <span className="field-error">{errors.password}</span>
-            )}
-          </div>
+          </FormField>
           <Button type="submit" variant="primary" size="lg" fullWidth centered loading={loading} icon={LogIn}>
             Ingresar
           </Button>

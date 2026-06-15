@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Button } from './Button';
 
 const inputStyle = {
   width: '100%',
@@ -65,13 +66,9 @@ export const DataTable = ({
             {filtered.length} / {data.length} registros
           </span>
           {hasActiveFilters && (
-            <button onClick={clearFilters} className="btn btn-sm" style={{
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.2)',
-              color: 'var(--danger)',
-            }}>
-              <X size={12} /> Limpiar filtros
-            </button>
+            <Button variant="ghost" size="sm" icon={X} onClick={clearFilters}>
+              Limpiar filtros
+            </Button>
           )}
         </div>
         <div className="table-toolbar-right">
@@ -143,22 +140,16 @@ export const DataTable = ({
       }}>
         <span>Página {page + 1} de {totalPages}</span>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <button
-            className="btn-icon btn-ghost"
-            disabled={page === 0}
+          <Button variant="ghost" size="sm" icon={ChevronLeft}
             onClick={() => setPage(p => p - 1)}
+            disabled={page === 0}
             style={{ opacity: page === 0 ? 0.3 : 1 }}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <button
-            className="btn-icon btn-ghost"
-            disabled={page >= totalPages - 1}
+          />
+          <Button variant="ghost" size="sm" icon={ChevronRight}
             onClick={() => setPage(p => p + 1)}
+            disabled={page >= totalPages - 1}
             style={{ opacity: page >= totalPages - 1 ? 0.3 : 1 }}
-          >
-            <ChevronRight size={15} />
-          </button>
+          />
         </div>
       </div>
     </div>

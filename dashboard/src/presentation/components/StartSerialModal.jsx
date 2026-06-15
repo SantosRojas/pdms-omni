@@ -2,6 +2,7 @@ import React from 'react';
 import { Radio } from 'lucide-react';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { InfoRow } from './InfoRow';
 import { toLocalDatetime } from '../../infrastructure/time';
 
 export const StartSerialModal = ({ show, onClose, latestTherapy, onStartReader }) => {
@@ -30,18 +31,9 @@ export const StartSerialModal = ({ show, onClose, latestTherapy, onStartReader }
             Última terapia registrada
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', fontSize: 'var(--fs-sm)' }}>
-            <div>
-              <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 'var(--fs-xxs)' }}>Paciente</span>
-              <span style={{ fontWeight: 500 }}>{latestTherapy.patient_id_str || 'N/A'}</span>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 'var(--fs-xxs)' }}>Nº Serie Máquina</span>
-              <span style={{ fontWeight: 500 }}>{latestTherapy.serial_number || 'N/A'}</span>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 'var(--fs-xxs)' }}>Inicio</span>
-              <span style={{ fontWeight: 500 }}>{toLocalDatetime(latestTherapy.started_at) || 'N/A'}</span>
-            </div>
+            <InfoRow label="Paciente" value={latestTherapy.patient_id_str || 'N/A'} />
+            <InfoRow label="Nº Serie Máquina" value={latestTherapy.serial_number || 'N/A'} />
+            <InfoRow label="Inicio" value={toLocalDatetime(latestTherapy.started_at) || 'N/A'} gridColumn="span 2" />
           </div>
         </div>
       )}
