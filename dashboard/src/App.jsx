@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LoginPage } from './presentation/pages/LoginPage';
-import { Dashboard } from './presentation/pages/Dashboard';
+import { TherapySelectionPage } from './presentation/pages/TherapySelectionPage';
+import { LiveMonitorPage } from './presentation/pages/LiveMonitorPage';
+import { TherapyDetailPage } from './presentation/pages/TherapyDetailPage';
 import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
 import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
@@ -20,36 +22,35 @@ const parseHash = () => {
   if (hash.startsWith('#/history/')) {
     const id = parseInt(hash.replace('#/history/', ''), 10);
     if (!isNaN(id)) {
-      return { view: 'history', historyTherapy: { id }, dashboardTherapyId: null };
+      return { view: 'history', historyTherapy: { id }, therapyDetailId: null };
     }
   } else if (hash.startsWith('#/therapy/')) {
     const id = hash.replace('#/therapy/', '');
-    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: id };
+    return { view: 'therapy-detail', historyTherapy: null, therapyDetailId: id };
   } else if (hash === '#/admin') {
-    return { view: 'admin', historyTherapy: null, dashboardTherapyId: null };
+    return { view: 'admin', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/equivalences') {
-    return { view: 'equivalences', historyTherapy: null, dashboardTherapyId: null };
+    return { view: 'equivalences', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/profile') {
-    return { view: 'profile', historyTherapy: null, dashboardTherapyId: null };
+    return { view: 'profile', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/settings') {
-    return { view: 'settings', historyTherapy: null, dashboardTherapyId: null };
+    return { view: 'settings', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/live') {
-    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: 'live' };
+    return { view: 'live-monitor', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/' || hash === '#') {
-    return { view: 'dashboard', historyTherapy: null, dashboardTherapyId: null };
+    return { view: 'therapy-selection', historyTherapy: null, therapyDetailId: null };
   }
-  return { view: 'not-found', historyTherapy: null, dashboardTherapyId: null };
+  return { view: 'not-found', historyTherapy: null, therapyDetailId: null };
 };
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(!!apiService.getToken());
-  
+
   const initialRoute = parseHash();
   const [view, setView] = useState(initialRoute.view);
   const [historyTherapy, setHistoryTherapy] = useState(initialRoute.historyTherapy);
-  const [dashboardTherapyId, setDashboardTherapyId] = useState(initialRoute.dashboardTherapyId);
-  const [currentHash, setCurrentHash] = useState(window.location.hash || '#/');
+  const [therapyDetailId, setTherapyDetailId] = useState(initialRoute.therapyDetailId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth > 768);
   const historySource = useRef(null);
@@ -68,8 +69,7 @@ function App() {
           const userData = await apiService.getMe();
           apiService.setToken(token);
           setUser(userData);
-        } catch (err) {
-          console.error('Error al recuperar sesión:', err);
+        } catch {
           apiService.setToken(null);
         }
       }
@@ -83,8 +83,7 @@ function App() {
       const route = parseHash();
       setView(route.view);
       setHistoryTherapy(route.historyTherapy);
-      setDashboardTherapyId(route.dashboardTherapyId);
-      setCurrentHash(window.location.hash || '#/');
+      setTherapyDetailId(route.therapyDetailId);
       setSidebarOpen(false);
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -103,10 +102,7 @@ function App() {
   const handleLogin = (userData, token) => {
     apiService.setToken(token);
     setUser(userData);
-    const route = parseHash();
-    if (route.view === 'dashboard') {
-      window.location.hash = '#/';
-    }
+    window.location.hash = '#/';
   };
 
   const handleLogout = async () => {
@@ -129,10 +125,24 @@ function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
+  const handleNavigateHistory = (therapy) => {
+    historySource.current = window.location.hash;
+    window.location.hash = `#/history/${therapy.id}`;
+  };
+
+  const handleHistoryBack = () => {
+    window.location.hash = historySource.current?.startsWith('#/therapy/') ? historySource.current : '#/';
+    historySource.current = null;
+  };
+
   const renderContent = () => {
     switch (view) {
       case 'history':
-        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={() => { window.location.hash = historySource.current?.startsWith('#/therapy/') ? historySource.current : '#/'; historySource.current = null; }} />;
+        return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={handleHistoryBack} />;
+      case 'therapy-detail':
+        return <TherapyDetailPage therapyId={therapyDetailId} onNavigateHistory={handleNavigateHistory} />;
+      case 'live-monitor':
+        return <LiveMonitorPage user={user} />;
       case 'admin':
         return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':
@@ -144,22 +154,13 @@ function App() {
       case 'not-found':
         return <NotFoundPage onBack={() => { window.location.hash = '#/'; }} />;
       default:
-        return (
-          <Dashboard
-            user={user}
-            therapyId={dashboardTherapyId}
-            onNavigateHistory={(therapy) => {
-              historySource.current = window.location.hash;
-              window.location.hash = `#/history/${therapy.id}`;
-            }}
-          />
-        );
+        return <TherapySelectionPage user={user} onNavigateHistory={handleNavigateHistory} />;
     }
   };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} currentHash={currentHash} />
+      <Sidebar user={user} onLogout={handleLogout} open={sidebarOpen} currentHash={window.location.hash || '#/'} />
       {sidebarOpen && !isDesktop && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <Button
         variant="ghost"
