@@ -1016,6 +1016,17 @@ pub async fn serial_start(
     }
 
     let new_therapy = payload.and_then(|Json(p)| p.new_therapy).unwrap_or(false);
+
+    if new_therapy {
+        if let Err(e) = state.db.close_all_open_therapies().await {
+            return db_err(e).into_response();
+        }
+    } else {
+        if let Err(e) = state.db.close_all_open_therapies_except_latest().await {
+            return db_err(e).into_response();
+        }
+    }
+
     state.serial_manager.start(new_therapy).await;
     Json(serde_json::json!({"ok": true})).into_response()
 }

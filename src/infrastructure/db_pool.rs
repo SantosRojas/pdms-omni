@@ -1336,6 +1336,74 @@ impl DbPool {
         }
     }
 
+    pub async fn close_all_open_therapies(&self) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE ended_at IS NULL",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE ended_at IS NULL",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let q = Query::new(
+                    "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' WHERE ended_at IS NULL",
+                );
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn close_all_open_therapies_except_latest(&self) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
+                     WHERE ended_at IS NULL \
+                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1)",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
+                     WHERE ended_at IS NULL \
+                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1)",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let q = Query::new(
+                    "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' \
+                     WHERE ended_at IS NULL \
+                     AND id != (SELECT TOP 1 id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC)",
+                );
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
     pub async fn close_therapy(&self, therapy_id: i64) -> Result<(), String> {
         match self {
             DbPool::Sqlite(pool) => {
