@@ -721,9 +721,7 @@ impl VersionRepository for MssqlVersionRepository {
 
         match r {
             Ok(()) => {
-                conn.simple_query("COMMIT")
-                    .await
-                    .map_err(map_db_err)?;
+                conn.simple_query("COMMIT").await.map_err(map_db_err)?;
                 Ok(())
             }
             Err(e) => {

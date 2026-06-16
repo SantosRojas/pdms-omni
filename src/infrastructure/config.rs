@@ -61,6 +61,7 @@ pub struct AppConfig {
     pub ws_port: u16,
     pub cycle_interval_secs: u64,
     pub db_save_interval_secs: u64,
+    pub db_save_only_on_therapy: bool,
 
     pub device_init_retry_max_attempts: u32,
     pub device_init_retry_interval_secs: u64,
@@ -133,7 +134,10 @@ impl AppConfig {
         let baudrate_raw = env::var("SERIAL_BAUDRATE").unwrap_or_default();
         let baudrate: u32 = baudrate_raw.parse().unwrap_or_else(|_| {
             if !baudrate_raw.is_empty() {
-                warn_once(&format!("SERIAL_BAUDRATE '{}' inválido, usando 19200", baudrate_raw));
+                warn_once(&format!(
+                    "SERIAL_BAUDRATE '{}' inválido, usando 19200",
+                    baudrate_raw
+                ));
             }
             19200
         });
@@ -155,6 +159,10 @@ impl AppConfig {
                 db_save_interval_secs, cycle_interval_secs
             ));
         }
+
+        let db_save_only_on_therapy = env::var("DB_SAVE_ONLY_ON_THERAPY")
+            .map(|v| v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
         Self {
             port_name: env::var("SERIAL_PORT").unwrap_or_else(|_| "COM6".to_string()),
@@ -181,6 +189,7 @@ impl AppConfig {
                 .unwrap_or(9001),
             cycle_interval_secs,
             db_save_interval_secs,
+            db_save_only_on_therapy,
             device_init_retry_max_attempts: env::var("DEVICE_INIT_RETRY_MAX_ATTEMPTS")
                 .unwrap_or_default()
                 .parse()

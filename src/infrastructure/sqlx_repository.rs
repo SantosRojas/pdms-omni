@@ -623,13 +623,12 @@ impl VersionRepository for SqlxVersionRepository {
         }
 
         for attr in attrs {
-            let signal_id: i64 = sqlx::query_scalar(
-                "SELECT id FROM signals WHERE internal_name = ?1",
-            )
-            .bind(&attr.internal_name)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(map_db_err)?;
+            let signal_id: i64 =
+                sqlx::query_scalar("SELECT id FROM signals WHERE internal_name = ?1")
+                    .bind(&attr.internal_name)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(map_db_err)?;
 
             sqlx::query(
                 "INSERT OR IGNORE INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)

@@ -159,7 +159,7 @@ impl DictionaryRepository for PgDictionaryRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query(
             "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
-             ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
+             ON CONFLICT (dict_id, version_fingerprint) DO NOTHING",
         )
         .bind(entry.dict_id as i32)
         .bind(&entry.text)
@@ -183,7 +183,7 @@ impl DictionaryRepository for PgDictionaryRepository {
         for entry in entries {
             sqlx::query(
                 "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
-                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
+                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING",
             )
             .bind(entry.dict_id as i32)
             .bind(&entry.text)
@@ -626,13 +626,12 @@ impl VersionRepository for PgVersionRepository {
         }
 
         for attr in attrs {
-            let signal_id: i64 = sqlx::query_scalar(
-                "SELECT id FROM signals WHERE internal_name = $1",
-            )
-            .bind(&attr.internal_name)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(map_db_err)?;
+            let signal_id: i64 =
+                sqlx::query_scalar("SELECT id FROM signals WHERE internal_name = $1")
+                    .bind(&attr.internal_name)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(map_db_err)?;
 
             sqlx::query(
                 "INSERT INTO data_attributes (handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, version_fingerprint)
@@ -655,7 +654,7 @@ impl VersionRepository for PgVersionRepository {
         for entry in dict_entries {
             sqlx::query(
                 "INSERT INTO dictionary (dict_id, text, version_fingerprint) VALUES ($1, $2, $3)
-                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING"
+                 ON CONFLICT (dict_id, version_fingerprint) DO NOTHING",
             )
             .bind(entry.dict_id as i32)
             .bind(&entry.text)

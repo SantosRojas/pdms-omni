@@ -76,7 +76,10 @@ impl SerialReaderManager {
         s.consecutive_failures = 0;
         s.data_warnings = 0;
         let id = chrono::Utc::now().timestamp_millis() as u64;
-        let _ = self.cmd_tx.send(ReaderCommand::Start { id, new_therapy }).await;
+        let _ = self
+            .cmd_tx
+            .send(ReaderCommand::Start { id, new_therapy })
+            .await;
     }
 
     pub async fn stop(&self, close_therapy: bool) {

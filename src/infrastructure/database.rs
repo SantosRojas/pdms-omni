@@ -298,13 +298,19 @@ async fn initialize_sqlite(
                 version_fingerprint TEXT NOT NULL,
                 PRIMARY KEY (handle, version_fingerprint),
                 FOREIGN KEY(signal_id) REFERENCES signals(id)
-            )"
-        ).execute(&pool).await;
+            )",
+        )
+        .execute(&pool)
+        .await;
         let _ = sqlx::query(
             "INSERT OR IGNORE INTO data_attributes_new SELECT handle, data_type, size, conversion_factor, label_did, unit_did, signal_id, COALESCE(version_fingerprint, 'migrated') FROM data_attributes"
         ).execute(&pool).await;
-        let _ = sqlx::query("DROP TABLE data_attributes").execute(&pool).await;
-        let _ = sqlx::query("ALTER TABLE data_attributes_new RENAME TO data_attributes").execute(&pool).await;
+        let _ = sqlx::query("DROP TABLE data_attributes")
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE data_attributes_new RENAME TO data_attributes")
+            .execute(&pool)
+            .await;
         info!("  [DB] data_attributes migration complete.");
     }
 
@@ -322,13 +328,17 @@ async fn initialize_sqlite(
                 text TEXT,
                 version_fingerprint TEXT NOT NULL,
                 PRIMARY KEY (dict_id, version_fingerprint)
-            )"
-        ).execute(&pool).await;
+            )",
+        )
+        .execute(&pool)
+        .await;
         let _ = sqlx::query(
             "INSERT OR IGNORE INTO dictionary_new SELECT dict_id, text, COALESCE(version_fingerprint, 'migrated') FROM dictionary"
         ).execute(&pool).await;
         let _ = sqlx::query("DROP TABLE dictionary").execute(&pool).await;
-        let _ = sqlx::query("ALTER TABLE dictionary_new RENAME TO dictionary").execute(&pool).await;
+        let _ = sqlx::query("ALTER TABLE dictionary_new RENAME TO dictionary")
+            .execute(&pool)
+            .await;
         info!("  [DB] dictionary migration complete.");
     }
 

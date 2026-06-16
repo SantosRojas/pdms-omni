@@ -544,7 +544,9 @@ async fn run_reader_session(
                                 );
                             }
                         }
-                    } else if let Some(session_id) = current_session_id {
+                    } else if !config.db_save_only_on_therapy
+                        && let Some(session_id) = current_session_id
+                    {
                         info!(
                             "[DB] [Cycle {cycle}] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Saving pre/post therapy snapshot ({count} readings, phase=non_therapy)...",
                             count = readings.len()

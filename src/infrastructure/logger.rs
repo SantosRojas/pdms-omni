@@ -17,23 +17,22 @@ pub fn init_logger(log_dir: Option<PathBuf>) -> Vec<WorkerGuard> {
         );
         let (console_writer, console_guard) = tracing_appender::non_blocking(std::io::stdout());
         let console_timer = ChronoLocal::new("%Y-%m-%d %H:%M:%S".to_string());
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
-            "info,hyper=warn,tiberius=warn,rustls=warn"
-        ));
-    tracing_subscriber::Registry::default()
-        .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(console_writer)
-                .with_ansi(true)
-                .with_target(false)
-                .with_timer(console_timer)
-                .with_level(true)
-                .boxed(),
-        )
-        .init();
-    return vec![console_guard];
+        let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            tracing_subscriber::EnvFilter::new("info,hyper=warn,tiberius=warn,rustls=warn")
+        });
+        tracing_subscriber::Registry::default()
+            .with(filter)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(console_writer)
+                    .with_ansi(true)
+                    .with_target(false)
+                    .with_timer(console_timer)
+                    .with_level(true)
+                    .boxed(),
+            )
+            .init();
+        return vec![console_guard];
     }
 
     let file_appender = tracing_appender::rolling::daily(&dir, "pdms-omni.log");
@@ -60,10 +59,9 @@ pub fn init_logger(log_dir: Option<PathBuf>) -> Vec<WorkerGuard> {
         .with_level(true)
         .boxed();
 
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
-            "info,hyper=warn,tiberius=warn,rustls=warn"
-        ));
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new("info,hyper=warn,tiberius=warn,rustls=warn")
+    });
 
     tracing_subscriber::Registry::default()
         .with(filter)

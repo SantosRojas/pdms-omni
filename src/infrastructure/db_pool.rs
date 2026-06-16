@@ -546,7 +546,10 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 // Manual BEGIN/COMMIT for tiberius (no built-in transaction helper)
-                Query::new("BEGIN TRANSACTION").execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Query::new("BEGIN TRANSACTION")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 let mut q1 = Query::new(
                     "INSERT INTO equivalence_deletion_log (signal_id, numeric_value, deleted_by, deletion_reason) VALUES (@P1, @P2, @P3, @P4)",
                 );
@@ -567,7 +570,10 @@ impl DbPool {
                     let _ = Query::new("ROLLBACK").execute(&mut *conn).await;
                     return Err(e.to_string());
                 }
-                Query::new("COMMIT").execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Query::new("COMMIT")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 Ok(())
             }
         }

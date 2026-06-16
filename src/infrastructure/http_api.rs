@@ -627,10 +627,7 @@ pub struct TherapyExportQuery {
 }
 
 /// GET /api/patients
-pub async fn list_patients(
-    headers: HeaderMap,
-    State(state): State<ApiState>,
-) -> impl IntoResponse {
+pub async fn list_patients(headers: HeaderMap, State(state): State<ApiState>) -> impl IntoResponse {
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized();
     }

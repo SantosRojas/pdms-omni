@@ -64,9 +64,7 @@ impl WebSocketHub {
             let ws_route = move |ws: WebSocketUpgrade| {
                 let tx = app_tx.clone();
                 let secret = ws_jwt_secret.clone();
-                async move {
-                    ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe(), secret))
-                }
+                async move { ws.on_upgrade(move |socket| handle_socket(socket, tx.subscribe(), secret)) }
             };
 
             // Build a 503-returning fallback for all API routes when the DB is unavailable.
@@ -135,10 +133,7 @@ impl WebSocketHub {
                     )
                     // Therapy Comments
                     .route("/therapies/{id}/comments", get(http_api::list_comments))
-                    .route(
-                        "/therapies/{id}/comments",
-                        post(http_api::create_comment),
-                    )
+                    .route("/therapies/{id}/comments", post(http_api::create_comment))
                     .route(
                         "/therapies/comments/{comment_id}",
                         delete(http_api::delete_comment),
@@ -149,16 +144,19 @@ impl WebSocketHub {
             } else {
                 // DB not available: all API routes return 503.
                 Router::new()
-                    .route("/status", get({
-                        let persistence_enabled = persistence_enabled;
-                        move || async move {
-                            axum::Json(serde_json::json!({
-                                "ok": true,
-                                "persistence_enabled": persistence_enabled,
-                                "message": "Base de datos no disponible"
-                            }))
-                        }
-                    }))
+                    .route(
+                        "/status",
+                        get({
+                            let persistence_enabled = persistence_enabled;
+                            move || async move {
+                                axum::Json(serde_json::json!({
+                                    "ok": true,
+                                    "persistence_enabled": persistence_enabled,
+                                    "message": "Base de datos no disponible"
+                                }))
+                            }
+                        }),
+                    )
                     .route("/auth/login", post(|| async { db_unavailable() }))
                     .route("/auth/logout", post(|| async { db_unavailable() }))
                     .route("/auth/me", get(|| async { db_unavailable() }))
@@ -179,11 +177,23 @@ impl WebSocketHub {
                     .route("/serial/status", get(|| async { db_unavailable() }))
                     .route("/serial/start", post(|| async { db_unavailable() }))
                     .route("/serial/stop", post(|| async { db_unavailable() }))
-                    .route("/therapies/{id}/comments", get(|| async { db_unavailable() }))
-                    .route("/therapies/{id}/comments", post(|| async { db_unavailable() }))
-                    .route("/therapies/comments/{comment_id}", delete(|| async { db_unavailable() }))
+                    .route(
+                        "/therapies/{id}/comments",
+                        get(|| async { db_unavailable() }),
+                    )
+                    .route(
+                        "/therapies/{id}/comments",
+                        post(|| async { db_unavailable() }),
+                    )
+                    .route(
+                        "/therapies/comments/{comment_id}",
+                        delete(|| async { db_unavailable() }),
+                    )
                     .route("/therapies/{id}/close", post(|| async { db_unavailable() }))
-                    .route("/sessions/{id}/readings", get(|| async { db_unavailable() }))
+                    .route(
+                        "/sessions/{id}/readings",
+                        get(|| async { db_unavailable() }),
+                    )
                     .fallback(api_not_found)
             };
 
@@ -241,50 +251,41 @@ async fn handle_socket(
     jwt_secret: String,
 ) {
     // ── Require auth token as first message ──────────────────────
-    let is_authenticated = match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        socket.recv(),
-    )
-    .await
-    {
-        Ok(Some(Ok(Message::Text(text)))) => {
-            match serde_json::from_str::<serde_json::Value>(&text) {
-                Ok(val) if val.get("type").and_then(|t| t.as_str()) == Some("auth") => {
-                    let token = val
-                        .get("token")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("");
-                    match decode_token(&jwt_secret, token) {
-                        Ok(_) => {
-                            let _ = socket
-                                .send(Message::Text(
-                                    r#"{"type":"auth_ok"}"#.into(),
-                                ))
-                                .await;
-                            true
-                        }
-                        Err(_) => {
-                            let _ = socket
-                                .send(Message::Text(
-                                    r#"{"type":"auth_error","error":"invalid_token"}"#.into(),
-                                ))
-                                .await;
-                            false
+    let is_authenticated =
+        match tokio::time::timeout(std::time::Duration::from_secs(10), socket.recv()).await {
+            Ok(Some(Ok(Message::Text(text)))) => {
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(val) if val.get("type").and_then(|t| t.as_str()) == Some("auth") => {
+                        let token = val.get("token").and_then(|t| t.as_str()).unwrap_or("");
+                        match decode_token(&jwt_secret, token) {
+                            Ok(_) => {
+                                let _ = socket
+                                    .send(Message::Text(r#"{"type":"auth_ok"}"#.into()))
+                                    .await;
+                                true
+                            }
+                            Err(_) => {
+                                let _ = socket
+                                    .send(Message::Text(
+                                        r#"{"type":"auth_error","error":"invalid_token"}"#.into(),
+                                    ))
+                                    .await;
+                                false
+                            }
                         }
                     }
-                }
-                _ => {
-                    let _ = socket
-                        .send(Message::Text(
-                            r#"{"type":"auth_error","error":"expected_auth"}"#.into(),
-                        ))
-                        .await;
-                    false
+                    _ => {
+                        let _ = socket
+                            .send(Message::Text(
+                                r#"{"type":"auth_error","error":"expected_auth"}"#.into(),
+                            ))
+                            .await;
+                        false
+                    }
                 }
             }
-        }
-        _ => false,
-    };
+            _ => false,
+        };
 
     if !is_authenticated {
         let _ = socket.send(Message::Close(None)).await;
