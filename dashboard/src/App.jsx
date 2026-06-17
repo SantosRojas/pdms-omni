@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LoginPage } from './presentation/pages/LoginPage';
 import { TherapySelectionPage } from './presentation/pages/TherapySelectionPage';
 import { LiveMonitorPage } from './presentation/pages/LiveMonitorPage';
+import { ScadaPage } from './presentation/pages/ScadaPage';
 import { TherapyDetailPage } from './presentation/pages/TherapyDetailPage';
 import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
@@ -35,6 +36,8 @@ const parseHash = () => {
     return { view: 'profile', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/settings') {
     return { view: 'settings', historyTherapy: null, therapyDetailId: null };
+  } else if (hash === '#/scada') {
+    return { view: 'scada', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/live') {
     return { view: 'live-monitor', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/' || hash === '#') {
@@ -141,6 +144,8 @@ function App() {
         return <HistoryView therapy={historyTherapy} userRole={user.role} onBack={handleHistoryBack} />;
       case 'therapy-detail':
         return <TherapyDetailPage therapyId={therapyDetailId} onNavigateHistory={handleNavigateHistory} />;
+      case 'scada':
+        return <ScadaPage />;
       case 'live-monitor':
         return <LiveMonitorPage user={user} />;
       case 'admin':
