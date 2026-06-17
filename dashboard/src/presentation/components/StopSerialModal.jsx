@@ -10,7 +10,7 @@ export const StopSerialModal = ({ show, onClose, onStopReader }) => {
         El puerto serial está leyendo datos. ¿Qué deseas hacer con la terapia en curso?
       </p>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ flexDirection: 'column' }}>
         <Button variant="danger" fullWidth centered onClick={() => { onStopReader(true); onClose(); }}>
           Finalizar terapia y detener lectura
         </Button>

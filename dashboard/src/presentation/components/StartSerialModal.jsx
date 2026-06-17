@@ -38,7 +38,7 @@ export const StartSerialModal = ({ show, onClose, latestTherapy, onStartReader }
         </div>
       )}
 
-      <Modal.Footer>
+      <Modal.Footer style={{ flexDirection: 'column' }}>
         <Button variant="primary" fullWidth centered onClick={() => { onStartReader(true); onClose(); }}>
           Crear nueva terapia
         </Button>
