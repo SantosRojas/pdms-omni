@@ -142,6 +142,22 @@ pub fn build_patient_row(id: i64, patient_id_str: String, created_at: String) ->
     }
 }
 
+pub fn build_signal_row(
+    id: i64,
+    internal_name: String,
+    display_name: Option<String>,
+    unit: Option<String>,
+) -> GenericRow {
+    GenericRow {
+        values: vec![
+            Some(id.to_string()),
+            Some(internal_name),
+            display_name,
+            unit,
+        ],
+    }
+}
+
 pub fn build_history_row(
     id: i64,
     timestamp: String,

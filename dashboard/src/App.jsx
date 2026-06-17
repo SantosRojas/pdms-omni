@@ -7,6 +7,7 @@ import { TherapyDetailPage } from './presentation/pages/TherapyDetailPage';
 import { HistoryView } from './presentation/pages/HistoryView';
 import { AdminPage } from './presentation/pages/AdminPage';
 import { EquivalencesPage } from './presentation/pages/EquivalencesPage';
+import { SignalsPage } from './presentation/pages/SignalsPage';
 import { ProfilePage } from './presentation/pages/ProfilePage';
 import { SettingsPage } from './presentation/pages/SettingsPage';
 import { Sidebar } from './presentation/components/Sidebar';
@@ -32,6 +33,8 @@ const parseHash = () => {
     return { view: 'admin', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/equivalences') {
     return { view: 'equivalences', historyTherapy: null, therapyDetailId: null };
+  } else if (hash === '#/signals-config') {
+    return { view: 'signals-config', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/profile') {
     return { view: 'profile', historyTherapy: null, therapyDetailId: null };
   } else if (hash === '#/settings') {
@@ -152,6 +155,8 @@ function App() {
         return <AdminPage currentUser={user} onBack={() => { window.location.hash = '#/'; }} />;
       case 'equivalences':
         return <EquivalencesPage userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
+      case 'signals-config':
+        return <SignalsPage userRole={user.role} onBack={() => { window.location.hash = '#/'; }} />;
       case 'profile':
         return <ProfilePage currentUser={user} onBack={() => { window.location.hash = '#/'; }} onUpdateUser={setUser} />;
       case 'settings':

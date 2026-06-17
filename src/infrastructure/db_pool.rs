@@ -10,7 +10,8 @@ use tiberius::{Query, Row as TibRow};
 use crate::infrastructure::persistence_helpers::{
     GenericRow, MSSQL_NUMERIC_EQ_EXPR, POSTGRES_NUMERIC_EQ_EXPR, SQLITE_NUMERIC_EQ_EXPR,
     build_equivalence_row, build_export_row, build_history_row, build_patient_row,
-    build_therapy_comment_row, build_therapy_row, build_user_list_row, build_user_row,
+    build_signal_row, build_therapy_comment_row, build_therapy_row, build_user_list_row,
+    build_user_row,
 };
 
 /// A backend-agnostic database connection pool.
@@ -511,6 +512,89 @@ impl DbPool {
                 q.bind(display_name);
                 q.bind(signal_id as i32);
                 q.bind(numeric_value);
+                q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    // ─── SIGNALS ───────────────────────────────────────────────
+
+    pub async fn list_signals(&self) -> Result<Vec<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let rows = sqlx::query(
+                    "SELECT id, internal_name, display_name, unit FROM signals ORDER BY id",
+                )
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| {
+                    build_signal_row(
+                        r.get::<i64, _>(0),
+                        r.get::<String, _>(1),
+                        r.get::<Option<String>, _>(2),
+                        r.get::<Option<String>, _>(3),
+                    )
+                }).collect())
+            }
+            DbPool::Postgres(pool) => {
+                let rows = sqlx::query(
+                    "SELECT id, internal_name, display_name, unit FROM signals ORDER BY id",
+                )
+                .fetch_all(pool).await.map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().map(|r| {
+                    build_signal_row(
+                        r.get::<i64, _>(0),
+                        r.get::<String, _>(1),
+                        r.get::<Option<String>, _>(2),
+                        r.get::<Option<String>, _>(3),
+                    )
+                }).collect())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let q = Query::new(
+                    "SELECT id, internal_name, display_name, unit FROM signals ORDER BY id",
+                );
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let mut rows = Vec::new();
+                for row in stream.into_first_result().await.map_err(|e| e.to_string())? {
+                    rows.push(build_signal_row(
+                        row.get::<i32, _>(0).unwrap_or(0) as i64,
+                        row.get::<&str, _>(1).unwrap_or("").to_string(),
+                        row.get::<&str, _>(2).map(|s| s.to_string()),
+                        row.get::<&str, _>(3).map(|s| s.to_string()),
+                    ));
+                }
+                Ok(rows)
+            }
+        }
+    }
+
+    pub async fn update_signal(
+        &self,
+        signal_id: i64,
+        display_name: Option<&str>,
+        unit: Option<&str>,
+    ) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query("UPDATE signals SET display_name = ?1, unit = ?2 WHERE id = ?3")
+                    .bind(display_name).bind(unit).bind(signal_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query("UPDATE signals SET display_name = $1, unit = $2 WHERE id = $3")
+                    .bind(display_name).bind(unit).bind(signal_id).execute(pool).await.map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = Query::new(
+                    "UPDATE signals SET display_name = @P1, unit = @P2 WHERE id = @P3",
+                );
+                q.bind(display_name);
+                q.bind(unit);
+                q.bind(signal_id as i32);
                 q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 Ok(())
             }

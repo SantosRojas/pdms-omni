@@ -94,7 +94,9 @@ async fn initialize_sqlite(
         );
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            internal_name TEXT UNIQUE
+            internal_name TEXT UNIQUE,
+            display_name TEXT,
+            unit TEXT
         );
         CREATE TABLE IF NOT EXISTS data_attributes (
             handle INTEGER NOT NULL,
@@ -233,6 +235,8 @@ async fn initialize_sqlite(
         "ALTER TABLE versions ADD COLUMN fingerprint TEXT",
         "ALTER TABLE data_attributes ADD COLUMN version_fingerprint TEXT",
         "ALTER TABLE dictionary ADD COLUMN version_fingerprint TEXT",
+        "ALTER TABLE signals ADD COLUMN display_name TEXT",
+        "ALTER TABLE signals ADD COLUMN unit TEXT",
     ] {
         if let Err(e) = sqlx::query(migration).execute(&pool).await {
             println!("  [DB] Migration note (safe to ignore): {e}");
@@ -425,7 +429,9 @@ async fn initialize_postgres(
         )",
         "CREATE TABLE IF NOT EXISTS signals (
             id BIGSERIAL PRIMARY KEY,
-            internal_name TEXT UNIQUE
+            internal_name TEXT UNIQUE,
+            display_name TEXT,
+            unit TEXT
         )",
         "CREATE TABLE IF NOT EXISTS data_attributes (
             handle INTEGER NOT NULL,
@@ -561,6 +567,8 @@ async fn initialize_postgres(
         "ALTER TABLE versions ADD COLUMN IF NOT EXISTS fingerprint TEXT",
         "ALTER TABLE data_attributes ADD COLUMN IF NOT EXISTS version_fingerprint TEXT",
         "ALTER TABLE dictionary ADD COLUMN IF NOT EXISTS version_fingerprint TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS display_name TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS unit TEXT",
     ];
 
     for stmt in migration_statements {
@@ -694,7 +702,9 @@ async fn initialize_mssql(
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'signals')
              CREATE TABLE signals (
                  id INT IDENTITY(1,1) PRIMARY KEY,
-                 internal_name NVARCHAR(200) UNIQUE
+                 internal_name NVARCHAR(200) UNIQUE,
+                 display_name NVARCHAR(500),
+                 unit NVARCHAR(100)
              )",
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'data_attributes')
              CREATE TABLE data_attributes (
@@ -873,6 +883,14 @@ async fn initialize_mssql(
             "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dictionary') AND name = 'version_fingerprint')
              BEGIN
                  ALTER TABLE dictionary ADD version_fingerprint NVARCHAR(64) NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('signals') AND name = 'display_name')
+             BEGIN
+                 ALTER TABLE signals ADD display_name NVARCHAR(500) NULL;
+             END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('signals') AND name = 'unit')
+             BEGIN
+                 ALTER TABLE signals ADD unit NVARCHAR(100) NULL;
              END",
         ];
 

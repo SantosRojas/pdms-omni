@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Layers, Users, User, Settings, LogOut, Activity, Monitor } from 'lucide-react';
+import { Home, Layers, Users, User, Settings, LogOut, Activity, Monitor, List } from 'lucide-react';
 import { Button } from './Button';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { hash: '#/live', label: 'Monitor', icon: Activity, roles: null },
   { hash: '#/scada', label: 'SCADA', icon: Monitor, roles: null },
   { hash: '#/equivalences', label: 'Equivalencias', icon: Layers, roles: null },
+  { hash: '#/signals-config', label: 'Señales', icon: List, roles: ['admin'] },
   { hash: '#/admin', label: 'Usuarios', icon: Users, roles: ['admin'] },
   { hash: '#/profile', label: 'Perfil', icon: User, roles: null },
   { hash: '#/settings', label: 'Ajustes', icon: Settings, roles: null },

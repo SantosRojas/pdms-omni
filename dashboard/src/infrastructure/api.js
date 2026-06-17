@@ -138,6 +138,26 @@ export const apiService = {
     return res.json();
   },
 
+  // ─── Signals ──────────────────────────────────────
+  async getSignals() {
+    const res = await fetch(`${API_BASE}/api/signals`, { headers: this._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async updateSignal(id, display_name, unit) {
+    const res = await fetch(`${API_BASE}/api/signals/${id}`, {
+      method: 'PUT',
+      headers: this._headers(),
+      body: JSON.stringify({ display_name, unit }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   // ─── Telemetry ────────────────────────────────────
   async getPatients() {
     const res = await fetch(`${API_BASE}/api/patients`, { headers: this._headers() });

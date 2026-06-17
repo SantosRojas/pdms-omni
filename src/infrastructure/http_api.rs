@@ -512,6 +512,77 @@ pub async fn update_equivalence(
     }
 }
 
+// ─── SIGNALS ───────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct SignalDto {
+    pub id: i64,
+    pub internal_name: String,
+    pub display_name: Option<String>,
+    pub unit: Option<String>,
+}
+
+/// GET /api/signals
+pub async fn list_signals(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if get_claims(&headers, &state).await.is_none() {
+        return unauthorized().into_response();
+    }
+
+    match state.db.list_signals().await {
+        Ok(rows) => {
+            let signals: Vec<SignalDto> = rows
+                .into_iter()
+                .map(|row| SignalDto {
+                    id: row.get_i64(0),
+                    internal_name: row.get_string(1),
+                    display_name: row.get_optional_string(2),
+                    unit: row.get_optional_string(3),
+                })
+                .collect();
+            Json(signals).into_response()
+        }
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct UpdateSignalRequest {
+    pub display_name: Option<String>,
+    pub unit: Option<String>,
+}
+
+/// PUT /api/signals/{id}
+pub async fn update_signal(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(signal_id): Path<i64>,
+    Json(body): Json<UpdateSignalRequest>,
+) -> impl IntoResponse {
+    let session = match get_claims(&headers, &state).await {
+        Some(s) => s,
+        None => return unauthorized().into_response(),
+    };
+    if session.role != "admin" {
+        return forbidden().into_response();
+    }
+
+    match state
+        .db
+        .update_signal(
+            signal_id,
+            body.display_name.as_deref(),
+            body.unit.as_deref(),
+        )
+        .await
+    {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => db_err(e).into_response(),
+    }
+}
+
 /// DELETE /api/equivalences
 pub async fn delete_equivalence(
     State(state): State<ApiState>,
