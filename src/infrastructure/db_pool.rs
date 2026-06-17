@@ -897,7 +897,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(
-                    "SELECT sr.id, sr.timestamp, s.internal_name, CAST(sr.physical_value AS TEXT), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                    "SELECT sr.id, sr.timestamp, COALESCE(s.display_name, s.internal_name), CAST(sr.physical_value AS TEXT), sr.raw_value, COALESCE(s.unit, sr.unit), sr.display_value, sr.phase
                      FROM session_readings sr
                      JOIN signals s ON sr.signal_id = s.id
                      WHERE sr.serial_session_id = ?1
@@ -923,7 +923,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(
-                    "SELECT sr.id, TO_CHAR(sr.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(sr.physical_value AS TEXT), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                    "SELECT sr.id, TO_CHAR(sr.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(sr.physical_value AS TEXT), sr.raw_value, COALESCE(s.unit, sr.unit), sr.display_value, sr.phase
                      FROM session_readings sr
                      JOIN signals s ON sr.signal_id = s.id
                      WHERE sr.serial_session_id = $1
@@ -950,7 +950,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let mut q = Query::new(
-                    "SELECT TOP(@P1) sr.id, CONVERT(NVARCHAR(30), sr.timestamp, 120), s.internal_name, CAST(sr.physical_value AS NVARCHAR(MAX)), sr.raw_value, sr.unit, sr.display_value, sr.phase
+                    "SELECT TOP(@P1) sr.id, CONVERT(NVARCHAR(30), sr.timestamp, 120), COALESCE(s.display_name, s.internal_name), CAST(sr.physical_value AS NVARCHAR(MAX)), sr.raw_value, COALESCE(s.unit, sr.unit), sr.display_value, sr.phase
                      FROM session_readings sr
                      JOIN signals s ON sr.signal_id = s.id
                      WHERE sr.serial_session_id = @P2
@@ -990,7 +990,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp DESC LIMIT ?2",
+                    "SELECT t.id, t.timestamp, COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp DESC LIMIT ?2",
                     SQLITE_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1009,7 +1009,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2",
+                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1029,7 +1029,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let query = format!(
-                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp DESC",
+                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp DESC",
                     MSSQL_NUMERIC_EQ_EXPR
                 );
                 let mut q = Query::new(query);
@@ -1065,7 +1065,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                    "SELECT t.id, t.timestamp, COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1089,7 +1089,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1114,7 +1114,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let query = format!(
-                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit
+                    "SELECT TOP(@P1) t.id, CONVERT(NVARCHAR(30), t.timestamp, 120), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1155,7 +1155,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2",
+                    "SELECT t.timestamp, COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = ?1 ORDER BY t.timestamp ASC LIMIT ?2",
                     SQLITE_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1173,7 +1173,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2",
+                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1192,7 +1192,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let query = format!(
-                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp ASC",
+                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = @P2 ORDER BY t.timestamp ASC",
                     MSSQL_NUMERIC_EQ_EXPR
                 );
                 let mut q = Query::new(query);
@@ -1227,7 +1227,7 @@ impl DbPool {
         match self {
             DbPool::Sqlite(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.timestamp, s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                    "SELECT t.timestamp, COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1250,7 +1250,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), s.internal_name, CAST(t.physical_value AS TEXT), e.display_name, t.unit
+                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1274,7 +1274,7 @@ impl DbPool {
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
                 let query = format!(
-                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), s.internal_name, CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, t.unit
+                    "SELECT TOP(@P1) CONVERT(NVARCHAR(30), t.timestamp, 120), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS NVARCHAR(MAX)), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
