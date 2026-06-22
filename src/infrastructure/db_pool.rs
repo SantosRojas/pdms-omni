@@ -727,6 +727,8 @@ impl DbPool {
         &self,
         search: Option<&str>,
         status_filter: Option<&str>,
+        date_from: Option<&str>,
+        date_to: Option<&str>,
         page: i64,
         page_size: i64,
     ) -> Result<(Vec<GenericRow>, i64), String> {
@@ -734,20 +736,36 @@ impl DbPool {
             .map(|s| format!("%{}%", s))
             .unwrap_or_else(|| "%".to_string());
         let status = status_filter.unwrap_or("");
+        let date_from_pattern = date_from
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("{}T00:00:00", d))
+            .unwrap_or_default();
+        let date_to_pattern = date_to
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("{}T23:59:59", d))
+            .unwrap_or_default();
         let offset = (page - 1) * page_size;
-        let where_clause = "WHERE (p.patient_id_str LIKE ?1 OR m.serial_number LIKE ?1 OR m.software_version LIKE ?1 OR COALESCE(th.status, '') LIKE ?1)
+        let base_where = "WHERE (p.patient_id_str LIKE ?1 OR m.serial_number LIKE ?1 OR m.software_version LIKE ?1 OR COALESCE(th.status, '') LIKE ?1)
                             AND (?2 = '' OR th.status = ?2)";
-        let where_clause_pg = "WHERE (p.patient_id_str LIKE $1 OR m.serial_number LIKE $1 OR m.software_version LIKE $1 OR COALESCE(th.status, '') LIKE $1)
+        let base_where_pg = "WHERE (p.patient_id_str LIKE $1 OR m.serial_number LIKE $1 OR m.software_version LIKE $1 OR COALESCE(th.status, '') LIKE $1)
                                AND ($2 = '' OR th.status = $2)";
-        let where_clause_ms = "WHERE (p.patient_id_str LIKE @P1 OR m.serial_number LIKE @P1 OR m.software_version LIKE @P1 OR ISNULL(th.status, '') LIKE @P1)
+        let base_where_ms = "WHERE (p.patient_id_str LIKE @P1 OR m.serial_number LIKE @P1 OR m.software_version LIKE @P1 OR ISNULL(th.status, '') LIKE @P1)
                                AND (@P2 = '' OR th.status = @P2)";
+        let where_count = format!("{} AND (?3 = '' OR th.started_at >= ?3) AND (?4 = '' OR th.started_at <= ?4)", base_where);
+        let where_data = format!("{} AND (?5 = '' OR th.started_at >= ?5) AND (?6 = '' OR th.started_at <= ?6)", base_where);
+        let where_count_pg = format!("{} AND ($3 = '' OR th.started_at >= $3) AND ($4 = '' OR th.started_at <= $4)", base_where_pg);
+        let where_data_pg = format!("{} AND ($5 = '' OR th.started_at >= $5) AND ($6 = '' OR th.started_at <= $6)", base_where_pg);
+        let where_count_ms = format!("{} AND (@P3 = '' OR th.started_at >= @P3) AND (@P4 = '' OR th.started_at <= @P4)", base_where_ms);
+        let where_data_ms = format!("{} AND (@P5 = '' OR th.started_at >= @P5) AND (@P6 = '' OR th.started_at <= @P6)", base_where_ms);
         match self {
             DbPool::Sqlite(pool) => {
                 let total = sqlx::query_scalar::<_, i64>(
-                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_clause)
+                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_count)
                 )
                 .bind(&search_pattern)
                 .bind(status)
+                .bind(&date_from_pattern)
+                .bind(&date_to_pattern)
                 .fetch_one(pool).await.map_err(|e| e.to_string())?;
 
                 let rows = sqlx::query(
@@ -757,13 +775,15 @@ impl DbPool {
                          JOIN patients p ON th.patient_id = p.id
                          JOIN machines m ON th.machine_id = m.id
                          {}
-                         ORDER BY th.started_at DESC LIMIT ?3 OFFSET ?4", where_clause
+                         ORDER BY th.started_at DESC LIMIT ?3 OFFSET ?4", where_data
                     )
                 )
                 .bind(&search_pattern)
                 .bind(status)
                 .bind(page_size)
                 .bind(offset)
+                .bind(&date_from_pattern)
+                .bind(&date_to_pattern)
                 .fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok((
                     rows.into_iter()
@@ -787,10 +807,12 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let total = sqlx::query_scalar::<_, i64>(
-                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_clause_pg)
+                    &format!("SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}", where_count_pg)
                 )
                 .bind(&search_pattern)
                 .bind(status)
+                .bind(&date_from_pattern)
+                .bind(&date_to_pattern)
                 .fetch_one(pool).await.map_err(|e| e.to_string())?;
 
                 let rows = sqlx::query(
@@ -800,13 +822,15 @@ impl DbPool {
                          JOIN patients p ON th.patient_id = p.id
                          JOIN machines m ON th.machine_id = m.id
                          {}
-                         ORDER BY th.started_at DESC LIMIT $3 OFFSET $4", where_clause_pg
+                         ORDER BY th.started_at DESC LIMIT $3 OFFSET $4", where_data_pg
                     )
                 )
                 .bind(&search_pattern)
                 .bind(status)
                 .bind(page_size)
                 .bind(offset)
+                .bind(&date_from_pattern)
+                .bind(&date_to_pattern)
                 .fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok((
                     rows.into_iter()
@@ -833,11 +857,13 @@ impl DbPool {
 
                 let count_sql = format!(
                     "SELECT COUNT(*) FROM therapies th JOIN patients p ON th.patient_id = p.id JOIN machines m ON th.machine_id = m.id {}",
-                    where_clause_ms
+                    where_count_ms
                 );
                 let mut qc = Query::new(&count_sql);
                 qc.bind(&search_pattern);
                 qc.bind(status);
+                qc.bind(&date_from_pattern);
+                qc.bind(&date_to_pattern);
                 let stream = qc.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let count_rows: Vec<TibRow> = stream
                     .into_first_result()
@@ -854,13 +880,15 @@ impl DbPool {
                      JOIN patients p ON th.patient_id = p.id
                      JOIN machines m ON th.machine_id = m.id
                      {}
-                     ORDER BY th.started_at DESC OFFSET @P4 ROWS FETCH NEXT @P3 ROWS ONLY", where_clause_ms
+                     ORDER BY th.started_at DESC OFFSET @P4 ROWS FETCH NEXT @P3 ROWS ONLY", where_data_ms
                 );
                 let mut q = Query::new(&data_sql);
                 q.bind(&search_pattern);
                 q.bind(status);
                 q.bind(page_size);
                 q.bind(offset);
+                q.bind(&date_from_pattern);
+                q.bind(&date_to_pattern);
                 let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
                 let rows: Vec<TibRow> = stream
                     .into_first_result()

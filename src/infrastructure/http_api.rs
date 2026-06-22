@@ -722,6 +722,8 @@ pub async fn list_patients(headers: HeaderMap, State(state): State<ApiState>) ->
 pub struct TherapiesQuery {
     pub search: Option<String>,
     pub status: Option<String>,
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
     #[serde(default = "default_therapies_page")]
     pub page: i64,
     #[serde(default = "default_therapies_page_size")]
@@ -756,6 +758,8 @@ pub async fn list_therapies(
         .list_therapies(
             params.search.as_deref(),
             params.status.as_deref(),
+            params.date_from.as_deref(),
+            params.date_to.as_deref(),
             params.page,
             params.page_size,
         )

@@ -23,9 +23,9 @@ export const GeneralInfo = memo(({ selectedTherapy, therapyIsActive, isPreTherap
         hasData ? (
           <>
             <StatCard title="Estado del sistema" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" />
-            <StatCard title="Peso del paciente" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
-            <StatCard title="Modo de terapia" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" />
-            <StatCard title="Anticoagulante" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" />
+            {/* <StatCard title="Peso del paciente" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" /> */}
+            {/* <StatCard title="Modo de terapia" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" /> */}
+            {/* <StatCard title="Anticoagulante" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" /> */}
           </>
         ) : (
           <div className="empty-state" style={{ padding: '12px' }}>
@@ -36,7 +36,7 @@ export const GeneralInfo = memo(({ selectedTherapy, therapyIsActive, isPreTherap
         hasData ? (
           <>
             <StatCard title="Peso del paciente" value={data.info.g_patient_data_weight_set.value} unit={data.info.g_patient_data_weight_set.unit} iconName="Activity" color="var(--secondary)" />
-            <StatCard title="Estado del sistema" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" />
+            {/* <StatCard title="Estado del sistema" value={data.info.g_trmt_main_state_set.value} iconName="Activity" color="#10b981" /> */}
             <StatCard title="Modo de terapia" value={data.info.g_therapy_mode_set.value} iconName="HeartPulse" color="var(--accent)" />
             <StatCard title="Anticoagulante" value={data.info.g_anticoag_mode_set.value} iconName="Beaker" color="#a855f7" />
             <StatCard title="Dosis renal" value={data.info.d_renal_dose_act.value} unit={data.info.d_renal_dose_act.unit} iconName="Zap" color="#f97316" />
