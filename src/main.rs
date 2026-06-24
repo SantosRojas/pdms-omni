@@ -35,6 +35,7 @@ struct TelemetryEvent<'a> {
     therapy_state_name: String,
     therapy_start: Option<String>,
     therapy_end: Option<String>,
+    therapy_closed_by_user: bool,
     persistence_enabled: bool,
     persistence_status: &'static str,
 }
@@ -216,6 +217,7 @@ async fn run_reader_session(
     let mut force_new_session = new_therapy;
     let software_version = version.system_sw.clone();
     let mut prev_therapy_state_value: Option<f64> = None;
+    let mut manual_close_acknowledged = false;
 
     info!("[Loop] Lectura cíclica de valores (Ctrl+C para detener)...");
 
@@ -227,6 +229,16 @@ async fn run_reader_session(
                 info!("[Serial] Deteniendo lectura: {}", status.status);
                 break;
             }
+        }
+
+        // Check if a therapy was closed manually from the UI
+        if let Some(closed_id) = serial_manager.take_pending_therapy_close().await
+            && current_therapy_id == Some(closed_id)
+        {
+            info!("[Therapy] Cierre manual desde UI. Terapia {closed_id} cerrada en BD. Resetando estado en memoria.");
+            current_therapy_id = None;
+            therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            manual_close_acknowledged = true;
         }
 
         cycle += 1;
@@ -420,29 +432,36 @@ async fn run_reader_session(
                             (current_patient_id, current_machine_id)
                         && persistence_enabled
                     {
-                        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-                        match interactor
-                            .get_or_create_therapy(
-                                patient_id,
-                                machine_id,
-                                &now,
-                                force_new_session,
-                                current_session_id,
-                            )
-                            .await
-                        {
-                            Ok(therapy_id) => {
-                                current_therapy_id = Some(therapy_id);
-                                therapy_start_time = Some(now);
-                                therapy_end_time = None;
-                                force_new_session = false;
-                                info!(
-                                    "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy START detected (id={therapy_id})"
-                                );
+                        if manual_close_acknowledged && was_in_therapy {
+                            debug!(
+                                "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Cierre manual reciente — esperando transición de estado del dispositivo para crear nueva terapia"
+                            );
+                        } else {
+                            manual_close_acknowledged = false;
+                            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                            match interactor
+                                .get_or_create_therapy(
+                                    patient_id,
+                                    machine_id,
+                                    &now,
+                                    force_new_session,
+                                    current_session_id,
+                                )
+                                .await
+                            {
+                                Ok(therapy_id) => {
+                                    current_therapy_id = Some(therapy_id);
+                                    therapy_start_time = Some(now);
+                                    therapy_end_time = None;
+                                    force_new_session = false;
+                                    info!(
+                                        "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy START detected (id={therapy_id})"
+                                    );
+                                }
+                                Err(e) => error!(
+                                    "[DB] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Failed to open therapy: {e}"
+                                ),
                             }
-                            Err(e) => error!(
-                                "[DB] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Failed to open therapy: {e}"
-                            ),
                         }
                     }
 
@@ -454,6 +473,7 @@ async fn run_reader_session(
                         );
                     }
                 } else if was_in_therapy {
+                    manual_close_acknowledged = false;
                     let is_state_3 = therapy_state_value.is_some_and(|v| (v - 3.0).abs() < 0.1);
                     if is_state_3 {
                         if let Some(tid) = current_therapy_id.take() {
@@ -504,6 +524,7 @@ async fn run_reader_session(
                     therapy_state_name: therapy_state_name.clone(),
                     therapy_start: therapy_start_time.clone(),
                     therapy_end: therapy_end_time.clone(),
+                    therapy_closed_by_user: manual_close_acknowledged,
                     persistence_enabled,
                     persistence_status: if persistence_enabled {
                         "persisting"

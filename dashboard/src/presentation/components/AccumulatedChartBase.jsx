@@ -32,12 +32,20 @@ export const AccumulatedChartBase = memo(({ title, icon, therapyId, isActive, em
     setLoading(true);
     setError(null);
     try {
-      const rows = await apiService.getTherapyHistory(Number(therapyId), 5000);
+      const [rows, sigs] = await Promise.all([
+        apiService.getTherapyHistory(Number(therapyId), 5000),
+        apiService.getSignals(),
+      ]);
+      const signalsMap = {};
+      sigs.forEach(s => {
+        signalsMap[(s.display_name || s.internal_name).toLowerCase()] = s.internal_name;
+      });
       const byTs = {};
       rows.forEach(r => {
-        if (typeof r.physical_value !== 'number') return;
+        const signalKey = signalsMap[r.internal_name.toLowerCase()];
+        if (!signalKey) return;
         if (!byTs[r.timestamp]) byTs[r.timestamp] = { time: r.timestamp };
-        byTs[r.timestamp][r.internal_name] = r.physical_value;
+        byTs[r.timestamp][signalKey] = Number(r.physical_value) || 0;
       });
       const sorted = Object.values(byTs).sort((a, b) => a.time.localeCompare(b.time));
       const withTimeOnly = sorted.map(p => ({

@@ -1292,7 +1292,10 @@ pub async fn close_therapy(
     }
 
     match state.db.close_therapy(therapy_id).await {
-        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Ok(_) => {
+            state.serial_manager.request_therapy_close(therapy_id).await;
+            Json(serde_json::json!({"ok": true})).into_response()
+        }
         Err(e) => db_err(e).into_response(),
     }
 }

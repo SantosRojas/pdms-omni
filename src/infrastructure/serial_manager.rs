@@ -15,6 +15,7 @@ pub struct SerialReaderStatus {
     pub max_failures: u32,
     pub data_warnings: u32,
     pub close_therapy_on_stop: bool,
+    pub pending_therapy_close: Option<i64>,
 }
 
 pub struct SerialReaderManager {
@@ -42,6 +43,7 @@ impl SerialReaderManager {
             max_failures,
             data_warnings: 0,
             close_therapy_on_stop: true,
+            pending_therapy_close: None,
         }));
 
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -119,6 +121,19 @@ impl SerialReaderManager {
         s.status = "FailedLimit".to_string();
         s.close_therapy_on_stop = true;
         let _ = self.cmd_tx.send(ReaderCommand::Stop).await;
+    }
+
+    /// Notify the serial loop that a therapy has been closed manually from the UI.
+    /// The serial loop will pick this up on its next cycle and reset its in-memory state.
+    pub async fn request_therapy_close(&self, therapy_id: i64) {
+        let mut s = self.state.lock().await;
+        s.pending_therapy_close = Some(therapy_id);
+    }
+
+    /// Atomically read and clear the pending therapy close notification.
+    pub async fn take_pending_therapy_close(&self) -> Option<i64> {
+        let mut s = self.state.lock().await;
+        s.pending_therapy_close.take()
     }
 
     /// Record one connection failure (I/O error, timeout).
