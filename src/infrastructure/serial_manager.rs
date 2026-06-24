@@ -119,6 +119,7 @@ impl SerialReaderManager {
     pub async fn set_failed_limit(&self) {
         let mut s = self.state.lock().await;
         s.status = "FailedLimit".to_string();
+        s.consecutive_failures = s.max_failures;
         s.close_therapy_on_stop = true;
         let _ = self.cmd_tx.send(ReaderCommand::Stop).await;
     }
