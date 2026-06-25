@@ -384,7 +384,17 @@ async fn run_reader_session(
                         .get_or_create_machine(serial, &software_version)
                         .await
                     {
-                        Ok(machine_id) => current_machine_id = Some(machine_id),
+                        Ok(machine_id) => {
+                            current_machine_id = Some(machine_id);
+                            // ─── Cierre scoped de terapias abiertas para esta máquina ───
+                            if let Some(ref db) = repos.db {
+                                if new_therapy {
+                                    let _ = db.close_all_open_therapies(machine_id).await;
+                                } else {
+                                    let _ = db.close_all_open_therapies_except_latest(machine_id).await;
+                                }
+                            }
+                        }
                         Err(e) => {
                             error!("[DB] [Machine: {ctx_machine}] Failed to register machine: {e}")
                         }

@@ -1448,12 +1448,14 @@ impl DbPool {
         }
     }
 
-    pub async fn close_all_open_therapies(&self) -> Result<(), String> {
+    pub async fn close_all_open_therapies(&self, machine_id: i64) -> Result<(), String> {
         match self {
             DbPool::Sqlite(pool) => {
                 sqlx::query(
-                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE ended_at IS NULL",
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
+                     WHERE ended_at IS NULL AND machine_id = ?1",
                 )
+                .bind(machine_id)
                 .execute(pool)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -1461,8 +1463,10 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 sqlx::query(
-                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' WHERE ended_at IS NULL",
+                    "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
+                     WHERE ended_at IS NULL AND machine_id = $1",
                 )
+                .bind(machine_id)
                 .execute(pool)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -1470,23 +1474,26 @@ impl DbPool {
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let q = Query::new(
-                    "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' WHERE ended_at IS NULL",
+                let mut q = Query::new(
+                    "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' \
+                     WHERE ended_at IS NULL AND machine_id = @P1",
                 );
+                q.bind(machine_id as i32);
                 q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
         }
     }
 
-    pub async fn close_all_open_therapies_except_latest(&self) -> Result<(), String> {
+    pub async fn close_all_open_therapies_except_latest(&self, machine_id: i64) -> Result<(), String> {
         match self {
             DbPool::Sqlite(pool) => {
                 sqlx::query(
                     "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
-                     WHERE ended_at IS NULL \
-                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1)",
+                     WHERE ended_at IS NULL AND machine_id = ?1 \
+                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL AND machine_id = ?1 ORDER BY started_at DESC LIMIT 1)",
                 )
+                .bind(machine_id)
                 .execute(pool)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -1495,9 +1502,10 @@ impl DbPool {
             DbPool::Postgres(pool) => {
                 sqlx::query(
                     "UPDATE therapies SET ended_at = CURRENT_TIMESTAMP, status = 'completed' \
-                     WHERE ended_at IS NULL \
-                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1)",
+                     WHERE ended_at IS NULL AND machine_id = $1 \
+                     AND id != (SELECT id FROM therapies WHERE ended_at IS NULL AND machine_id = $1 ORDER BY started_at DESC LIMIT 1)",
                 )
+                .bind(machine_id)
                 .execute(pool)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -1505,11 +1513,12 @@ impl DbPool {
             }
             DbPool::Mssql(pool) => {
                 let mut conn = pool.get().await.map_err(|e| e.to_string())?;
-                let q = Query::new(
+                let mut q = Query::new(
                     "UPDATE therapies SET ended_at = GETUTCDATE(), status = 'completed' \
-                     WHERE ended_at IS NULL \
-                     AND id != (SELECT TOP 1 id FROM therapies WHERE ended_at IS NULL ORDER BY started_at DESC)",
+                     WHERE ended_at IS NULL AND machine_id = @P1 \
+                     AND id != (SELECT TOP 1 id FROM therapies WHERE ended_at IS NULL AND machine_id = @P1 ORDER BY started_at DESC)",
                 );
+                q.bind(machine_id as i32);
                 q.execute(&mut *conn).await.map_err(|e| e.to_string())?;
                 Ok(())
             }
