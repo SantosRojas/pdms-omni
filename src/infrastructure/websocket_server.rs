@@ -8,7 +8,7 @@ use axum::routing::{delete, get, post, put};
 use serde::Serialize;
 use tokio::sync::broadcast;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info};
 
 use super::auth::decode_token;
@@ -239,7 +239,12 @@ impl WebSocketHub {
 /// Creates a fallback router that serves the built dashboard (SPA).
 fn dashboard_fallback(dir: Option<&std::path::Path>) -> Router {
     if let Some(dir) = dir {
-        Router::new().fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
+        let index_path = dir.join("index.html");
+        Router::new().fallback_service(
+            ServeDir::new(dir)
+                .append_index_html_on_directories(true)
+                .not_found_service(ServeFile::new(index_path)),
+        )
     } else {
         Router::new().fallback(|| async {
             (
