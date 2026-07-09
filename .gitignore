@@ -21,8 +21,7 @@ dev_guide.txt
 /Back
 /logs
 
-# Dashboard — build output y dependencias
-/dashboard-ts/*
+# Dashboard — el código fuente de dashboard-ts se versiona; los descartables se ignoran en dashboard-ts/.gitignore
 node_modules/
 
 # Runtime SQLite databases (pueden contener datos de pacientes)
