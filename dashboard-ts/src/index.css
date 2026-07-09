@@ -1,0 +1,247 @@
+@import "tailwindcss";
+@source "./src";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: #f4f6f8;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-surface: #ffffff;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-secondary: #ffffff;
+  --color-secondary-foreground: #0f172a;
+  --color-muted: #ffffff;
+  --color-muted-foreground: #64748b;
+  --color-accent: #ffffff;
+  --color-accent-foreground: #0f172a;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #00d4ff;
+  --color-primary: #00d4ff;
+  --color-primary-foreground: #fff;
+
+  --color-glass-bg: #ffffff99;
+  --color-glass-border: #ffffff4d;
+
+  --color-scada-bg: #0a0e14;
+  --color-scada-surface: #131820;
+  --color-scada-card: #1a212c;
+  --color-scada-border: #2a3342;
+  --color-scada-text: #e2e8f0;
+  --color-scada-muted: #7e8a98;
+  --color-scada-accent: #00d4ff;
+  --color-scada-success: #22c55e;
+  --color-scada-warning: #f59e0b;
+  --color-scada-danger: #ef4444;
+  --color-scada-info: #3b82f6;
+
+  --color-press-ap: #ef4444;
+  --color-press-vp: #3b82f6;
+  --color-press-tmp: #22c55e;
+  --color-press-fp: #f59e0b;
+  --color-flow-bf: #a78bfa;
+  --color-flow-df: #06b6d4;
+  --color-flow-nr: #f97316;
+
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --animate-flow: flow 2s linear infinite;
+
+  @keyframes flow {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+}
+
+:root {
+  --primary-r: 0;
+  --primary-g: 212;
+  --primary-b: 255;
+
+  /* Light glass tokens */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-bg-hover: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-border-hover: rgba(255, 255, 255, 0.5);
+
+  /* Light SCADA theme */
+  --color-scada-bg: #f4f6f8;
+  --color-scada-surface: #ffffff;
+  --color-scada-card: #ffffff;
+  --color-scada-border: #e2e8f0;
+  --color-scada-text: #0f172a;
+  --color-scada-muted: #64748b;
+  --color-scada-accent: #00d4ff;
+  --color-scada-success: #22c55e;
+  --color-scada-warning: #f59e0b;
+  --color-scada-danger: #ef4444;
+  --color-scada-info: #3b82f6;
+
+  --background: var(--color-scada-bg);
+  --foreground: var(--color-scada-text);
+  --card: var(--color-scada-card);
+  --card-foreground: var(--color-scada-text);
+  --popover: var(--color-scada-card);
+  --popover-foreground: var(--color-scada-text);
+  --secondary: var(--color-scada-surface);
+  --secondary-foreground: var(--color-scada-text);
+  --muted: var(--color-scada-surface);
+  --muted-foreground: var(--color-scada-muted);
+  --accent: var(--color-scada-surface);
+  --accent-foreground: var(--color-scada-text);
+  --surface: var(--color-scada-surface);
+  --destructive: var(--color-scada-danger);
+  --destructive-foreground: #f8fafc;
+  --border: var(--color-scada-border);
+  --input: var(--color-scada-border);
+  --ring: var(--primary-r), var(--primary-g), var(--primary-b);
+}
+
+.dark {
+  /* Dark glass tokens */
+  --glass-bg: rgba(26, 33, 44, 0.65);
+  --glass-bg-hover: rgba(26, 33, 44, 0.8);
+  --glass-border: rgba(42, 51, 66, 0.5);
+  --glass-border-hover: rgba(100, 116, 139, 0.4);
+
+  /* Dark Tailwind theme overrides */
+  --color-background: #0a0e14;
+  --color-foreground: #e2e8f0;
+  --color-card: #1a212c;
+  --color-card-foreground: #e2e8f0;
+  --color-surface: #131820;
+  --color-popover: #1a212c;
+  --color-popover-foreground: #e2e8f0;
+  --color-secondary: #131820;
+  --color-secondary-foreground: #e2e8f0;
+  --color-muted: #131820;
+  --color-muted-foreground: #7e8a98;
+  --color-accent: #131820;
+  --color-accent-foreground: #e2e8f0;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #f8fafc;
+  --color-border: #2a3342;
+  --color-input: #2a3342;
+  --color-ring: #00d4ff;
+  --color-primary: #00d4ff;
+  --color-primary-foreground: #fff;
+
+  --color-glass-bg: #1a212ca6;
+  --color-glass-border: #2a334280;
+
+  /* Dark SCADA theme */
+  --color-scada-bg: #0a0e14;
+  --color-scada-surface: #131820;
+  --color-scada-card: #1a212c;
+  --color-scada-border: #2a3342;
+  --color-scada-text: #e2e8f0;
+  --color-scada-muted: #7e8a98;
+  --color-scada-accent: #00d4ff;
+  --color-scada-success: #22c55e;
+  --color-scada-warning: #f59e0b;
+  --color-scada-danger: #ef4444;
+  --color-scada-info: #3b82f6;
+}
+
+/* ---- Glassmorphism utilities ---- */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.glass-hover:hover {
+  background: var(--glass-bg-hover, var(--glass-bg));
+  border-color: var(--glass-border-hover, var(--glass-border));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ---- Animations ---- */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ---- Global styles ---- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+[data-density="compact"] {
+  --spacing: 0.2rem;
+}
+
+[data-density="large"] {
+  --spacing: 0.3125rem;
+}
+
+.page-enter {
+  animation: fade-in 0.25s ease-out, slide-up 0.25s ease-out;
+}
+
+.gradient-bg {
+  background: linear-gradient(-45deg, var(--color-scada-bg), var(--color-scada-surface), rgba(0, 212, 255, 0.04), var(--color-scada-card), var(--color-scada-bg));
+  background-size: 400% 400%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scada-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scada-text);
+}
+
+::backdrop {
+  background: var(--color-scada-bg);
+}
