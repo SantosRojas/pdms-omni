@@ -663,6 +663,11 @@ pub struct HistoryRowDto {
     pub unit: String,
 }
 
+/// Maximum rows the API will ever return for a single history/export request.
+const MAX_HISTORY_LIMIT: u32 = 5_000;
+/// Maximum rows per page for paginated endpoints.
+const MAX_PAGE_SIZE: i64 = 200;
+
 #[derive(Deserialize)]
 pub struct HistoryQuery {
     pub patient: String,
@@ -753,6 +758,11 @@ pub async fn list_therapies(
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized();
     }
+
+    // Clamp page_size to prevent excessively large responses.
+    let page_size = params.page_size.clamp(1, MAX_PAGE_SIZE);
+    let page = params.page.max(1);
+
     match state
         .db
         .list_therapies(
@@ -760,8 +770,8 @@ pub async fn list_therapies(
             params.status.as_deref(),
             params.date_from.as_deref(),
             params.date_to.as_deref(),
-            params.page,
-            params.page_size,
+            page,
+            page_size,
         )
         .await
     {
@@ -784,8 +794,8 @@ pub async fn list_therapies(
             Json(TherapiesResponse {
                 therapies,
                 total,
-                page: params.page,
-                page_size: params.page_size,
+                page,
+                page_size,
             })
             .into_response()
         }
@@ -802,9 +812,10 @@ pub async fn patient_history(
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized();
     }
+    let limit = params.limit.clamp(1, MAX_HISTORY_LIMIT);
     match state
         .db
-        .patient_history(&params.patient, params.limit)
+        .patient_history(&params.patient, limit)
         .await
     {
         Ok(rows) => {
@@ -842,9 +853,10 @@ pub async fn therapy_history(
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized();
     }
+    let limit = params.limit.clamp(1, MAX_HISTORY_LIMIT);
     match state
         .db
-        .therapy_history(params.therapy_id, params.limit)
+        .therapy_history(params.therapy_id, limit)
         .await
     {
         Ok(rows) => {
@@ -886,7 +898,8 @@ pub async fn export_csv(
     if session.role != "admin" && session.role != "operator" {
         return forbidden().into_response();
     }
-    match state.db.export_history(&params.patient, params.limit).await {
+    let limit = params.limit.clamp(1, MAX_HISTORY_LIMIT);
+    match state.db.export_history(&params.patient, limit).await {
         Ok(rows) => {
             let mut csv = String::from("\u{FEFF}Timestamp,Parameter,Value,Display,Unit\n");
             for row in rows {
@@ -958,9 +971,10 @@ pub async fn get_session_readings(
     if get_claims(&headers, &state).await.is_none() {
         return unauthorized();
     }
+    let limit = params.limit.clamp(1, MAX_HISTORY_LIMIT);
     match state
         .db
-        .list_session_readings(session_id, params.limit)
+        .list_session_readings(session_id, limit)
         .await
     {
         Ok(rows) => {
@@ -1004,9 +1018,10 @@ pub async fn export_therapy_csv(
     if session.role != "admin" && session.role != "operator" {
         return forbidden().into_response();
     }
+    let limit = params.limit.clamp(1, MAX_HISTORY_LIMIT);
     match state
         .db
-        .export_therapy_history(params.therapy_id, params.limit)
+        .export_therapy_history(params.therapy_id, limit)
         .await
     {
         Ok(rows) => {

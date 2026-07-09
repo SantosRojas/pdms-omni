@@ -1,22 +1,38 @@
+# Build artifacts
 /target
+
+# Environment — NEVER commit real credentials
 .env
+.env.local
+.env.production
+
+# Documentation interna (no incluir en repositorio público)
+CLAUDE.md
+DOCUMENTACION.md
+comm_desc.txt
+dev_guide.txt
+
+# Documentos propietarios B. Braun
 *.pdf
 *.doc
 *.xlsx
-*.log
 
+# Directorios de respaldo e historial
 /Back
 /logs
-/dashboard-ts/*
 
-# Runtime SQLite databases
+# Dashboard — build output y dependencias
+/dashboard-ts/*
+node_modules/
+
+# Runtime SQLite databases (pueden contener datos de pacientes)
 *.db
 *.db-shm
 *.db-wal
 omni_db
 omni_db-shm
 omni_db-wal
+omni_data.db
 database.db
 database.db-shm
 database.db-wal
-
