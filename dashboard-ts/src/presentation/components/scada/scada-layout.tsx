@@ -14,7 +14,7 @@ import {
   getNum, getUnit, getAccumTherapyTime, getAccumNetRemoval,
 } from "@/application/utils/signal-configs"
 import { useCylinderConfigs } from "@/application/hooks/use-cylinder-config"
-import { ToggleLeft, ToggleRight, Maximize, Minimize, Eye } from "lucide-react"
+import { ToggleLeft, ToggleRight, Maximize, Minimize } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { preferencesStorage } from "@/infrastructure/storage/preferences"
 import type { TelemetryReading, TelemetryHistoryPoint } from "@/domain/entities/telemetry-reading"
@@ -96,76 +96,25 @@ export function ScadaLayout({
       {/*===================PRIMERA COLUMNA========================*/}
       <div className="flex flex-col w-full md:w-72 shrink-0 gap-3">
         <PatientInfoCard info={info} therapyStart={therapyStart} therapyTime={therapyTimeDisplay} netRemovalVol={netRemovalVolDisplay} />
-        <TherapyStateMachine currentState={therapyStateName} therapyActive={therapyActive} />
         {
           alarms.length > 0 && (
             <AlarmPanel alarms={alarms} />
           )
         }
 
-        {/* Visible signals toggle */}
         <Card variant="glass" dense className="p-3">
-          <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-scada-muted">
-            <Eye className="h-3.5 w-3.5" />
-            Señales visibles
-          </h3>
-          <div className="space-y-2">
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-scada-muted/60">Presiones</p>
-            {PRESSURE_GAUGES.map((g) => {
-              const checked = visibleSignals.has(g.key)
-              return (
-                <label key={g.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-white/5">
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={checked}
-                    onClick={() => toggleSignal(g.key)}
-                    className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-150",
-                      checked
-                        ? "border-scada-accent bg-scada-accent/15"
-                        : "border-scada-border bg-transparent hover:border-scada-text hover:bg-white/5",
-                    )}
-                  >
-                    {checked && (
-                      <svg viewBox="0 0 12 12" className="h-3 w-3 text-scada-accent" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M2 6l3 3 5-5" />
-                      </svg>
-                    )}
-                  </button>
-                  <span className="text-xs text-scada-text">{g.label}</span>
-                </label>
-              )
-            })}
-            <p className="mt-2 text-[9px] font-semibold uppercase tracking-wider text-scada-muted/60">Caudales</p>
-            {FLOW_INDICATORS.map((g) => {
-              const checked = visibleSignals.has(g.key)
-              return (
-                <label key={g.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-white/5">
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={checked}
-                    onClick={() => toggleSignal(g.key)}
-                    className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-150",
-                      checked
-                        ? "border-scada-accent bg-scada-accent/15"
-                        : "border-scada-border bg-transparent hover:border-scada-text hover:bg-white/5",
-                    )}
-                  >
-                    {checked && (
-                      <svg viewBox="0 0 12 12" className="h-3 w-3 text-scada-accent" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M2 6l3 3 5-5" />
-                      </svg>
-                    )}
-                  </button>
-                  <span className="text-xs text-scada-text">{g.label}</span>
-                </label>
-              )
-            })}
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-scada-muted">Caudales</h3>
+          <div className="flex flex-col gap-3">
+            {visibleFlowIndicators.map((g) => (
+              <FlowIndicator
+                key={g.key}
+                value={getNum(flows, g.key)}
+                max={g.max}
+                unit={getUnit(flows, g.key) || (g.key === "c_net_rem_flow_act" ? "ml/h" : "ml/min")}
+                label={g.label}
+                color={g.color}
+              />
+            ))}
           </div>
         </Card>
       </div>
@@ -173,8 +122,10 @@ export function ScadaLayout({
 
       <div className="flex flex-col flex-1 gap-3">
 
-        <div className="grid grid-col-1 md:grid-cols-[3fr_1fr] gap-3">
-          <Card variant="glass" dense className="p-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+
+          {/* Pression Gauges and Cylinders */}
+          <Card variant="glass" dense className="flex-1 p-3">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[12px] font-semibold uppercase tracking-wider text-scada-muted">Presiones</h3>
               <button
@@ -186,10 +137,11 @@ export function ScadaLayout({
               </button>
             </div>
 
-            {pressureView !== "gauge" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {visiblePressures.map((g) => {
+            <div className="flex flex-wrap justify-around gap-2">
+              {pressureView !== "gauge" ? (
+                visiblePressures.map((g) => {
                   const cfg = configs[g.type]
+
                   return (
                     <RadialGauge
                       key={g.key}
@@ -204,12 +156,11 @@ export function ScadaLayout({
                       critical={Math.abs(cfg.max) * 0.85}
                     />
                   )
-                })}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {visiblePressures.map((g) => {
+                })
+              ) : (
+                visiblePressures.map((g) => {
                   const cfg = configs[g.type]
+
                   return (
                     <PressureCylinder
                       key={g.key}
@@ -221,26 +172,77 @@ export function ScadaLayout({
                       size="md"
                     />
                   )
-                })}
-              </div>
-            )}
-          </Card>
+                })
+              )}
+            </div>
 
+
+          </Card>
+          {/* Visible signals toggle */}
           <Card variant="glass" dense className="p-3">
-            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-scada-muted">Caudales</h3>
-            <div className="flex flex-col gap-3">
-              {visibleFlowIndicators.map((g) => (
-                <FlowIndicator
-                  key={g.key}
-                  value={getNum(flows, g.key)}
-                  max={g.max}
-                  unit={getUnit(flows, g.key) || (g.key === "c_net_rem_flow_act" ? "ml/h" : "ml/min")}
-                  label={g.label}
-                  color={g.color}
-                />
-              ))}
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-scada-muted">
+              Señales visibles
+            </h3>
+            <div className="space-y-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-scada-muted/60">Presiones</p>
+              {PRESSURE_GAUGES.map((g) => {
+                const checked = visibleSignals.has(g.key)
+                return (
+                  <label key={g.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-white/5">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      onClick={() => toggleSignal(g.key)}
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-150",
+                        checked
+                          ? "border-scada-accent bg-scada-accent/15"
+                          : "border-scada-border bg-transparent hover:border-scada-text hover:bg-white/5",
+                      )}
+                    >
+                      {checked && (
+                        <svg viewBox="0 0 12 12" className="h-3 w-3 text-scada-accent" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 6l3 3 5-5" />
+                        </svg>
+                      )}
+                    </button>
+                    <span className="text-xs text-scada-text">{g.label}</span>
+                  </label>
+                )
+              })}
+              <p className="mt-2 text-[9px] font-semibold uppercase tracking-wider text-scada-muted/60">Caudales</p>
+              {FLOW_INDICATORS.map((g) => {
+                const checked = visibleSignals.has(g.key)
+                return (
+                  <label key={g.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-white/5">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      onClick={() => toggleSignal(g.key)}
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-150",
+                        checked
+                          ? "border-scada-accent bg-scada-accent/15"
+                          : "border-scada-border bg-transparent hover:border-scada-text hover:bg-white/5",
+                      )}
+                    >
+                      {checked && (
+                        <svg viewBox="0 0 12 12" className="h-3 w-3 text-scada-accent" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 6l3 3 5-5" />
+                        </svg>
+                      )}
+                    </button>
+                    <span className="text-xs text-scada-text">{g.label}</span>
+                  </label>
+                )
+              })}
             </div>
           </Card>
+
         </div>
 
 
@@ -273,7 +275,10 @@ export function ScadaLayout({
           )
         }
 
-        <ProcessDiagram pressures={pressures} flows={flows} />
+        <div className="flex flex-row gap-3 w-full">
+          <TherapyStateMachine currentState={therapyStateName} therapyActive={therapyActive} />
+          <ProcessDiagram pressures={pressures} flows={flows} />
+        </div>
 
       </div>
 

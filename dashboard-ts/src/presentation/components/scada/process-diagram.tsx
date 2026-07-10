@@ -20,7 +20,7 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
     r ? `${r.physical_value} ${r.unit || unit}` : "---"
 
   return (
-    <Card variant="glass" dense className="relative overflow-hidden">
+    <Card variant="glass" dense className="relative overflow-hidden w-full">
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-scada-muted">
         Circuito de Diálisis
       </h3>
@@ -40,7 +40,7 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
         {/* Arterial Line */}
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1">
-            <div className="h-0.5 w-12 bg-gradient-to-r from-scada-press-ap/50 to-scada-press-ap" />
+            <div className="h-0.5 w-12 bg-linear-to-r from-scada-press-ap/50 to-scada-press-ap" />
             <div className="h-2 w-2 rotate-45 border-b-2 border-r-2 border-scada-press-ap" />
           </div>
           <span className="font-mono text-xs text-scada-press-ap">{fmt(ap, "mmHg")}</span>
@@ -69,7 +69,7 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
           <div className="flex flex-col items-center gap-0.5 mt-1">
             <div className="h-3 w-0.5 bg-scada-press-ep" />
             <div className="flex items-center gap-1">
-              <div className="h-0.5 w-10 bg-gradient-to-r from-scada-press-ep/50 to-scada-press-ep" />
+              <div className="h-0.5 w-10 bg-linear-to-r from-scada-press-ep/50 to-scada-press-ep" />
               <div className="h-2 w-2 rotate-45 border-b-2 border-r-2 border-scada-press-ep" />
               <span className="font-mono text-[10px] text-scada-press-ep">{fmt(ep, "mmHg")}</span>
             </div>
@@ -88,7 +88,7 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
         {/* Venous Line */}
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1">
-            <div className="h-0.5 w-12 bg-gradient-to-l from-scada-press-vp/50 to-scada-press-vp" />
+            <div className="h-0.5 w-12 bg-linear-to-l from-scada-press-vp/50 to-scada-press-vp" />
             <div className="h-2 w-2 rotate-45 border-t-2 border-l-2 border-scada-press-vp" />
           </div>
           <span className="font-mono text-xs text-scada-press-vp">{fmt(vp, "mmHg")}</span>

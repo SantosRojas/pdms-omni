@@ -17,9 +17,9 @@ export function TherapyStateMachine({ currentState, therapyActive }: TherapyStat
   const stateLower = currentState.toLowerCase()
   const activeIdx = stateLower.includes("terapia") ? 2
     : stateLower.includes("prepara") ? 0
-    : stateLower.includes("conectar") ? 1
-    : stateLower.includes("fin") || stateLower.includes("final") ? 3
-    : -1
+      : stateLower.includes("conectar") ? 1
+        : stateLower.includes("fin") || stateLower.includes("final") ? 3
+          : -1
 
   return (
     <Card variant="glass" dense>
@@ -39,12 +39,12 @@ export function TherapyStateMachine({ currentState, therapyActive }: TherapyStat
               <div key={s.key} className="relative flex items-center gap-3 pl-8">
                 <div
                   className={cn(
-                    "absolute left-[9px] h-3 w-3 -translate-x-1/2 rounded-full border-2",
+                    "absolute left-2.25 h-3 w-3 -translate-x-1/2 rounded-full border-2",
                     isActive
                       ? "border-scada-accent bg-scada-accent shadow-[0_0_8px] shadow-scada-accent"
                       : isPast
-                      ? "border-scada-success bg-scada-success"
-                      : "border-scada-border bg-scada-surface",
+                        ? "border-scada-success bg-scada-success"
+                        : "border-scada-border bg-scada-surface",
                   )}
                 />
                 <span

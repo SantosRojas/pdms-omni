@@ -39,6 +39,14 @@ export function PatientInfoCard({ info, therapyStart, therapyTime, netRemovalVol
             </div>
           )
         })}
+        <div className="flex justify-between text-xs">
+          <span className="text-scada-muted">Tiempo Terapia</span>
+          <span className="font-mono text-scada-text">{therapyTime || "--:--:--"}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-scada-muted">Vol. Remoción Neta</span>
+          <span className="font-mono text-scada-text">{netRemovalVol || "--- ml"}</span>
+        </div>
         {therapyStart && (
           <div className="flex justify-between text-xs border-t border-scada-border pt-2 mt-2">
             <span className="flex items-center gap-1 text-scada-muted">
@@ -48,16 +56,6 @@ export function PatientInfoCard({ info, therapyStart, therapyTime, netRemovalVol
             <span className="font-mono text-scada-text">{therapyStart}</span>
           </div>
         )}
-        <div className="border-t border-scada-border pt-2 mt-2 space-y-1.5">
-          <div className="flex justify-between text-xs">
-            <span className="text-scada-muted">Tiempo Terapia</span>
-            <span className="font-mono text-scada-text">{therapyTime || "--:--:--"}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-scada-muted">Vol. Remoción Neta</span>
-            <span className="font-mono text-scada-text">{netRemovalVol || "--- ml"}</span>
-          </div>
-        </div>
       </div>
     </Card>
   )
