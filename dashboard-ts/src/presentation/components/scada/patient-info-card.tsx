@@ -5,9 +5,11 @@ import { Play } from "lucide-react"
 interface PatientInfoCardProps {
   info: Record<string, TelemetryReading>
   therapyStart?: string | null
+  therapyTime?: string
+  netRemovalVol?: string
 }
 
-export function PatientInfoCard({ info, therapyStart }: PatientInfoCardProps) {
+export function PatientInfoCard({ info, therapyStart, therapyTime, netRemovalVol }: PatientInfoCardProps) {
   const fields = [
     { key: "g_patient_id_str", label: "Paciente", format: (v: string) => v },
     { key: "g_patient_data_weight_set", label: "Peso", unit: "kg" },
@@ -46,6 +48,16 @@ export function PatientInfoCard({ info, therapyStart }: PatientInfoCardProps) {
             <span className="font-mono text-scada-text">{therapyStart}</span>
           </div>
         )}
+        <div className="border-t border-scada-border pt-2 mt-2 space-y-1.5">
+          <div className="flex justify-between text-xs">
+            <span className="text-scada-muted">Tiempo Terapia</span>
+            <span className="font-mono text-scada-text">{therapyTime || "--:--:--"}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-scada-muted">Vol. Remoción Neta</span>
+            <span className="font-mono text-scada-text">{netRemovalVol || "--- ml"}</span>
+          </div>
+        </div>
       </div>
     </Card>
   )

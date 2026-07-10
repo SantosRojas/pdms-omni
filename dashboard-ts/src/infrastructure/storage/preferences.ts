@@ -53,4 +53,17 @@ export const preferencesStorage = {
   setCylinderConfig(type: CylinderPressureType, config: CylinderConfig): void {
     localStorage.setItem(`${PREFIX}cylinder-${type}`, JSON.stringify(config))
   },
+
+  getVisibleSignals(): string[] | null {
+    try {
+      const raw = localStorage.getItem(`${PREFIX}visible-signals`)
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  },
+
+  setVisibleSignals(keys: string[]): void {
+    localStorage.setItem(`${PREFIX}visible-signals`, JSON.stringify(keys))
+  },
 }

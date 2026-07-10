@@ -57,6 +57,7 @@ export const SIGNAL_NAMES = {
     "c_press_vp_act",
     "c_press_fp_act",
     "c_press_tmp_act",
+    "c_press_ep_act",
   ] as const,
   FLOWS: [
     "c_pump_bs_bl_flow_act",

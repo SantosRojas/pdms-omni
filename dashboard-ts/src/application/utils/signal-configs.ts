@@ -26,6 +26,7 @@ export const PRESSURE_GAUGES: GaugeConfig[] = [
   { key: "c_press_vp_act", label: "Venoso", color: "#3b82f6", type: "venous" },
   { key: "c_press_tmp_act", label: "TMP", color: "#22c55e", type: "tmp" },
   { key: "c_press_fp_act", label: "Filtro", color: "#f59e0b", type: "filter" },
+  { key: "c_press_ep_act", label: "Efluente", color: "#a855f7", type: "effluent" },
 ]
 
 export const FLOW_INDICATORS: FlowConfig[] = [
@@ -39,6 +40,7 @@ export const PRESSURE_SERIES: SeriesConfig[] = [
   { key: "c_press_vp_act", name: "VP", color: "#3b82f6" },
   { key: "c_press_tmp_act", name: "TMP", color: "#22c55e" },
   { key: "c_press_fp_act", name: "FP", color: "#f59e0b" },
+  { key: "c_press_ep_act", name: "EP", color: "#a855f7" },
 ]
 
 export const FLOW_SERIES: SeriesConfig[] = [

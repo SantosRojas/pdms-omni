@@ -19,6 +19,7 @@ const PRESSURE_LABELS: Record<CylinderPressureType, string> = {
   venous: "Venoso",
   tmp: "TMP",
   filter: "Filtro",
+  effluent: "Efluente",
 }
 
 const PRESSURE_TYPES = Object.keys(PRESSURE_LABELS) as CylinderPressureType[]

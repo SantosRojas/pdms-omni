@@ -11,6 +11,7 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
   const vp = pressures["c_press_vp_act"]
   const fp = pressures["c_press_fp_act"]
   const tmp = pressures["c_press_tmp_act"]
+  const ep = pressures["c_press_ep_act"]
   const bf = flows["c_pump_bs_bl_flow_act"]
   const df = flows["c_pump_fs_mid_flow_act"]
   const nr = flows["c_net_rem_flow_act"]
@@ -62,6 +63,25 @@ export function ProcessDiagram({ pressures, flows }: ProcessDiagramProps) {
           <div className="flex gap-3 text-[10px] text-scada-muted">
             <span>FP: <span className="text-scada-press-fp">{fmt(fp, "mmHg")}</span></span>
             <span>TMP: <span className="text-scada-press-tmp">{fmt(tmp, "mmHg")}</span></span>
+          </div>
+
+          {/* Effluent line */}
+          <div className="flex flex-col items-center gap-0.5 mt-1">
+            <div className="h-3 w-0.5 bg-scada-press-ep" />
+            <div className="flex items-center gap-1">
+              <div className="h-0.5 w-10 bg-gradient-to-r from-scada-press-ep/50 to-scada-press-ep" />
+              <div className="h-2 w-2 rotate-45 border-b-2 border-r-2 border-scada-press-ep" />
+              <span className="font-mono text-[10px] text-scada-press-ep">{fmt(ep, "mmHg")}</span>
+            </div>
+            <div className="h-3 w-0.5 bg-scada-press-ep" />
+            <svg viewBox="0 0 24 28" className="h-6 w-5 text-scada-press-ep" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="4" width="18" height="22" rx="2" />
+              <path d="M12 4V1" />
+              <line x1="7" y1="9" x2="17" y2="9" strokeDasharray="2 1" />
+              <line x1="7" y1="14" x2="17" y2="14" strokeDasharray="2 1" />
+              <line x1="7" y1="19" x2="14" y2="19" strokeDasharray="2 1" />
+            </svg>
+            <span className="text-[10px] text-scada-muted">Efluente</span>
           </div>
         </div>
 
