@@ -14,6 +14,7 @@ import {
   Brush,
 } from "recharts"
 import type { SeriesConfig } from "@/application/utils/signal-configs"
+import { ChartTooltip } from "@/presentation/components/shared/chart-tooltip"
 
 interface EnhancedChartProps {
   title: string
@@ -134,12 +135,18 @@ export function EnhancedChart({
               <XAxis dataKey={xAxisKey} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
               <Tooltip
-                contentStyle={{
-                  borderRadius: "12px",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "var(--color-surface)",
-                }}
-                labelStyle={{ color: "var(--color-primary)", fontWeight: "bold" }}
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    unitMap={Object.fromEntries(series.map((s) => [s.key, s.unit]))}
+                    contentStyle={{
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "var(--color-surface)",
+                    }}
+                    labelClassName="font-bold"
+                  />
+                )}
               />
               <Legend />
               {series.map((s) => (

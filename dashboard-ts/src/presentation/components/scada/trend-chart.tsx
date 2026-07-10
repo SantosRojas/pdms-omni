@@ -10,6 +10,7 @@ import {
   CartesianGrid,
 } from "recharts"
 import type { TelemetryHistoryPoint } from "@/domain/entities/telemetry-reading"
+import { ChartTooltip } from "@/presentation/components/shared/chart-tooltip"
 
 interface SeriesConfig {
   key: string
@@ -55,13 +56,18 @@ export function TrendChart({ data, series, height = "170px", showGrid = false, d
             width={30}
           />
           <Tooltip
-            contentStyle={{
-              background: "var(--color-scada-card)",
-              border: "1px solid var(--color-scada-border)",
-              borderRadius: "8px",
-              fontSize: "12px",
-              color: "var(--color-scada-text)",
-            }}
+            content={(props) => (
+              <ChartTooltip
+                {...props}
+                unitMap={Object.fromEntries(series.map((s) => [s.key, s.unit]))}
+                contentStyle={{
+                  background: "var(--color-scada-card)",
+                  border: "1px solid var(--color-scada-border)",
+                  fontSize: "12px",
+                  color: "var(--color-scada-text)",
+                }}
+              />
+            )}
           />
           <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: 9, paddingTop: 4 }} />
           {series.map((s) => (

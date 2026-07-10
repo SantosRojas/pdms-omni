@@ -36,17 +36,17 @@ export const FLOW_INDICATORS: FlowConfig[] = [
 ]
 
 export const PRESSURE_SERIES: SeriesConfig[] = [
-  { key: "c_press_ap_act", name: "AP", color: "#ef4444" },
-  { key: "c_press_vp_act", name: "VP", color: "#3b82f6" },
-  { key: "c_press_tmp_act", name: "TMP", color: "#22c55e" },
-  { key: "c_press_fp_act", name: "FP", color: "#f59e0b" },
-  { key: "c_press_ep_act", name: "EP", color: "#a855f7" },
+  { key: "c_press_ap_act", name: "AP", color: "#ef4444", unit: "mmHg" },
+  { key: "c_press_vp_act", name: "VP", color: "#3b82f6", unit: "mmHg" },
+  { key: "c_press_tmp_act", name: "TMP", color: "#22c55e", unit: "mmHg" },
+  { key: "c_press_fp_act", name: "FP", color: "#f59e0b", unit: "mmHg" },
+  { key: "c_press_ep_act", name: "EP", color: "#a855f7", unit: "mmHg" },
 ]
 
 export const FLOW_SERIES: SeriesConfig[] = [
-  { key: "c_pump_bs_bl_flow_act", name: "BS", color: "#a78bfa" },
-  { key: "c_pump_fs_mid_flow_act", name: "DF", color: "#06b6d4" },
-  { key: "c_net_rem_flow_act", name: "NR", color: "#f97316" },
+  { key: "c_pump_bs_bl_flow_act", name: "BS", color: "#a78bfa", unit: "ml/min" },
+  { key: "c_pump_fs_mid_flow_act", name: "DF", color: "#06b6d4", unit: "ml/min" },
+  { key: "c_net_rem_flow_act", name: "NR", color: "#f97316", unit: "ml/h" },
 ]
 
 export const CHART_COLORS: Record<string, string> = Object.fromEntries(
