@@ -2,7 +2,7 @@
 //! Contains ALL business logic for the OMNI-ODI protocol.
 //! This module ONLY depends on domain traits — never on infrastructure.
 
-use chrono::Local;
+use chrono::Utc;
 use thiserror::Error;
 
 use crate::domain::device::{
@@ -518,7 +518,7 @@ where
             if include_reading(attr) {
                 readings.push(TelemetryReading {
                     id: None,
-                    timestamp: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                    timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                     therapy_id: None,
                     serial_session_id: None,
                     signal_id: attr.signal_id,

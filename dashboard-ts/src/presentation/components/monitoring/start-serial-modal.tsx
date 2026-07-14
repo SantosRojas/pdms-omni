@@ -3,6 +3,7 @@ import { X, Play, RefreshCw } from "lucide-react"
 import { Button } from "@/presentation/components/ui/button"
 import { Card, CardContent } from "@/presentation/components/ui/card"
 import type { Therapy } from "@/domain/entities/therapy"
+import { toLocalDatetime } from "@/application/utils/time"
 
 interface StartSerialModalProps {
   open: boolean
@@ -34,7 +35,7 @@ export function StartSerialModal({ open, onClose, onStart, latestTherapy }: Star
                 <div className="rounded-lg border border-glass-border bg-glass-bg p-3 text-sm">
                   <p className="text-xs text-muted-foreground">Terapia actual</p>
                   <p className="font-medium">#{latestTherapy.id}</p>
-                  <p className="text-xs text-muted-foreground">{latestTherapy.serial_number} — {latestTherapy.started_at}</p>
+                  <p className="text-xs text-muted-foreground">{latestTherapy.serial_number} — {toLocalDatetime(latestTherapy.started_at)}</p>
                 </div>
               )}
 

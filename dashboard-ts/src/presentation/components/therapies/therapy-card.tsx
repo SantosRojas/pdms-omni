@@ -4,6 +4,7 @@ import { Button } from "@/presentation/components/ui/button"
 import { Badge } from "@/presentation/components/ui/badge"
 import { Clock, User, Activity, Timer, MonitorOff } from "lucide-react"
 import type { Therapy } from "@/domain/entities/therapy"
+import { relativeTime, formatDuration } from "@/application/utils/time"
 
 interface TherapyCardProps {
   therapy: Therapy
@@ -14,27 +15,6 @@ const statusConfig: Record<string, { badge: "success" | "warning" | "secondary" 
   active: { badge: "success", dot: "bg-emerald-500", label: "Activo" },
   open: { badge: "warning", dot: "bg-amber-500", label: "Abierta" },
   completed: { badge: "secondary", dot: "bg-primary", label: "Completada" },
-}
-
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return "ahora"
-  if (mins < 60) return `hace ${mins} min`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `hace ${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `hace ${days} día${days > 1 ? "s" : ""}`
-  return new Date(dateStr).toLocaleDateString("es-ES")
-}
-
-function formatDuration(start: string, end: string | null): string {
-  if (!end) return "En curso"
-  const diff = new Date(end).getTime() - new Date(start).getTime()
-  const hours = Math.floor(diff / 3600000)
-  const mins = Math.floor((diff % 3600000) / 60000)
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins} min`
 }
 
 export function TherapyCard({ therapy, onClose }: TherapyCardProps) {

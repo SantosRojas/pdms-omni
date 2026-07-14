@@ -237,7 +237,7 @@ async fn run_reader_session(
         {
             info!("[Therapy] Cierre manual desde UI. Terapia {closed_id} cerrada en BD. Resetando estado en memoria.");
             current_therapy_id = None;
-            therapy_end_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            therapy_end_time = Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
             manual_close_acknowledged = true;
         }
 
@@ -448,7 +448,7 @@ async fn run_reader_session(
                             );
                         } else {
                             manual_close_acknowledged = false;
-                            let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                            let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
                             match interactor
                                 .get_or_create_therapy(
                                     patient_id,
@@ -477,7 +477,7 @@ async fn run_reader_session(
 
                     if !was_in_therapy && current_therapy_id.is_some() {
                         therapy_start_time =
-                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                            Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
                         info!(
                             "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy resumed"
                         );
@@ -493,7 +493,7 @@ async fn run_reader_session(
                             let _ = interactor.end_therapy(tid).await;
                         }
                         therapy_end_time =
-                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                            Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
                         info!(
                             "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy finished. Serial session continues in post-therapy mode."
                         );
@@ -502,7 +502,7 @@ async fn run_reader_session(
                             "[Therapy] [Machine: {ctx_machine}] [Patient: {ctx_patient}] Therapy paused (serial session continues)"
                         );
                         therapy_end_time =
-                            Some(chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                            Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
                     }
                 }
                 was_in_therapy = is_in_therapy;

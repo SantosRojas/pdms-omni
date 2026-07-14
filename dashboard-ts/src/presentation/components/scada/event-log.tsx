@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/presentation/components/ui/scroll-area"
 import { Card } from "@/presentation/components/ui/card"
+import { toLocalTimeOnly } from "@/application/utils/time"
 
 export interface EventEntry {
   timestamp: string
@@ -39,7 +40,7 @@ export function EventLog({ events }: EventLogProps) {
           )}
           {events.map((ev, i) => (
             <div key={i} className="flex items-center gap-2 text-xs">
-              <span className="shrink-0 font-mono text-[10px] text-scada-muted">{ev.timestamp}</span>
+              <span className="shrink-0 font-mono text-[10px] text-scada-muted">{toLocalTimeOnly(ev.timestamp)}</span>
               <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", typeDots[ev.type])} />
               <span className={cn(typeColors[ev.type])}>{ev.message}</span>
             </div>

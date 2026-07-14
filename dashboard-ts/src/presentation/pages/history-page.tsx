@@ -15,6 +15,7 @@ import type { HistoryRow, TherapyComment } from "@/domain/entities/therapy"
 import type { Signal } from "@/domain/entities/signal"
 import { useAuthStore } from "@/application/stores/auth-store"
 import { PRESSURE_SERIES, FLOW_SERIES } from "@/application/utils/signal-configs"
+import { toLocalDatetime, toLocalTimeOnly } from "@/application/utils/time"
 
 export function HistoryPage() {
   const { id } = useParams<{ id: string }>()
@@ -95,18 +96,6 @@ export function HistoryPage() {
     } catch { /* ignore */ }
   }
 
-  function toLocalDatetime(utcStr: string): string {
-    const d = new Date(utcStr + "Z")
-    if (isNaN(d.getTime())) return utcStr
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, "0")
-    const day = String(d.getDate()).padStart(2, "0")
-    const hours = String(d.getHours()).padStart(2, "0")
-    const mins = String(d.getMinutes()).padStart(2, "0")
-    const secs = String(d.getSeconds()).padStart(2, "0")
-    return `${year}-${month}-${day} ${hours}:${mins}:${secs}`
-  }
-
   const columns: Column<HistoryRow>[] = [
     {
       key: "timestamp",
@@ -124,12 +113,6 @@ export function HistoryPage() {
     { key: "display_value", header: "Display", render: (r) => r.display_value || "—" },
     { key: "unit", header: "Unidad" },
   ]
-
-  function toLocalTimeOnly(utcStr: string): string {
-    const d = new Date(utcStr + "Z")
-    if (isNaN(d.getTime())) return utcStr
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-  }
 
   const chartData = rows.reduce<Record<string, unknown>[]>((acc, r) => {
     const minuteKey = r.timestamp.slice(0, 16)
@@ -190,7 +173,7 @@ export function HistoryPage() {
                         <div className="mb-1 flex items-center justify-between">
                           <span className="font-medium">{c.author_name}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{c.created_at}</span>
+                            <span className="text-xs text-muted-foreground">{toLocalDatetime(c.created_at)}</span>
                             {user?.role === "admin" && (
                               <button onClick={() => setDeleteCommentId(c.id)} className="text-destructive hover:text-destructive/80">
                                 <Trash2 className="h-3 w-3" />

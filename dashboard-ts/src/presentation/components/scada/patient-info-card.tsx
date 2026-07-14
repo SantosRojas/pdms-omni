@@ -1,6 +1,7 @@
 import type { TelemetryReading } from "@/domain/entities/telemetry-reading"
 import { Card } from "@/presentation/components/ui/card"
 import { Play } from "lucide-react"
+import { toLocalDatetime } from "@/application/utils/time"
 
 interface PatientInfoCardProps {
   info: Record<string, TelemetryReading>
@@ -53,7 +54,7 @@ export function PatientInfoCard({ info, therapyStart, therapyTime, netRemovalVol
               <Play className="h-3 w-3 text-primary" />
               Inicio Terapia
             </span>
-            <span className="font-mono text-scada-text">{therapyStart}</span>
+            <span className="font-mono text-scada-text">{toLocalDatetime(therapyStart)}</span>
           </div>
         )}
       </div>

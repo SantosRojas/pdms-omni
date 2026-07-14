@@ -1,6 +1,7 @@
 import { AlertTriangle, AlertCircle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card } from "@/presentation/components/ui/card"
+import { toLocalTimeOnly } from "@/application/utils/time"
 
 export interface Alarm {
   id: string
@@ -49,7 +50,7 @@ export function AlarmPanel({ alarms }: AlarmPanelProps) {
               <Icon className={cn("mt-0.5 h-3 w-3 shrink-0", cfg.color)} />
               <div className="flex-1">
                 <p className={cn("text-xs font-medium", cfg.color)}>{alarm.message}</p>
-                <p className="text-[10px] text-scada-muted">{alarm.timestamp}</p>
+                <p className="text-[10px] text-scada-muted">{toLocalTimeOnly(alarm.timestamp)}</p>
               </div>
             </div>
           )
