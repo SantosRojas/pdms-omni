@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { MessageSquare, Send, Trash2, X, Plus } from "lucide-react"
+import { Send, Trash2, X, Plus } from "lucide-react"
 import { Card, CardContent } from "@/presentation/components/ui/card"
 import { Button } from "@/presentation/components/ui/button"
 import { Input } from "@/presentation/components/ui/input"
@@ -21,6 +21,10 @@ export function CommentsPanel({ therapyId }: CommentsPanelProps) {
   const isAdmin = user?.role === "admin"
 
   const [comments, setComments] = useState<TherapyComment[]>([])
+  const sortedComments = useMemo(() =>
+    [...comments].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [comments]
+  )
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [commentText, setCommentText] = useState("")
@@ -29,7 +33,7 @@ export function CommentsPanel({ therapyId }: CommentsPanelProps) {
 
   useEffect(() => {
     if (!therapyId) return
-    therapyApi.getComments(therapyId).then(setComments).catch(() => {}).finally(() => setLoading(false))
+    therapyApi.getComments(therapyId).then(setComments).catch(() => { }).finally(() => setLoading(false))
   }, [therapyId])
 
   async function addComment() {
@@ -61,19 +65,18 @@ export function CommentsPanel({ therapyId }: CommentsPanelProps) {
       <Card variant="glass" dense className="p-3">
         <h3 className="mb-2 flex items-center justify-between text-[12px] font-semibold uppercase tracking-wider text-scada-muted">
           <span className="flex items-center gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />
             Comentarios ({comments.length})
           </span>
         </h3>
 
-        <ScrollArea className="mb-2 max-h-36">
+        <ScrollArea className="mb-2 max-h-70">
           {loading ? (
             <p className="text-xs text-scada-muted">Cargando...</p>
           ) : comments.length === 0 ? (
             <p className="text-xs text-scada-muted">Sin comentarios</p>
           ) : (
             <div className="space-y-2">
-              {comments.map((c) => (
+              {sortedComments.map((c) => (
                 <div key={c.id} className="rounded-md bg-scada-card/50 p-2 text-xs">
                   <div className="mb-0.5 flex items-center justify-between">
                     <span className="font-medium text-scada-text">{c.author_name}</span>

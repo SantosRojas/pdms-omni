@@ -3,8 +3,9 @@ use std::process::Command;
 use std::time::SystemTime;
 
 fn main() {
-    let dashboard_dir = Path::new("dashboard");
+    let dashboard_dir = Path::new("dashboard-ts");
     if !dashboard_dir.exists() {
+        println!("cargo:warning=dashboard-ts/ no encontrado, omitiendo build del frontend");
         return;
     }
 
@@ -46,7 +47,7 @@ fn any_source_newer(dashboard_dir: &Path, dist_index: &Path) -> bool {
     };
     src_dir_newer(&dashboard_dir.join("src"), dist_time)
         || file_newer(&dashboard_dir.join("index.html"), dist_time)
-        || file_newer(&dashboard_dir.join("vite.config.js"), dist_time)
+        || file_newer(&dashboard_dir.join("vite.config.ts"), dist_time)
         || file_newer(&dashboard_dir.join("package.json"), dist_time)
 }
 

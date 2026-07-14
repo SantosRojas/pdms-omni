@@ -225,14 +225,14 @@ impl AppConfig {
                         None
                     }
                 } else {
-                    // Try next to the executable, then cwd/dashboard/dist
+                    // Try next to the executable, then cwd/dashboard-ts/dist
                     std::env::current_exe()
                         .ok()
-                        .and_then(|p| p.parent().map(|d| d.join("dashboard")))
+                        .and_then(|p| p.parent().map(|d| d.join("dashboard-ts").join("dist")))
                         .filter(|p| p.exists())
                         .or_else(|| {
                             let cwd = std::env::current_dir().ok()?;
-                            let from_cwd = cwd.join("dashboard").join("dist");
+                            let from_cwd = cwd.join("dashboard-ts").join("dist");
                             if from_cwd.exists() {
                                 Some(from_cwd)
                             } else {
