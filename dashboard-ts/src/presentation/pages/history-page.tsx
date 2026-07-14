@@ -204,17 +204,19 @@ export function HistoryPage() {
                   </div>
                 )}
               </ScrollArea>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Agregar comentario..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addComment()}
-                />
-                <Button size="icon" onClick={addComment} disabled={!commentText.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              {user?.role !== "viewer" && (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Agregar comentario..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addComment()}
+                  />
+                  <Button size="icon" onClick={addComment} disabled={!commentText.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )
