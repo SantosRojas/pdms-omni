@@ -186,6 +186,12 @@ async fn initialize_sqlite(
             active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS authorization_codes (
+            code TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at DATETIME NULL,
+            used INTEGER NOT NULL DEFAULT 0
+        );
         CREATE TABLE IF NOT EXISTS serial_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             machine_id INTEGER,
@@ -513,6 +519,12 @@ async fn initialize_postgres(
             active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
+        "CREATE TABLE IF NOT EXISTS authorization_codes (
+            code TEXT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            expires_at TIMESTAMPTZ NULL,
+            used BOOLEAN NOT NULL DEFAULT FALSE
+        )",
         "CREATE TABLE IF NOT EXISTS serial_sessions (
             id BIGSERIAL PRIMARY KEY,
             machine_id BIGINT REFERENCES machines(id),
@@ -784,18 +796,25 @@ async fn initialize_mssql(
                  deleted_at DATETIME2 DEFAULT GETUTCDATE(),
                  FOREIGN KEY(signal_id) REFERENCES signals(id)
              )",
-            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'users')
-             CREATE TABLE users (
-                 id INT IDENTITY(1,1) PRIMARY KEY,
-                 username NVARCHAR(200) UNIQUE NOT NULL,
-                 password NVARCHAR(500) NOT NULL,
-                 full_name NVARCHAR(500) NOT NULL DEFAULT '',
-                 email NVARCHAR(500) NOT NULL DEFAULT '',
-                 role NVARCHAR(50) NOT NULL DEFAULT 'viewer',
-                 active BIT NOT NULL DEFAULT 1,
-                 created_at DATETIME2 DEFAULT GETUTCDATE()
-             )",
-            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'serial_sessions')
+             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'users')
+              CREATE TABLE users (
+                  id INT IDENTITY(1,1) PRIMARY KEY,
+                  username NVARCHAR(200) UNIQUE NOT NULL,
+                  password NVARCHAR(500) NOT NULL,
+                  full_name NVARCHAR(500) NOT NULL DEFAULT '',
+                  email NVARCHAR(500) NOT NULL DEFAULT '',
+                  role NVARCHAR(50) NOT NULL DEFAULT 'viewer',
+                  active BIT NOT NULL DEFAULT 1,
+                  created_at DATETIME2 DEFAULT GETUTCDATE()
+              )",
+             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'authorization_codes')
+              CREATE TABLE authorization_codes (
+                  code NVARCHAR(200) PRIMARY KEY,
+                  user_id INT NOT NULL,
+                  expires_at DATETIME2 NULL,
+                  used BIT NOT NULL DEFAULT 0
+              )",
+             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'serial_sessions')
              CREATE TABLE serial_sessions (
                  id INT IDENTITY(1,1) PRIMARY KEY,
                  machine_id INT,

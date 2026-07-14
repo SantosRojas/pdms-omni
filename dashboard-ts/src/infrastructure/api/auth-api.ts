@@ -8,6 +8,11 @@ export const authApi: AuthRepository = {
     return res
   },
 
+  async loginWithCode(code: string): Promise<LoginResponse> {
+    const { data: res } = await apiClient.post<LoginResponse>("/api/auth/login-with-token", { code })
+    return res
+  },
+
   async logout(): Promise<void> {
     await apiClient.post("/api/auth/logout")
   },

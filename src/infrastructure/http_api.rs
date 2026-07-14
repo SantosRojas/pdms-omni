@@ -2,8 +2,10 @@
 //! Uses DbPool abstraction to support both SQLite and SQL Server.
 
 use axum::Json;
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, Request, StatusCode};
+use axum::middleware::Next;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
@@ -23,17 +25,33 @@ pub struct ApiState {
     pub serial_manager: std::sync::Arc<crate::infrastructure::serial_manager::SerialReaderManager>,
 }
 
-/// Extracts the authenticated user from the Authorization: Bearer <token> header.
+/// Extracts the authenticated user from either:
+///  1. Authorization: Bearer <token> header (preferred)
+///  2. Cookie: monitor_token=<jwt> (fallback for SPA routes)
+///
 /// Also verifies the user account is active in the database.
 async fn get_claims(headers: &HeaderMap, state: &ApiState) -> Option<JwtClaims> {
-    let auth = headers.get("authorization")?.to_str().ok()?;
-    let token = auth.strip_prefix("Bearer ")?;
-    let claims = decode_token(&state.jwt_secret, token).ok()?;
-    let active = state.db.is_user_active(claims.user_id).await.ok()?;
-    if !active {
-        return None;
+    // 1. Try Authorization: Bearer first
+    if let Some(auth) = headers.get("authorization").and_then(|v| v.to_str().ok())
+        && let Some(token) = auth.strip_prefix("Bearer ")
+        && let Ok(claims) = decode_token(&state.jwt_secret, token)
+        && state.db.is_user_active(claims.user_id).await.ok()?
+    {
+        return Some(claims);
     }
-    Some(claims)
+    // 2. Fallback: Cookie: monitor_token=<jwt>
+    if let Some(cookie_header) = headers.get("cookie").and_then(|v| v.to_str().ok()) {
+        for pair in cookie_header.split(';') {
+            let pair = pair.trim();
+            if let Some(token) = pair.strip_prefix("monitor_token=")
+                && let Ok(claims) = decode_token(&state.jwt_secret, token)
+                && state.db.is_user_active(claims.user_id).await.ok()?
+            {
+                return Some(claims);
+            }
+        }
+    }
+    None
 }
 
 fn unauthorized() -> axum::response::Response {
@@ -69,6 +87,17 @@ fn db_err(msg: String) -> axum::response::Response {
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct LoginWithTokenRequest {
+    pub code: String,
+}
+
+#[derive(Deserialize)]
+pub struct CallbackQuery {
+    pub token: String,
+    pub redirect: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -163,6 +192,391 @@ pub async fn login(
             .into_response(),
         Err(e) => db_err(e).into_response(),
     }
+}
+
+/// POST /api/auth/login-with-token
+pub async fn login_with_token(
+    State(state): State<ApiState>,
+    Json(body): Json<LoginWithTokenRequest>,
+) -> impl IntoResponse {
+    let code = &body.code;
+
+    // 1. Buscar authorization_codes WHERE code = ?
+    let row = match state.db.find_authorization_code(code).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Token inválido"})),
+            )
+                .into_response()
+        }
+        Err(e) => return db_err(e).into_response(),
+    };
+
+    let user_id = row.get_i64(0);
+    let used = row.get_bool(1);
+    let expires_at = row.get_optional_string(2);
+
+    // 2. Si used = true → error 401
+    if used {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Token ya utilizado"})),
+        )
+            .into_response();
+    }
+
+    // 3. Si expires_at < ahora → error 401
+    if let Some(ref exp) = expires_at
+        && let Ok(exp_parsed) =
+            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
+    {
+        let now = chrono::Utc::now().naive_utc();
+        if exp_parsed < now {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Token expirado"})),
+            )
+                .into_response();
+        }
+    }
+
+    // 4. UPDATE authorization_codes SET used = 1
+    if let Err(e) = state.db.mark_authorization_code_used(code).await {
+        return db_err(e).into_response();
+    }
+
+    // 5. Buscar usuario por user_id
+    let user_row = match state.db.find_user_by_id(user_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Usuario no encontrado"})),
+            )
+                .into_response()
+        }
+        Err(e) => return db_err(e).into_response(),
+    };
+
+    let db_id = user_row.get_i64(0);
+    let username = user_row.get_string(1);
+    let full_name = user_row.get_string(3);
+    let email = user_row.get_string(4);
+    let role = user_row.get_string(5);
+    let active = user_row.get_bool(6);
+    let created_at = user_row.get_string(7);
+
+    // 6. Si usuario no activo → error 403
+    if !active {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Cuenta deshabilitada"})),
+        )
+            .into_response();
+    }
+
+    // 7. Emitir JWT
+    let claims = JwtClaims {
+        user_id: db_id,
+        username: username.clone(),
+        full_name: full_name.clone(),
+        email: email.clone(),
+        role: role.clone(),
+        iat: 0,
+        exp: 0,
+        iss: String::new(),
+    };
+    let token = match issue_token(
+        &state.jwt_secret,
+        &claims,
+        std::time::Duration::from_secs(state.jwt_token_ttl_secs),
+    ) {
+        Ok(t) => t,
+        Err(e) => return db_err(e.to_string()).into_response(),
+    };
+
+    // 8. Setear cookie y devolver respuesta
+    let user = UserDto {
+        id: db_id,
+        username: username.clone(),
+        full_name: full_name.clone(),
+        email: email.clone(),
+        role: role.clone(),
+        active,
+        created_at,
+    };
+
+    (
+        StatusCode::OK,
+        [(
+            "Set-Cookie",
+            &format!(
+                "monitor_token={}; HttpOnly; SameSite=Lax; Path=/api; Max-Age={}",
+                token, state.jwt_token_ttl_secs
+            ),
+        )],
+        Json(LoginResponse { token, user }),
+    )
+        .into_response()
+}
+
+/// GET /api/auth/callback?token=uuid&redirect=/therapy/42
+pub async fn auth_callback(
+    State(state): State<ApiState>,
+    Query(params): Query<CallbackQuery>,
+) -> impl IntoResponse {
+    let redirect = params.redirect.unwrap_or_else(|| "/".to_string());
+
+    // Validar que redirect sea relativo (mismo origen) para evitar open redirect
+    if !redirect.starts_with('/') {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid redirect path"})),
+        )
+            .into_response();
+    }
+
+    // Misma validación que login_with_token
+    let row = match state.db.find_authorization_code(&params.token).await {
+        Ok(Some(r)) => r,
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Token inválido"})),
+            )
+                .into_response()
+        }
+    };
+
+    let user_id = row.get_i64(0);
+    let used = row.get_bool(1);
+    let expires_at = row.get_optional_string(2);
+
+    if used {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Token ya utilizado"})),
+        )
+            .into_response();
+    }
+
+    if let Some(ref exp) = expires_at
+        && let Ok(exp_parsed) =
+            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
+    {
+        let now = chrono::Utc::now().naive_utc();
+        if exp_parsed < now {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Token expirado"})),
+            )
+                .into_response();
+        }
+    }
+
+    if let Err(e) = state.db.mark_authorization_code_used(&params.token).await {
+        return db_err(e).into_response();
+    }
+
+    let user_row = match state.db.find_user_by_id(user_id).await {
+        Ok(Some(r)) => r,
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Usuario no encontrado"})),
+            )
+                .into_response()
+        }
+    };
+
+    let db_id = user_row.get_i64(0);
+    let username = user_row.get_string(1);
+    let full_name = user_row.get_string(3);
+    let email = user_row.get_string(4);
+    let role = user_row.get_string(5);
+    let active = user_row.get_bool(6);
+
+    if !active {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Cuenta deshabilitada"})),
+        )
+            .into_response();
+    }
+
+    let claims = JwtClaims {
+        user_id: db_id,
+        username: username.clone(),
+        full_name: full_name.clone(),
+        email: email.clone(),
+        role: role.clone(),
+        iat: 0,
+        exp: 0,
+        iss: String::new(),
+    };
+    let token = match issue_token(
+        &state.jwt_secret,
+        &claims,
+        std::time::Duration::from_secs(state.jwt_token_ttl_secs),
+    ) {
+        Ok(t) => t,
+        Err(e) => return db_err(e.to_string()).into_response(),
+    };
+
+    // Setear cookie y redirigir
+    (
+        [
+            (
+                "Set-Cookie",
+                &format!(
+                    "monitor_token={}; HttpOnly; SameSite=Lax; Path=/api; Max-Age={}",
+                    token, state.jwt_token_ttl_secs
+                ),
+            ),
+            ("Location", &redirect),
+        ],
+        StatusCode::FOUND,
+    )
+        .into_response()
+}
+
+/// Tower middleware that intercepts GET requests with `?token_permanente=<code>`,
+/// validates the authorization code, sets the `monitor_token` cookie, and
+/// redirects to the same path without the query parameter.
+///
+/// Only processes `/api/*` routes. SPA routes (e.g. `/therapy/42`) pass through
+/// so the frontend can read `token_permanente` from the URL and exchange it via
+/// `POST /api/auth/login-with-token`.
+pub async fn token_permanente_middleware(
+    State(state): State<ApiState>,
+    request: Request<Body>,
+    next: Next,
+) -> impl IntoResponse {
+    // Solo procesar GET requests
+    if request.method() != axum::http::Method::GET {
+        return next.run(request).await.into_response();
+    }
+
+    // No interferir con rutas SPA — el frontend maneja el token via API
+    if !request.uri().path().starts_with("/api") {
+        return next.run(request).await.into_response();
+    }
+
+    // Extraer query params manualmente (sin dependencias extra)
+    let query = request.uri().query().unwrap_or("");
+    let token_code: Option<String> = {
+        let pairs: Vec<&str> = query.split('&').collect();
+        let mut result = None;
+        for pair in pairs {
+            if let Some((k, v)) = pair.split_once('=')
+                && k == "token_permanente"
+            {
+                result = Some(v.to_string());
+                break;
+            }
+        }
+        result
+    };
+
+    let Some(code) = token_code else {
+        return next.run(request).await.into_response();
+    };
+
+    // Validar el código
+    let row = match state.db.find_authorization_code(&code).await {
+        Ok(Some(r)) => r,
+        _ => return next.run(request).await.into_response(),
+    };
+
+    let user_id = row.get_i64(0);
+    let used = row.get_bool(1);
+    let expires_at = row.get_optional_string(2);
+
+    if used {
+        return next.run(request).await.into_response();
+    }
+
+    if let Some(ref exp) = expires_at
+        && let Ok(exp_parsed) =
+            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
+    {
+        let now = chrono::Utc::now().naive_utc();
+        if exp_parsed < now {
+            return next.run(request).await.into_response();
+        }
+    }
+
+    if state.db.mark_authorization_code_used(&code).await.is_err() {
+        return next.run(request).await.into_response();
+    }
+
+    let user_row = match state.db.find_user_by_id(user_id).await {
+        Ok(Some(r)) => r,
+        _ => return next.run(request).await.into_response(),
+    };
+
+    let db_id = user_row.get_i64(0);
+    let username = user_row.get_string(1);
+    let full_name = user_row.get_string(3);
+    let email = user_row.get_string(4);
+    let role = user_row.get_string(5);
+    let active = user_row.get_bool(6);
+
+    if !active {
+        return next.run(request).await.into_response();
+    }
+
+    let claims = JwtClaims {
+        user_id: db_id,
+        username: username.clone(),
+        full_name: full_name.clone(),
+        email: email.clone(),
+        role: role.clone(),
+        iat: 0,
+        exp: 0,
+        iss: String::new(),
+    };
+    let jwt = match issue_token(
+        &state.jwt_secret,
+        &claims,
+        std::time::Duration::from_secs(state.jwt_token_ttl_secs),
+    ) {
+        Ok(t) => t,
+        Err(_) => return next.run(request).await.into_response(),
+    };
+
+    // Construir redirect URI sin el query param token_permanente
+    let path = request.uri().path().to_string();
+    let remaining_pairs: Vec<&str> = query
+        .split('&')
+        .filter(|pair| !pair.starts_with("token_permanente=") && !pair.is_empty())
+        .collect();
+    let redirect = if remaining_pairs.is_empty() {
+        path
+    } else {
+        format!("{}?{}", path, remaining_pairs.join("&"))
+    };
+
+    // 302 redirect con Set-Cookie
+    (
+        [
+            (
+                "Set-Cookie",
+                &format!(
+                    "monitor_token={}; HttpOnly; SameSite=Lax; Path=/api; Max-Age={}",
+                    jwt, state.jwt_token_ttl_secs
+                ),
+            ),
+            ("Location", &redirect),
+        ],
+        StatusCode::FOUND,
+    )
+        .into_response()
 }
 
 /// POST /api/auth/logout

@@ -23,6 +23,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   initialized: false,
 
   initialize: async () => {
+    // 1. Intentar con token_permanente de la URL (auth por link mágico)
+    const urlToken = new URLSearchParams(window.location.search).get("token_permanente")
+    if (urlToken) {
+      set({ loading: true })
+      try {
+        const res = await authApi.loginWithCode(urlToken)
+        tokenStorage.setToken(res.token)
+        setWsToken(res.token)
+        const cleanUrl = window.location.pathname + window.location.hash
+        window.history.replaceState(null, "", cleanUrl)
+        set({ user: res.user, token: res.token, loading: false, initialized: true })
+        return
+      } catch {
+        tokenStorage.clear()
+        setWsToken(null)
+      }
+    }
+
+    // 2. Intentar con token guardado en localStorage
     const token = tokenStorage.getToken()
     if (!token) {
       set({ initialized: true })

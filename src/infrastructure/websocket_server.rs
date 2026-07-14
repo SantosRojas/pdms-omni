@@ -78,16 +78,17 @@ impl WebSocketHub {
                 )
             }
 
+            // Build shared API state (only when DB is available)
+            let api_state: Option<ApiState> = db.map(|db| ApiState {
+                db,
+                jwt_secret,
+                jwt_token_ttl_secs,
+                serial_manager,
+            });
+
             // Build a nested /api router with its own fallback for unknown API routes
             // (returns JSON 404 instead of falling through to the SPA).
-            let api_router: Router<()> = if let Some(db) = db {
-                let api_state = ApiState {
-                    db,
-                    jwt_secret,
-                    jwt_token_ttl_secs,
-                    serial_manager,
-                };
-
+            let api_router: Router<()> = if let Some(ref state) = api_state {
                 Router::new()
                     .route(
                         "/status",
@@ -103,6 +104,8 @@ impl WebSocketHub {
                     )
                     // Auth
                     .route("/auth/login", post(http_api::login))
+                    .route("/auth/login-with-token", post(http_api::login_with_token))
+                    .route("/auth/callback", get(http_api::auth_callback))
                     .route("/auth/logout", post(http_api::logout))
                     .route("/auth/me", get(http_api::get_me))
                     // Users CRUD
@@ -142,7 +145,7 @@ impl WebSocketHub {
                         delete(http_api::delete_comment),
                     )
                     .route("/therapies/{id}/close", post(http_api::close_therapy))
-                    .with_state(api_state)
+                    .with_state(state.clone())
                     .fallback(api_not_found)
             } else {
                 // DB not available: all API routes return 503.
@@ -161,6 +164,11 @@ impl WebSocketHub {
                         }),
                     )
                     .route("/auth/login", post(|| async { db_unavailable() }))
+                    .route(
+                        "/auth/login-with-token",
+                        post(|| async { db_unavailable() }),
+                    )
+                    .route("/auth/callback", get(|| async { db_unavailable() }))
                     .route("/auth/logout", post(|| async { db_unavailable() }))
                     .route("/auth/me", get(|| async { db_unavailable() }))
                     .route("/users", get(|| async { db_unavailable() }))
@@ -202,11 +210,20 @@ impl WebSocketHub {
                     .fallback(api_not_found)
             };
 
-            let app = Router::new()
+            let mut app = Router::new()
                 .nest("/api", api_router)
                 .route("/ws", get(ws_route))
-                .layer(cors)
-                .fallback_service(dashboard_fallback(dashboard_dir.as_deref()));
+                .layer(cors);
+
+            // Apply token_permanente middleware when DB is available
+            if let Some(ref state) = api_state {
+                app = app.layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    http_api::token_permanente_middleware,
+                ));
+            }
+
+            app = app.fallback_service(dashboard_fallback(dashboard_dir.as_deref()));
 
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,

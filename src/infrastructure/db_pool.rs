@@ -349,6 +349,186 @@ impl DbPool {
         }
     }
 
+    // ─── AUTHORIZATION CODES ────────────────────────────────
+
+    pub async fn find_authorization_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let row = sqlx::query(
+                    "SELECT user_id, used, expires_at FROM authorization_codes WHERE code = ?1",
+                )
+                .bind(code)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(row.map(|r| GenericRow {
+                    values: vec![
+                        Some(r.get::<i64, _>(0).to_string()),
+                        Some(if r.get::<bool, _>(1) {
+                            "1".to_string()
+                        } else {
+                            "0".to_string()
+                        }),
+                        r.get::<Option<String>, _>(2),
+                    ],
+                }))
+            }
+            DbPool::Postgres(pool) => {
+                let row = sqlx::query(
+                    "SELECT user_id, used, expires_at FROM authorization_codes WHERE code = $1",
+                )
+                .bind(code)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(row.map(|r| GenericRow {
+                    values: vec![
+                        Some(r.get::<i64, _>(0).to_string()),
+                        Some(if r.get::<bool, _>(1) {
+                            "1".to_string()
+                        } else {
+                            "0".to_string()
+                        }),
+                        r.get::<Option<String>, _>(2),
+                    ],
+                }))
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = tiberius::Query::new(
+                    "SELECT user_id, used, CONVERT(NVARCHAR(30), expires_at, 120) FROM authorization_codes WHERE code = @P1",
+                );
+                q.bind(code);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<tiberius::Row> = stream
+                    .into_first_result()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().next().map(|r: tiberius::Row| {
+                    GenericRow {
+                        values: vec![
+                            r.get::<i64, _>(0).map(|v| v.to_string()),
+                            r.get::<bool, _>(1).map(|v| if v { "1".to_string() } else { "0".to_string() }),
+                            r.get::<&str, _>(2).map(|v| v.to_string()),
+                        ],
+                    }
+                }))
+            }
+        }
+    }
+
+    pub async fn mark_authorization_code_used(&self, code: &str) -> Result<(), String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                sqlx::query(
+                    "UPDATE authorization_codes SET used = 1 WHERE code = ?1 AND used = 0",
+                )
+                .bind(code)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Postgres(pool) => {
+                sqlx::query(
+                    "UPDATE authorization_codes SET used = TRUE WHERE code = $1 AND used = FALSE",
+                )
+                .bind(code)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = tiberius::Query::new(
+                    "UPDATE authorization_codes SET used = 1 WHERE code = @P1 AND used = 0",
+                );
+                q.bind(code);
+                q.execute(&mut *conn)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    // ─── USER BY ID ──────────────────────────────────────────
+
+    pub async fn find_user_by_id(&self, user_id: i64) -> Result<Option<GenericRow>, String> {
+        match self {
+            DbPool::Sqlite(pool) => {
+                let row = sqlx::query(
+                    "SELECT id, username, password, full_name, email, role, active, created_at FROM users WHERE id = ?1",
+                )
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(row.map(|r| {
+                    build_user_row(
+                        r.get::<i64, _>(0),
+                        r.get::<String, _>(1),
+                        r.get::<String, _>(2),
+                        r.get::<String, _>(3),
+                        r.get::<String, _>(4),
+                        r.get::<String, _>(5),
+                        r.get::<bool, _>(6),
+                        r.get::<String, _>(7),
+                    )
+                }))
+            }
+            DbPool::Postgres(pool) => {
+                let row = sqlx::query(
+                    "SELECT id, username, password, full_name, email, role, active, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') FROM users WHERE id = $1",
+                )
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(row.map(|r| {
+                    build_user_row(
+                        r.get::<i64, _>(0),
+                        r.get::<String, _>(1),
+                        r.get::<String, _>(2),
+                        r.get::<String, _>(3),
+                        r.get::<String, _>(4),
+                        r.get::<String, _>(5),
+                        r.get::<bool, _>(6),
+                        r.get::<String, _>(7),
+                    )
+                }))
+            }
+            DbPool::Mssql(pool) => {
+                let mut conn = pool.get().await.map_err(|e| e.to_string())?;
+                let mut q = tiberius::Query::new(
+                    "SELECT id, username, password, full_name, email, role, active, CONVERT(NVARCHAR(30), created_at, 120) FROM users WHERE id = @P1",
+                );
+                q.bind(user_id as i32);
+                let stream = q.query(&mut *conn).await.map_err(|e| e.to_string())?;
+                let rows: Vec<tiberius::Row> = stream
+                    .into_first_result()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(rows.into_iter().next().map(|r: tiberius::Row| {
+                    build_user_row(
+                        r.get::<i32, _>(0).map(|v| v as i64).unwrap_or(0),
+                        r.get::<&str, _>(1).unwrap_or("").to_string(),
+                        r.get::<&str, _>(2).unwrap_or("").to_string(),
+                        r.get::<&str, _>(3).unwrap_or("").to_string(),
+                        r.get::<&str, _>(4).unwrap_or("").to_string(),
+                        r.get::<&str, _>(5).unwrap_or("").to_string(),
+                        r.get::<bool, _>(6).unwrap_or(false),
+                        r.get::<&str, _>(7).unwrap_or("").to_string(),
+                    )
+                }))
+            }
+        }
+    }
+
     // ─── EQUIVALENCES ─────────────────────────────────────────
 
     pub async fn list_equivalences(&self) -> Result<Vec<GenericRow>, String> {
