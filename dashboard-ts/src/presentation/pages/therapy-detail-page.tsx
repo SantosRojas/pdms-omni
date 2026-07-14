@@ -60,6 +60,7 @@ export function TherapyDetailPage() {
           therapyActive={telemetry.therapyActive}
           therapyStateName={telemetry.therapyStateName}
           therapyStart={telemetry.therapyStart}
+          therapyId={Number(id)}
           displayNameMap={displayNameMap}
         />
       </div>

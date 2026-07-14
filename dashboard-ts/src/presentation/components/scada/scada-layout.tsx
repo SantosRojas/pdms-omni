@@ -8,6 +8,7 @@ import { ProcessDiagram } from "@/presentation/components/scada/process-diagram"
 import { TherapyStateMachine } from "@/presentation/components/scada/therapy-state-machine"
 import { PatientInfoCard } from "@/presentation/components/scada/patient-info-card"
 import { AlarmPanel, type Alarm } from "@/presentation/components/scada/alarm-panel"
+import { CommentsPanel } from "@/presentation/components/scada/comments-panel"
 
 import {
   PRESSURE_GAUGES, FLOW_INDICATORS, PRESSURE_SERIES, FLOW_SERIES,
@@ -27,6 +28,7 @@ interface ScadaLayoutProps {
   therapyActive: boolean
   therapyStateName: string
   therapyStart?: string | null
+  therapyId?: number
   alarms?: Alarm[]
   children?: ReactNode
   displayNameMap?: Record<string, string>
@@ -34,7 +36,7 @@ interface ScadaLayoutProps {
 
 export function ScadaLayout({
   info, pressures, flows, history,
-  therapyActive, therapyStateName, therapyStart,
+  therapyActive, therapyStateName, therapyStart, therapyId,
   alarms = [],
   children,
   displayNameMap,
@@ -117,6 +119,8 @@ export function ScadaLayout({
             ))}
           </div>
         </Card>
+
+        {therapyId && <CommentsPanel therapyId={therapyId} />}
       </div>
       {/*===================SEGUNDA COLUMNA========================*/}
 
