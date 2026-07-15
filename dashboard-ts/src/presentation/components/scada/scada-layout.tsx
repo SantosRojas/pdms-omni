@@ -12,35 +12,28 @@ import { CommentsPanel } from "@/presentation/components/scada/comments-panel"
 
 import {
   PRESSURE_GAUGES, FLOW_INDICATORS, PRESSURE_SERIES, FLOW_SERIES,
-  getNum, getUnit, getAccumTherapyTime, getAccumNetRemoval,
+  getNum, getUnit,
 } from "@/application/utils/signal-configs"
 import { useCylinderConfigs } from "@/application/hooks/use-cylinder-config"
 import { ToggleLeft, ToggleRight, Maximize, Minimize } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { preferencesStorage } from "@/infrastructure/storage/preferences"
-import type { TelemetryReading, TelemetryHistoryPoint } from "@/domain/entities/telemetry-reading"
+import type { ScadaViewModel } from "@/domain/view-models/scada-view-model"
 
 interface ScadaLayoutProps {
-  info: Record<string, TelemetryReading>
-  pressures: Record<string, TelemetryReading>
-  flows: Record<string, TelemetryReading>
-  history: TelemetryHistoryPoint[]
-  therapyActive: boolean
-  therapyStateName: string
-  therapyStart?: string | null
-  therapyId?: number
+  vm: ScadaViewModel
   alarms?: Alarm[]
   children?: ReactNode
-  displayNameMap?: Record<string, string>
 }
 
 export function ScadaLayout({
-  info, pressures, flows, history,
-  therapyActive, therapyStateName, therapyStart, therapyId,
+  vm,
   alarms = [],
   children,
-  displayNameMap,
 }: ScadaLayoutProps) {
+  const { telemetry, therapy, presentation } = vm
+  const { info, pressures, flows, history } = telemetry
+
   const [pressureView, setPressureView] = useState<"gauge" | "cylinder">("gauge")
   const [fsChart, setFsChart] = useState<"presiones" | "caudales" | null>(null)
   const pressureRef = useRef<HTMLDivElement>(null)
@@ -89,15 +82,12 @@ export function ScadaLayout({
   const visiblePressureSeries = PRESSURE_SERIES.filter(s => visibleSignals.has(s.key))
   const visibleFlowSeries = FLOW_SERIES.filter(s => visibleSignals.has(s.key))
 
-  const therapyTimeDisplay = getAccumTherapyTime(info)
-  const netRemovalVolDisplay = getAccumNetRemoval(info)
-
   return (
     <div className="flex flex-col md:flex-row gap-3 w-full">
       {children}
       {/*===================PRIMERA COLUMNA========================*/}
       <div className="flex flex-col w-full md:w-72 shrink-0 gap-3">
-        <PatientInfoCard info={info} therapyStart={therapyStart} therapyTime={therapyTimeDisplay} netRemovalVol={netRemovalVolDisplay} />
+        <PatientInfoCard info={info} therapyStart={therapy.start} therapyTime={presentation.therapyTimeDisplay} netRemovalVol={presentation.netRemovalDisplay} />
         {
           alarms.length > 0 && (
             <AlarmPanel alarms={alarms} />
@@ -120,7 +110,7 @@ export function ScadaLayout({
           </div>
         </Card>
 
-        {therapyId && <CommentsPanel therapyId={therapyId} />}
+        {therapy.id && <CommentsPanel therapyId={therapy.id} />}
       </div>
       {/*===================SEGUNDA COLUMNA========================*/}
 
@@ -251,7 +241,7 @@ export function ScadaLayout({
 
 
         {
-          therapyActive && (
+          therapy.active && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <Card ref={pressureRef} variant="glass" dense className="p-3" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="flex items-center justify-between mb-2">
@@ -261,7 +251,7 @@ export function ScadaLayout({
                   </button>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <TrendChart data={history} series={visiblePressureSeries} displayNameMap={displayNameMap} height={fsChart === "presiones" ? "100%" : "180px"} />
+                  <TrendChart data={history} series={visiblePressureSeries} displayNameMap={presentation.displayNameMap} height={fsChart === "presiones" ? "100%" : "180px"} />
                 </div>
               </Card>
               <Card ref={flowRef} variant="glass" dense className="p-3" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -272,7 +262,7 @@ export function ScadaLayout({
                   </button>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <TrendChart data={history} series={visibleFlowSeries} displayNameMap={displayNameMap} height={fsChart === "caudales" ? "100%" : "180px"} />
+                  <TrendChart data={history} series={visibleFlowSeries} displayNameMap={presentation.displayNameMap} height={fsChart === "caudales" ? "100%" : "180px"} />
                 </div>
               </Card>
             </div>
@@ -280,19 +270,12 @@ export function ScadaLayout({
         }
 
         <div className="flex flex-row gap-3 w-full">
-          <TherapyStateMachine currentState={therapyStateName} therapyActive={therapyActive} />
+          <TherapyStateMachine currentState={therapy.stateName} therapyActive={therapy.active} />
           <ProcessDiagram pressures={pressures} flows={flows} />
         </div>
 
       </div>
 
-      {/* <div className="flex w-64 shrink-0 flex-col gap-3">
-        <AccumulatedInfo
-          therapyTime={getAccumTherapyTime(info)}
-          netRemovalVol={getAccumNetRemoval(info)}
-        />
-        <EventLog events={events} />
-      </div> */}
     </div>
   )
 }

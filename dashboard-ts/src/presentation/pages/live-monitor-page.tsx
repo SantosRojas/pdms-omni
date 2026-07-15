@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useTelemetry } from "@/application/hooks/use-telemetry"
+import { useScadaViewModel } from "@/application/hooks/use-scada-view-model"
 import { useSerialStatus } from "@/application/hooks/use-serial-status"
 import { PageHeader } from "@/presentation/components/layout/page-header"
 import { SerialPanel } from "@/presentation/components/monitoring/serial-panel"
@@ -12,9 +12,8 @@ import type { Therapy } from "@/domain/entities/therapy"
 
 export function LiveMonitorPage() {
   const navigate = useNavigate()
-  const telemetry = useTelemetry(true)
+  const vm = useScadaViewModel()
   const serial = useSerialStatus()
-  const { pressures, flows, info } = telemetry.data
   const [therapies, setTherapies] = useState<Therapy[]>([])
   const knownIds = useRef<Set<string> | null>(null)
 
@@ -65,16 +64,9 @@ export function LiveMonitorPage() {
 
       <SerialPanel onStop={() => navigate("/")} />
 
-      {telemetry.connected && serialIsLive ? (
+      {vm.telemetry.info && Object.keys(vm.telemetry.info).length > 0 && serialIsLive ? (
         <div className="mt-3 flex gap-3">
-          <ScadaLayout
-            info={info}
-            pressures={pressures}
-            flows={flows}
-            history={telemetry.data.history}
-            therapyActive={telemetry.therapyActive}
-            therapyStateName={telemetry.therapyStateName}
-          />
+          <ScadaLayout vm={vm} />
         </div>
       ) : (
         <div className="mt-12 flex flex-col items-center gap-3 text-muted-foreground">
