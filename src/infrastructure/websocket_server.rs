@@ -1,14 +1,17 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use axum::body::Body;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::response::IntoResponse;
+use axum::http::header;
 use axum::routing::{delete, get, post, put};
 use serde::Serialize;
 use tokio::sync::broadcast;
+use tower::service_fn;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
-use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info};
 
 use super::auth::decode_token;
@@ -223,7 +226,10 @@ impl WebSocketHub {
                 ));
             }
 
-            app = app.fallback_service(dashboard_fallback(dashboard_dir.as_deref()));
+            if let Some(ref dir) = dashboard_dir {
+                info!("[WS] Sirviendo dashboard desde {}", dir.display());
+            }
+            app = app.fallback_service(dashboard_fallback(dashboard_dir));
 
             let listener = match tokio::net::TcpListener::bind(addr).await {
                 Ok(l) => l,
@@ -232,10 +238,6 @@ impl WebSocketHub {
                     return;
                 }
             };
-
-            if let Some(ref dir) = dashboard_dir {
-                info!("[WS] Sirviendo dashboard desde {}", dir.display());
-            }
             info!("[WS] Servidor WS + API activo en http://{}", addr);
 
             if let Err(e) = axum::serve(listener, app).await {
@@ -253,19 +255,72 @@ impl WebSocketHub {
     }
 }
 
-/// Creates a fallback router that serves the built dashboard (SPA).
-fn dashboard_fallback(dir: Option<&std::path::Path>) -> Router {
+/// Returns a static-file-guessing MIME type for common extensions.
+fn mime_type(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "html" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "application/javascript; charset=utf-8",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" | "svgz" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" | "otf" => "font/ttf",
+        "eot" => "application/vnd.ms-fontobject",
+        "wasm" => "application/wasm",
+        "map" => "application/json",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Serves the built dashboard as an SPA.
+///
+/// Actual static files (JS, CSS, images, fonts) are served from disk.
+/// All other paths (SPA routes like `/therapy/85`) receive `index.html`
+/// with HTTP 200 so that client-side routing works after a page reload.
+fn dashboard_fallback(dir: Option<PathBuf>) -> Router<()> {
     if let Some(dir) = dir {
-        let index_path = dir.join("index.html");
-        Router::new().fallback_service(
-            ServeDir::new(dir)
-                .append_index_html_on_directories(true)
-                .not_found_service(ServeFile::new(index_path)),
-        )
+        let svc = service_fn(move |req: axum::http::Request<Body>| {
+            let dir = dir.clone();
+            async move {
+                let path = req.uri().path().trim_start_matches('/');
+                let full_path = dir.join(path);
+                let index_path = dir.join("index.html");
+
+                if full_path.is_file() {
+                    match std::fs::read(&full_path) {
+                        Ok(data) => Ok(
+                            (StatusCode::OK, [(header::CONTENT_TYPE, mime_type(&full_path))], data)
+                                .into_response(),
+                        ),
+                        Err(_) => Ok((StatusCode::NOT_FOUND, "Not found").into_response()),
+                    }
+                } else {
+                    match std::fs::read_to_string(&index_path) {
+                        Ok(html) => Ok((
+                            StatusCode::OK,
+                            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                            html,
+                        )
+                            .into_response()),
+                        Err(e) => {
+                            tracing::error!("[Dashboard] Failed to read index.html: {}", e);
+                            Ok((StatusCode::NOT_FOUND, "Not found").into_response())
+                        }
+                    }
+                }
+            }
+        });
+
+        Router::new().fallback_service(svc)
     } else {
         Router::new().fallback(|| async {
             (
-                axum::http::StatusCode::NOT_FOUND,
+                StatusCode::NOT_FOUND,
                 "Not found. The API is running; serve the dashboard separately or set DASHBOARD_DIR.",
             )
         })
