@@ -1,6 +1,8 @@
 //! Domain repository traits.
 //! Define the contracts for persistence that infrastructure must fulfill.
 
+// Methods are used through the enum dispatch in repo_dispatch.rs
+// which the compiler cannot always track.
 #![allow(dead_code)]
 
 use super::entities::{

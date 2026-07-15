@@ -12,36 +12,9 @@ export interface TelemetryReading {
   phase?: string | null
 }
 
-export interface TelemetrySnapshot {
-  pressures: Record<string, TelemetryReading>
-  flows: Record<string, TelemetryReading>
-  info: Record<string, TelemetryReading>
-  history: TelemetryHistoryPoint[]
-}
-
 export interface TelemetryHistoryPoint {
   timestamp: string
   [key: string]: number | string
-}
-
-export interface TelemetryEvent {
-  type: "telemetry"
-  cycle: number
-  readings: TelemetryReading[]
-  therapy_active: boolean
-  therapy_state_name: string
-  therapy_start: string | null
-  therapy_end: string | null
-  persistence_enabled: boolean
-  persistence_status: string
-}
-
-export interface SerialStatusEvent {
-  type: "serial_status"
-  status: string
-  consecutive_failures: number
-  max_failures: number
-  data_warnings: number
 }
 
 export type SerialStatusValue =
@@ -81,9 +54,6 @@ export const SIGNAL_NAMES = {
     "g_substitution_mode_set",
   ] as const,
 } as const
-
-export type PressureSignal = (typeof SIGNAL_NAMES.PRESSURES)[number]
-export type FlowSignal = (typeof SIGNAL_NAMES.FLOWS)[number]
 
 const ALL_PRESSURE: readonly string[] = SIGNAL_NAMES.PRESSURES
 const ALL_FLOWS: readonly string[] = SIGNAL_NAMES.FLOWS

@@ -7,7 +7,7 @@
 //! msg_length includes the entire frame (header + data + crc).
 //! CRC is calculated over (msg_length - 2) bytes (everything except the CRC itself).
 
-use crate::domain::device::{DSS_APP, DeviceCommunicator, DeviceError, PC_TREND_VIEWER};
+use crate::domain::device::{DeviceCommunicator, DeviceError};
 use serialport::SerialPort;
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -18,18 +18,6 @@ pub struct SerialConfig {
     pub timeout_secs: u64,
     pub src_addr: u8,
     pub dst_addr: u8,
-}
-
-impl Default for SerialConfig {
-    fn default() -> Self {
-        Self {
-            port_name: "COM6".to_string(),
-            baudrate: 19200,
-            timeout_secs: 2,
-            src_addr: PC_TREND_VIEWER,
-            dst_addr: DSS_APP,
-        }
-    }
 }
 
 pub struct SerialDeviceCommunicator {

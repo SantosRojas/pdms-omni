@@ -49,13 +49,6 @@ export const FLOW_SERIES: SeriesConfig[] = [
   { key: "c_net_rem_flow_act", name: "NR", color: "#f97316", unit: "ml/h" },
 ]
 
-export const CHART_COLORS: Record<string, string> = Object.fromEntries(
-  [...PRESSURE_SERIES, ...FLOW_SERIES].map((s) => [s.key, s.color]),
-)
-
-export const PRESSURE_SIGNALS = PRESSURE_SERIES.map((s) => s.key)
-export const FLOW_SIGNALS = FLOW_SERIES.map((s) => s.key)
-
 export function getNum(obj: Record<string, unknown>, key: string): number {
   const r = obj[key] as { physical_value?: number } | undefined
   return r?.physical_value ?? 0

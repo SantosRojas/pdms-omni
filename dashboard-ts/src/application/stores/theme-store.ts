@@ -7,13 +7,10 @@ interface ThemeState {
   mode: ThemeMode
   accentColor: string
   density: Density
-  customPresets: string[]
-  mqListener: (() => void) | null
 
   setMode: (mode: ThemeMode) => void
   setAccentColor: (color: string) => void
   setDensity: (density: Density) => void
-  addPreset: (color: string) => void
   init: () => void
 }
 
@@ -45,21 +42,20 @@ function applyTheme(mode: ThemeMode, accentColor: string, density: Density) {
   }
 }
 
-export const useThemeStore = create<ThemeState>((set, get) => ({
+export const useThemeStore = create<ThemeState>((set, get) => {
+  let mqCleanup: (() => void) | null = null
+
+  return {
   mode: "system",
   accentColor: DEFAULT_ACCENT,
   density: "normal",
-  customPresets: [],
-  mqListener: null,
 
   init: () => {
     const mode = preferencesStorage.getTheme()
     const accentColor = preferencesStorage.getAccentColor()
     const density = preferencesStorage.getDensity()
-    const customPresets = preferencesStorage.getAccentPresets()
 
-    const prev = get().mqListener
-    if (prev) prev()
+    if (mqCleanup) mqCleanup()
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)")
     const listener = () => {
@@ -69,12 +65,9 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       }
     }
     mq.addEventListener("change", listener)
+    mqCleanup = () => mq.removeEventListener("change", listener)
 
-    const unsubscribe = () => {
-      mq.removeEventListener("change", listener)
-    }
-
-    set({ mode, accentColor, density, customPresets, mqListener: unsubscribe })
+    set({ mode, accentColor, density })
     applyTheme(mode, accentColor, density)
   },
 
@@ -95,10 +88,5 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     set({ density })
     applyTheme(get().mode, get().accentColor, density)
   },
-
-  addPreset: (color: string) => {
-    const presets = [...get().customPresets, color]
-    preferencesStorage.setAccentPresets(presets)
-    set({ customPresets: presets })
-  },
-}))
+}
+})

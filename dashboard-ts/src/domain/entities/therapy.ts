@@ -33,10 +33,6 @@ export interface CreateCommentRequest {
   comment: string
 }
 
-export interface DeleteCommentRequest {
-  reason: string
-}
-
 export interface HistoryRow {
   id: number
   timestamp: string
@@ -44,17 +40,6 @@ export interface HistoryRow {
   physical_value: number | string
   display_value: string | null
   unit: string
-}
-
-export interface SessionReading {
-  id: number
-  timestamp: string
-  internal_name: string
-  raw_value: number
-  physical_value: number | string
-  unit: string
-  display_value: string | null
-  phase: string | null
 }
 
 

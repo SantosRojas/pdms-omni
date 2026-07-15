@@ -1,6 +1,6 @@
 export { Button } from "./button"
 export { buttonVariants } from "./button-variants"
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from "./card"
+export { Card, CardHeader, CardTitle, CardDescription, CardContent } from "./card"
 export { Badge } from "./badge"
 export { badgeVariants } from "./badge-variants"
 export { Input } from "./input"

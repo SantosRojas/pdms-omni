@@ -2,8 +2,6 @@
 //! These structures represent the core business objects,
 //! independent of any infrastructure detail.
 
-#![allow(dead_code)]
-
 use serde::Serialize;
 
 /// Represents version information returned by CMD_CODE_GET_VERSIONS.
@@ -149,17 +147,9 @@ pub struct AttributeEquivalence {
     pub display_name: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Patient {
-    pub id: i64,
-    pub patient_id_str: String,
-    pub created_at: String,
-    pub therapy_start: Option<String>,
-    pub therapy_end: Option<String>,
-}
-
 /// A comment left by nursing staff on a therapy session.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct TherapyComment {
     pub id: i64,
     pub therapy_id: i64,

@@ -624,18 +624,6 @@ where
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub async fn get_session_readings(
-        &self,
-        session_id: i64,
-        limit: u32,
-    ) -> Result<Vec<TelemetryReading>, UseCaseError> {
-        Ok(self
-            .telemetry_repo
-            .get_session_readings(session_id, limit)
-            .await?)
-    }
-
     // ═══════════════════════════════════════════════════════════════
     //  FULL INITIALIZATION (convenience)
     // ═══════════════════════════════════════════════════════════════

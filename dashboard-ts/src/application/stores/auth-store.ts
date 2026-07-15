@@ -13,7 +13,6 @@ interface AuthState {
   initialize: () => Promise<void>
   login: (data: LoginRequest) => Promise<void>
   logout: () => Promise<void>
-  setUser: (user: User) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -78,7 +77,4 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, token: null })
   },
 
-  setUser: (user: User) => {
-    set({ user })
-  },
 }))
