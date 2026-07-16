@@ -1131,7 +1131,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(
-                    "SELECT sr.id, TO_CHAR(sr.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(sr.physical_value AS TEXT), sr.raw_value, COALESCE(s.unit, sr.unit), sr.display_value, sr.phase
+                    "SELECT sr.id, COALESCE(TO_CHAR(sr.timestamp, 'YYYY-MM-DD HH24:MI:SS'), ''), COALESCE(s.display_name, s.internal_name), CAST(sr.physical_value AS TEXT), sr.raw_value, COALESCE(s.unit, sr.unit), sr.display_value, sr.phase
                      FROM session_readings sr
                      JOIN signals s ON sr.signal_id = s.id
                      WHERE sr.serial_session_id = $1
@@ -1217,7 +1217,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2",
+                    "SELECT t.id, COALESCE(TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), ''), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp DESC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1297,7 +1297,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT t.id, TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
+                    "SELECT t.id, COALESCE(TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), ''), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id
@@ -1381,7 +1381,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2",
+                    "SELECT COALESCE(TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), ''), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit) FROM telemetry t JOIN patients p ON t.patient_id = p.id JOIN signals s ON t.signal_id = s.id LEFT JOIN attribute_equivalences e ON s.id = e.signal_id AND {} = e.numeric_value WHERE p.patient_id_str = $1 ORDER BY t.timestamp ASC LIMIT $2",
                     POSTGRES_NUMERIC_EQ_EXPR
                 )).bind(patient_id_str).bind(limit as i64).fetch_all(pool).await.map_err(|e| e.to_string())?;
                 Ok(rows
@@ -1458,7 +1458,7 @@ impl DbPool {
             }
             DbPool::Postgres(pool) => {
                 let rows = sqlx::query(&format!(
-                    "SELECT TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
+                    "SELECT COALESCE(TO_CHAR(t.timestamp, 'YYYY-MM-DD HH24:MI:SS'), ''), COALESCE(s.display_name, s.internal_name), CAST(t.physical_value AS TEXT), e.display_name, COALESCE(s.unit, t.unit)
                      FROM telemetry t
                      JOIN therapies th ON t.therapy_id = th.id
                      JOIN signals s ON t.signal_id = s.id

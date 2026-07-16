@@ -265,6 +265,15 @@ async fn initialize_sqlite(
     let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER")
         .execute(&pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN patient_id INTEGER")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN display_value TEXT")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("UPDATE telemetry SET timestamp = CURRENT_TIMESTAMP WHERE timestamp IS NULL")
+        .execute(&pool)
+        .await;
     let _ = sqlx::query("ALTER TABLE therapy_comments ADD COLUMN deleted_at DATETIME")
         .execute(&pool)
         .await;
@@ -280,12 +289,22 @@ async fn initialize_sqlite(
     .execute(&pool)
     .await;
 
+    // ── Deduplication: remove duplicate non-null fingerprints before UNIQUE index ──
+    if let Err(e) = sqlx::query(
+        "DELETE FROM versions WHERE fingerprint IS NOT NULL AND id NOT IN (SELECT MAX(id) FROM versions WHERE fingerprint IS NOT NULL GROUP BY fingerprint)"
+    ).execute(&pool).await {
+        warn!("  [DB] Deduplication note (safe to ignore): {e}");
+    }
+
     // Ensure deterministic lookup by fingerprint (prevent duplicates).
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_fingerprint ON versions(fingerprint)",
     )
     .execute(&pool)
-    .await;
+    .await
+    {
+        warn!("  [DB] Could not create unique index on versions(fingerprint): {e}. This may cause ON CONFLICT errors.");
+    }
 
     // Migrate existing databases: change to composite PK (handle + version_fingerprint)
     let has_old_da_pk: bool = sqlx::query_scalar(
@@ -550,25 +569,6 @@ async fn initialize_postgres(
         sqlx::query(stmt).execute(&pool).await?;
     }
 
-    // Query-performance indexes (safe, idempotent)
-    let index_statements = vec![
-        "CREATE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name)",
-        "CREATE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str)",
-        "CREATE INDEX IF NOT EXISTS idx_machines_serial_version ON machines(serial_number, software_version)",
-        "CREATE INDEX IF NOT EXISTS idx_therapies_patient_machine ON therapies(patient_id, machine_id, ended_at)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
-        "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
-        "CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
-        "CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_serial_sessions_status ON serial_sessions(status)",
-        "CREATE INDEX IF NOT EXISTS idx_session_readings_session ON session_readings(serial_session_id, timestamp DESC)",
-    ];
-
-    for stmt in index_statements {
-        let _ = sqlx::query(stmt).execute(&pool).await;
-    }
-
     let migration_statements = vec![
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''",
@@ -581,18 +581,69 @@ async fn initialize_postgres(
         "ALTER TABLE dictionary ADD COLUMN IF NOT EXISTS version_fingerprint TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS display_name TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS unit TEXT",
+        // Ensure patients has therapy_start/end columns for monitor compatibility
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_start TIMESTAMPTZ",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS therapy_end TIMESTAMPTZ",
+        // Fix telemetry rows with NULL timestamps from older schemas
+        "UPDATE telemetry SET timestamp = CURRENT_TIMESTAMP WHERE timestamp IS NULL",
+        "ALTER TABLE telemetry ALTER COLUMN timestamp SET DEFAULT CURRENT_TIMESTAMP",
+        // Ensure telemetry has therapy_id and patient_id columns for older schemas
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS therapy_id BIGINT",
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS patient_id BIGINT",
+        "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS display_value TEXT",
     ];
 
-    for stmt in migration_statements {
-        let _ = sqlx::query(stmt).execute(&pool).await;
+    for stmt in &migration_statements {
+        if let Err(e) = sqlx::query(stmt).execute(&pool).await {
+            warn!("  [DB] Migration note (safe to ignore): {e}");
+        }
+    }
+
+    // ── Deduplication before UNIQUE indexes ──
+    // Remove duplicates left by older schemas (e.g. monitor project) that lacked UNIQUE constraints.
+    // Keeps the row with smallest id per unique key.
+    for dedup in &[
+        "DELETE FROM patients WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY patient_id_str ORDER BY id) AS rn FROM patients WHERE patient_id_str IS NOT NULL) t WHERE t.rn > 1)",
+        "DELETE FROM machines WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY serial_number, software_version ORDER BY id) AS rn FROM machines) t WHERE t.rn > 1)",
+        "DELETE FROM signals WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY internal_name ORDER BY id) AS rn FROM signals WHERE internal_name IS NOT NULL) t WHERE t.rn > 1)",
+    ] {
+        if let Err(e) = sqlx::query(dedup).execute(&pool).await {
+            warn!("  [DB] Deduplication note (safe to ignore): {e}");
+        }
+    }
+
+    // Query-performance indexes.
+    // WARNING: signals, patients, and machines MUST be UNIQUE for ON CONFLICT to work.
+    // Deduplication above runs first so CREATE UNIQUE INDEX should succeed.
+    let index_statements = vec![
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_internal_name ON signals(internal_name)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_patient_id_str ON patients(patient_id_str)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_machines_serial_version ON machines(serial_number, software_version)",
+        "CREATE INDEX IF NOT EXISTS idx_therapies_patient_machine ON therapies(patient_id, machine_id, ended_at)",
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_therapy_timestamp ON telemetry(therapy_id, timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_signal ON telemetry(signal_id)",
+        "CREATE INDEX IF NOT EXISTS idx_equiv_signal_numeric ON attribute_equivalences(signal_id, numeric_value)",
+        "CREATE INDEX IF NOT EXISTS idx_equiv_deletion_log_signal ON equivalence_deletion_log(signal_id)",
+        "CREATE INDEX IF NOT EXISTS idx_therapy_comments_therapy ON therapy_comments(therapy_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_serial_sessions_status ON serial_sessions(status)",
+        "CREATE INDEX IF NOT EXISTS idx_session_readings_session ON session_readings(serial_session_id, timestamp DESC)",
+    ];
+
+    for stmt in &index_statements {
+        if let Err(e) = sqlx::query(stmt).execute(&pool).await {
+            warn!("  [DB] Index note (safe to ignore): {e}");
+        }
     }
 
     // Ensure deterministic lookup by fingerprint (prevent duplicates).
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_fingerprint ON versions(fingerprint)",
     )
     .execute(&pool)
-    .await;
+    .await
+    {
+        warn!("  [DB] Could not create unique index on versions(fingerprint): {e}. This may cause ON CONFLICT errors if duplicates exist.");
+    }
 
     // Migrate existing databases: change to composite PK
     let _ = sqlx::query(

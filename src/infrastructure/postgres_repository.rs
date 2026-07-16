@@ -343,15 +343,22 @@ impl TelemetryRepository for PgTelemetryRepository {
         serial_number: &str,
         software_version: &str,
     ) -> Result<i64, RepositoryError> {
-        sqlx::query("INSERT INTO machines (serial_number, software_version) VALUES ($1, $2) ON CONFLICT (serial_number, software_version) DO NOTHING")
-            .bind(serial_number)
-            .bind(software_version)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_err)?;
-
-        let row = sqlx::query(
+        // Check if machine already exists (SELECT-first avoids ON CONFLICT dependency)
+        let existing = sqlx::query_scalar::<_, i64>(
             "SELECT id FROM machines WHERE serial_number = $1 AND software_version = $2",
+        )
+        .bind(serial_number)
+        .bind(software_version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_err)?;
+
+        if let Some(id) = existing {
+            return Ok(id);
+        }
+
+        let row = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO machines (serial_number, software_version) VALUES ($1, $2) RETURNING id",
         )
         .bind(serial_number)
         .bind(software_version)
@@ -359,23 +366,32 @@ impl TelemetryRepository for PgTelemetryRepository {
         .await
         .map_err(map_db_err)?;
 
-        Ok(row.get(0))
+        Ok(row)
     }
 
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
-        sqlx::query("INSERT INTO patients (patient_id_str) VALUES ($1) ON CONFLICT (patient_id_str) DO NOTHING")
-            .bind(patient_id_str)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_err)?;
+        // Check if patient already exists (SELECT-first avoids ON CONFLICT dependency)
+        let existing = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM patients WHERE patient_id_str = $1",
+        )
+        .bind(patient_id_str)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_err)?;
 
-        let row = sqlx::query("SELECT id FROM patients WHERE patient_id_str = $1")
-            .bind(patient_id_str)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_db_err)?;
+        if let Some(id) = existing {
+            return Ok(id);
+        }
 
-        Ok(row.get::<i64, _>(0))
+        let id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO patients (patient_id_str) VALUES ($1) RETURNING id",
+        )
+        .bind(patient_id_str)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_err)?;
+
+        Ok(id)
     }
 
     async fn get_or_create_therapy(
