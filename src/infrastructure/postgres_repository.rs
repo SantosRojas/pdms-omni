@@ -382,7 +382,7 @@ impl TelemetryRepository for PgTelemetryRepository {
         &self,
         patient_id: i64,
         machine_id: i64,
-        started_at: &str,
+        started_at: chrono::NaiveDateTime,
         force_new: bool,
         serial_session_id: Option<i64>,
     ) -> Result<i64, RepositoryError> {

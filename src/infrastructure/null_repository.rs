@@ -154,7 +154,7 @@ impl TelemetryRepository for NullTelemetryRepository {
         &self,
         _patient_id: i64,
         _machine_id: i64,
-        _started_at: &str,
+        _started_at: chrono::NaiveDateTime,
         _force_new: bool,
         _serial_session_id: Option<i64>,
     ) -> Result<i64, RepositoryError> {

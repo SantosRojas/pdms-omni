@@ -933,10 +933,10 @@ impl DbPool {
                                AND (@P2 = '' OR th.status = @P2)";
         let where_count = format!("{} AND (?3 = '' OR th.started_at >= ?3) AND (?4 = '' OR th.started_at <= ?4)", base_where);
         let where_data = format!("{} AND (?5 = '' OR th.started_at >= ?5) AND (?6 = '' OR th.started_at <= ?6)", base_where);
-        let where_count_pg = format!("{} AND ($3 = '' OR th.started_at >= $3) AND ($4 = '' OR th.started_at <= $4)", base_where_pg);
-        let where_data_pg = format!("{} AND ($5 = '' OR th.started_at >= $5) AND ($6 = '' OR th.started_at <= $6)", base_where_pg);
-        let where_count_ms = format!("{} AND (@P3 = '' OR th.started_at >= @P3) AND (@P4 = '' OR th.started_at <= @P4)", base_where_ms);
-        let where_data_ms = format!("{} AND (@P5 = '' OR th.started_at >= @P5) AND (@P6 = '' OR th.started_at <= @P6)", base_where_ms);
+        let where_count_pg = format!("{} AND th.started_at >= COALESCE(NULLIF($3, '')::timestamptz, '-infinity'::timestamptz) AND th.started_at <= COALESCE(NULLIF($4, '')::timestamptz, 'infinity'::timestamptz)", base_where_pg);
+        let where_data_pg = format!("{} AND th.started_at >= COALESCE(NULLIF($5, '')::timestamptz, '-infinity'::timestamptz) AND th.started_at <= COALESCE(NULLIF($6, '')::timestamptz, 'infinity'::timestamptz)", base_where_pg);
+        let where_count_ms = format!("{} AND th.started_at >= ISNULL(TRY_CAST(NULLIF(@P3, '') AS datetime2), '17530101') AND th.started_at <= ISNULL(TRY_CAST(NULLIF(@P4, '') AS datetime2), '99991231')", base_where_ms);
+        let where_data_ms = format!("{} AND th.started_at >= ISNULL(TRY_CAST(NULLIF(@P5, '') AS datetime2), '17530101') AND th.started_at <= ISNULL(TRY_CAST(NULLIF(@P6, '') AS datetime2), '99991231')", base_where_ms);
         match self {
             DbPool::Sqlite(pool) => {
                 let total = sqlx::query_scalar::<_, i64>(

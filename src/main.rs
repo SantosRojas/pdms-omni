@@ -448,12 +448,12 @@ async fn run_reader_session(
                             );
                         } else {
                             manual_close_acknowledged = false;
-                            let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                            let now = chrono::Utc::now().naive_utc();
                             match interactor
                                 .get_or_create_therapy(
                                     patient_id,
                                     machine_id,
-                                    &now,
+                                    now,
                                     force_new_session,
                                     current_session_id,
                                 )
@@ -461,7 +461,7 @@ async fn run_reader_session(
                             {
                                 Ok(therapy_id) => {
                                     current_therapy_id = Some(therapy_id);
-                                    therapy_start_time = Some(now);
+                                    therapy_start_time = Some(now.format("%Y-%m-%d %H:%M:%S").to_string());
                                     therapy_end_time = None;
                                     force_new_session = false;
                                     info!(

@@ -48,6 +48,17 @@ impl GenericRow {
             .and_then(|v| v.as_ref())
             .and_then(|s| s.parse().ok())
     }
+
+    pub fn get_optional_naivedatetime(&self, idx: usize) -> Option<chrono::NaiveDateTime> {
+        self.values
+            .get(idx)
+            .and_then(|v| v.as_ref())
+            .and_then(|s| {
+                chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                    .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S"))
+                    .ok()
+            })
+    }
 }
 
 pub const SQLITE_NUMERIC_EQ_EXPR: &str = "CAST(t.physical_value AS REAL)";

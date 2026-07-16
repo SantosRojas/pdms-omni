@@ -216,9 +216,7 @@ pub async fn login_with_token(
 
     let user_id = row.get_i64(0);
     let used = row.get_bool(1);
-    let expires_at = row.get_optional_string(2);
 
-    // 2. Si used = true → error 401
     if used {
         return (
             StatusCode::UNAUTHORIZED,
@@ -227,12 +225,7 @@ pub async fn login_with_token(
             .into_response();
     }
 
-    // 3. Si expires_at < ahora → error 401
-    if let Some(ref exp) = expires_at
-        && let Ok(exp_parsed) =
-            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
-                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
-    {
+    if let Some(exp_parsed) = row.get_optional_naivedatetime(2) {
         let now = chrono::Utc::now().naive_utc();
         if exp_parsed < now {
             return (
@@ -353,7 +346,6 @@ pub async fn auth_callback(
 
     let user_id = row.get_i64(0);
     let used = row.get_bool(1);
-    let expires_at = row.get_optional_string(2);
 
     if used {
         return (
@@ -363,11 +355,7 @@ pub async fn auth_callback(
             .into_response();
     }
 
-    if let Some(ref exp) = expires_at
-        && let Ok(exp_parsed) =
-            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
-                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
-    {
+    if let Some(exp_parsed) = row.get_optional_naivedatetime(2) {
         let now = chrono::Utc::now().naive_utc();
         if exp_parsed < now {
             return (
@@ -494,17 +482,12 @@ pub async fn token_permanente_middleware(
 
     let user_id = row.get_i64(0);
     let used = row.get_bool(1);
-    let expires_at = row.get_optional_string(2);
 
     if used {
         return next.run(request).await.into_response();
     }
 
-    if let Some(ref exp) = expires_at
-        && let Ok(exp_parsed) =
-            chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%d %H:%M:%S")
-                .or_else(|_| chrono::NaiveDateTime::parse_from_str(exp, "%Y-%m-%dT%H:%M:%S"))
-    {
+    if let Some(exp_parsed) = row.get_optional_naivedatetime(2) {
         let now = chrono::Utc::now().naive_utc();
         if exp_parsed < now {
             return next.run(request).await.into_response();
