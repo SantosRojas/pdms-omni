@@ -384,7 +384,7 @@ impl TelemetryRepository for PgTelemetryRepository {
         }
 
         let id = sqlx::query_scalar::<_, i64>(
-            "INSERT INTO patients (patient_id_str) VALUES ($1) RETURNING id",
+            "INSERT INTO patients (patient_id_str, created_at) VALUES ($1, NOW()) RETURNING id",
         )
         .bind(patient_id_str)
         .fetch_one(&self.pool)

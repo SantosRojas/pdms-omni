@@ -368,7 +368,7 @@ impl TelemetryRepository for MssqlTelemetryRepository {
         let mut conn = self.pool.get().await.map_err(map_db_err)?;
 
         let mut q1 = Query::new(
-            "IF NOT EXISTS (SELECT 1 FROM patients WHERE patient_id_str = @P1) INSERT INTO patients (patient_id_str) VALUES (@P1)",
+            "IF NOT EXISTS (SELECT 1 FROM patients WHERE patient_id_str = @P1) INSERT INTO patients (patient_id_str, created_at) VALUES (@P1, GETDATE())",
         );
         q1.bind(patient_id_str);
         q1.execute(&mut *conn).await.map_err(map_db_err)?;

@@ -262,6 +262,12 @@ async fn initialize_sqlite(
     let _ = sqlx::query("ALTER TABLE patients ADD COLUMN therapy_end DATETIME")
         .execute(&pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE patients ADD COLUMN created_at DATETIME")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("UPDATE patients SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+        .execute(&pool)
+        .await;
     let _ = sqlx::query("ALTER TABLE telemetry ADD COLUMN therapy_id INTEGER")
         .execute(&pool)
         .await;
@@ -591,6 +597,9 @@ async fn initialize_postgres(
         "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS therapy_id BIGINT",
         "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS patient_id BIGINT",
         "ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS display_value TEXT",
+        // Fix patients.created_at for rows created by older schemas without DEFAULT
+        "UPDATE patients SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL",
+        "ALTER TABLE patients ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP",
     ];
 
     for stmt in &migration_statements {
@@ -962,7 +971,16 @@ async fn initialize_mssql(
              BEGIN
                  ALTER TABLE signals ADD unit NVARCHAR(100) NULL;
              END",
+            "IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('patients') AND name = 'created_at')
+             BEGIN
+                 ALTER TABLE patients ADD created_at DATETIME2 NULL;
+             END",
         ];
+        // Fix existing NULL created_at rows (run after ALTER TABLE in case column was just added)
+        {
+            let q = TibQuery::new("UPDATE patients SET created_at = GETDATE() WHERE created_at IS NULL");
+            let _ = q.execute(&mut *conn).await;
+        }
 
         for stmt in migration_statements {
             let q = TibQuery::new(stmt);

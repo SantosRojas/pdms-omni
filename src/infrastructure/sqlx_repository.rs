@@ -360,7 +360,7 @@ impl TelemetryRepository for SqlxTelemetryRepository {
     }
 
     async fn get_or_create_patient(&self, patient_id_str: &str) -> Result<i64, RepositoryError> {
-        sqlx::query("INSERT OR IGNORE INTO patients (patient_id_str) VALUES (?1)")
+        sqlx::query("INSERT OR IGNORE INTO patients (patient_id_str, created_at) VALUES (?1, CURRENT_TIMESTAMP)")
             .bind(patient_id_str)
             .execute(&self.pool)
             .await
