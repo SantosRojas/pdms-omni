@@ -49,6 +49,11 @@ export const FLOW_SERIES: SeriesConfig[] = [
   { key: "c_net_rem_flow_act", name: "NR", color: "#f97316", unit: "ml/h" },
 ]
 
+export function hasSignal(obj: Record<string, unknown>, key: string): boolean {
+  const r = obj[key] as { physical_value?: unknown } | undefined
+  return r?.physical_value !== undefined && r?.physical_value !== null
+}
+
 export function getNum(obj: Record<string, unknown>, key: string): number {
   const r = obj[key] as { physical_value?: number } | undefined
   return r?.physical_value ?? 0

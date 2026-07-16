@@ -12,7 +12,7 @@ import { CommentsPanel } from "@/presentation/components/scada/comments-panel"
 
 import {
   PRESSURE_GAUGES, FLOW_INDICATORS, PRESSURE_SERIES, FLOW_SERIES,
-  getNum, getUnit,
+  getNum, getUnit, hasSignal,
 } from "@/application/utils/signal-configs"
 import { useCylinderConfigs } from "@/application/hooks/use-cylinder-config"
 import { ToggleLeft, ToggleRight, Maximize, Minimize } from "lucide-react"
@@ -105,6 +105,7 @@ export function ScadaLayout({
                 unit={getUnit(flows, g.key) || (g.key === "c_net_rem_flow_act" ? "ml/h" : "ml/min")}
                 label={g.label}
                 color={g.color}
+                hasData={hasSignal(flows, g.key)}
               />
             ))}
           </div>
@@ -135,6 +136,7 @@ export function ScadaLayout({
               {pressureView !== "gauge" ? (
                 visiblePressures.map((g) => {
                   const cfg = configs[g.type]
+                  const dataExists = hasSignal(pressures, g.key)
 
                   return (
                     <RadialGauge
@@ -148,12 +150,14 @@ export function ScadaLayout({
                       size="md"
                       warning={Math.abs(cfg.max) * 0.7}
                       critical={Math.abs(cfg.max) * 0.85}
+                      hasData={dataExists}
                     />
                   )
                 })
               ) : (
                 visiblePressures.map((g) => {
                   const cfg = configs[g.type]
+                  const dataExists = hasSignal(pressures, g.key)
 
                   return (
                     <PressureCylinder
@@ -164,6 +168,7 @@ export function ScadaLayout({
                       config={cfg}
                       color={g.color}
                       size="md"
+                      hasData={dataExists}
                     />
                   )
                 })

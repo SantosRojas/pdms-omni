@@ -1,57 +1,57 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useScadaViewModel } from "@/application/hooks/use-scada-view-model"
 import { useSerialStatus } from "@/application/hooks/use-serial-status"
+import { useTelemetry } from "@/application/hooks/use-telemetry"
 import { PageHeader } from "@/presentation/components/layout/page-header"
 import { SerialPanel } from "@/presentation/components/monitoring/serial-panel"
 
 import { ScadaLayout } from "@/presentation/components/scada/scada-layout"
 import { therapyApi } from "@/infrastructure/api/therapy-api"
-import { Activity, Database } from "lucide-react"
-import type { Therapy } from "@/domain/entities/therapy"
+import { Activity, Wifi, WifiOff, Usb } from "lucide-react"
 
 export function LiveMonitorPage() {
   const navigate = useNavigate()
   const vm = useScadaViewModel()
   const serial = useSerialStatus()
-  const [therapies, setTherapies] = useState<Therapy[]>([])
-  const knownIds = useRef<Set<string> | null>(null)
+  const telemetry = useTelemetry(true)
+  const wasTherapyActive = useRef(false)
 
   const serialIsLive = serial.isRunning || serial.isInitializing
+  const serialNumber = vm.device.serialNumber ?? "---"
 
   useEffect(() => {
-    if (!serialIsLive) return
+    if (!vm.therapy.active) {
+      wasTherapyActive.current = false
+      return
+    }
+    if (wasTherapyActive.current) return
+    wasTherapyActive.current = true
 
-    const fetchTherapies = async () => {
-      try {
-        const res = await therapyApi.list(1, 50)
-        setTherapies(res.therapies)
-      } catch { /* ignore */ }
+    let cancelled = false
+
+    const tryNavigate = async () => {
+      while (!cancelled) {
+        try {
+          const res = await therapyApi.list(1, 50)
+          const open = res.therapies.filter(t => !t.ended_at && t.status !== "completed")
+          if (open.length > 0) {
+            const latest = open.sort((a, b) =>
+              String(b.started_at).localeCompare(String(a.started_at))
+            )[0]
+            navigate(`/therapy/${latest.id}`)
+            return
+          }
+        } catch {
+          /* network error, retry */
+        }
+        await new Promise(r => setTimeout(r, 2000))
+      }
     }
 
-    fetchTherapies()
-    const interval = setInterval(fetchTherapies, 5000)
-    return () => clearInterval(interval)
-  }, [serialIsLive])
-
-  useEffect(() => {
-    if (therapies.length > 0 && knownIds.current === null) {
-      knownIds.current = new Set(therapies.map(t => String(t.id)))
-    }
-  }, [therapies])
-
-  useEffect(() => {
-    if (knownIds.current === null) return
-    const newOpen = therapies.filter(
-      t => !t.ended_at && t.status !== "completed" && !knownIds.current!.has(String(t.id))
-    )
-    if (newOpen.length > 0) {
-      const latest = newOpen.sort((a, b) =>
-        String(b.started_at).localeCompare(String(a.started_at))
-      )[0]
-      navigate(`/therapy/${latest.id}`)
-    }
-  }, [therapies, navigate])
+    tryNavigate()
+    return () => { cancelled = true }
+  }, [vm.therapy.active, navigate])
 
   return (
     <div>
@@ -60,20 +60,28 @@ export function LiveMonitorPage() {
         description={serialIsLive ? "Recibiendo datos del dispositivo..." : "Esperando conexión serial"}
         icon={<Activity className="h-6 w-6" />}
         backTo="/"
+        action={
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-scada-muted">OMNI-SN: {serialNumber}</span>
+            {serial.isRunning || serial.isInitializing ? (
+              <Usb className="h-4 w-4 text-green-500" />
+            ) : (
+              <Usb className="h-4 w-4 text-muted-foreground" />
+            )}
+            {telemetry.connected ? (
+              <Wifi className="h-4 w-4 text-primary" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-primary" />
+            )}
+          </div>
+        }
       />
 
       <SerialPanel onStop={() => navigate("/")} />
 
-      {vm.telemetry.info && Object.keys(vm.telemetry.info).length > 0 && serialIsLive ? (
-        <div className="mt-3 flex gap-3">
-          <ScadaLayout vm={vm} />
-        </div>
-      ) : (
-        <div className="mt-12 flex flex-col items-center gap-3 text-muted-foreground">
-          <Database className="h-12 w-12" />
-          <p className="text-sm">Esperando datos del dispositivo...</p>
-        </div>
-      )}
+      <div className="mt-3 flex gap-3">
+        <ScadaLayout vm={vm} />
+      </div>
     </div>
   )
 }

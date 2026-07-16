@@ -9,6 +9,7 @@ interface PressureCylinderProps {
   config: CylinderConfig
   color: string
   size?: "sm" | "md" | "lg"
+  hasData?: boolean
 }
 
 export const PressureCylinder = memo(function PressureCylinder({
@@ -18,6 +19,7 @@ export const PressureCylinder = memo(function PressureCylinder({
   config,
   color,
   size = "md",
+  hasData = true,
 }: PressureCylinderProps) {
   const { min, max, step } = config
   const range = max - min
@@ -36,13 +38,19 @@ export const PressureCylinder = memo(function PressureCylinder({
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="flex items-baseline gap-0.5">
-        <span className={cn("font-mono font-bold tabular-nums", size === "sm" ? "text-sm" : "text-base")} style={{ color }}>
-          {clamped.toFixed(0)}
-        </span>
-        <span className={cn("text-scada-muted", size === "sm" ? "text-[10px]" : size === "lg" ? "text-[14px]" : "text-[12px]")}>{unit}</span>
+        {hasData ? (
+          <>
+            <span className={cn("font-mono font-bold tabular-nums", size === "sm" ? "text-sm" : "text-base")} style={{ color }}>
+              {clamped.toFixed(0)}
+            </span>
+            <span className={cn("text-scada-muted", size === "sm" ? "text-[10px]" : size === "lg" ? "text-[14px]" : "text-[12px]")}>{unit}</span>
+          </>
+        ) : (
+          <span className={cn("font-mono font-bold tabular-nums text-scada-muted", size === "sm" ? "text-sm" : "text-base")}>--</span>
+        )}
       </div>
 
-      <div className="flex items-stretch gap-0.5">
+      <div className={cn("flex items-stretch gap-0.5", !hasData && "opacity-40")}>
         <div className={cn("relative shrink-0", size === "sm" ? "h-28 w-8" : size === "lg" ? "h-44 w-12" : "h-36 w-10")}>
           <div className="absolute inset-0 flex flex-col justify-end overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-inner dark:bg-black/40">
             {zeroPct !== null && (
@@ -52,14 +60,16 @@ export const PressureCylinder = memo(function PressureCylinder({
               />
             )}
 
-            <div
-              className="w-full transition-[height] duration-500 ease-out"
-              style={{
-                height: `${heightPct}%`,
-                backgroundColor: color,
-                boxShadow: `0 0 6px ${color}60`,
-              }}
-            />
+            {hasData && (
+              <div
+                className="w-full transition-[height] duration-500 ease-out"
+                style={{
+                  height: `${heightPct}%`,
+                  backgroundColor: color,
+                  boxShadow: `0 0 6px ${color}60`,
+                }}
+              />
+            )}
 
             <div className="pointer-events-none absolute inset-0">
               {ticks.filter((_, i) => i % 2 === 0).map((tick) => (

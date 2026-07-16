@@ -13,6 +13,7 @@ interface RadialGaugeProps {
   warning?: number
   critical?: number
   tickCount?: number
+  hasData?: boolean
 }
 
 export const RadialGauge = memo(function RadialGauge({
@@ -27,8 +28,9 @@ export const RadialGauge = memo(function RadialGauge({
   warning,
   critical,
   tickCount = 6,
+  hasData = true,
 }: RadialGaugeProps) {
-  const clamped = Math.max(min, Math.min(max, value))
+  const clamped = Math.max(min, Math.min(max, typeof value === "number" && !Number.isNaN(value) ? value : 0))
   const range = max - min
   const fraction = range > 0 ? (clamped - min) / range : 0
 
@@ -87,8 +89,10 @@ export const RadialGauge = memo(function RadialGauge({
   }, [center, radius, startAngle, sweepAngle, tickCount, min, range, size])
 
   let indicatorColor = color
-  if (critical !== undefined && value >= critical) indicatorColor = "#ef4444"
-  else if (warning !== undefined && value >= warning) indicatorColor = "#f59e0b"
+  if (hasData) {
+    if (critical !== undefined && clamped >= critical) indicatorColor = "#ef4444"
+    else if (warning !== undefined && clamped >= warning) indicatorColor = "#f59e0b"
+  }
 
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -96,6 +100,7 @@ export const RadialGauge = memo(function RadialGauge({
         viewBox={`0 0 ${viewBox} ${viewBox + 10}`}
         className={cn(
           size === "sm" ? "h-28 w-28" : size === "lg" ? "h-44 w-44" : "h-36 w-36",
+          !hasData && "opacity-40",
         )}
       >
         {ticks.map((t, i) => (
@@ -127,7 +132,7 @@ export const RadialGauge = memo(function RadialGauge({
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
-        {fraction > 0 && (
+        {hasData && fraction > 0 && (
           <path
             d={valueArc}
             fill="none"
@@ -145,7 +150,7 @@ export const RadialGauge = memo(function RadialGauge({
           fill="currentColor"
           className={cn("font-mono font-bold", size === "sm" ? "text-sm" : "text-base")}
         >
-          {value.toFixed(decimals)}
+          {hasData ? value.toFixed(decimals) : "--"}
         </text>
         <text
           x={center}
@@ -157,7 +162,7 @@ export const RadialGauge = memo(function RadialGauge({
         >
           {unit}
         </text>
-        <circle cx={dotPos.x} cy={dotPos.y} r={3} fill={indicatorColor} />
+        {hasData && <circle cx={dotPos.x} cy={dotPos.y} r={3} fill={indicatorColor} />}
       </svg>
       <span className={cn("font-mono font-medium uppercase tracking-wider text-scada-muted", size === "sm" ? "text-[9px]" : "text-xs")}>
         {label}

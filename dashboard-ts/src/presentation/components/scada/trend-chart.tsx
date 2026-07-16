@@ -29,10 +29,13 @@ interface TrendChartProps {
 
 export function TrendChart({ data, series, height = "170px", showGrid = false, displayNameMap }: TrendChartProps) {
   const formattedData = useMemo(() => {
-    return data.map((point) => ({
-      ...point,
-      _time: point.timestamp ? point.timestamp.split(" ")[1]?.substring(0, 8) || point.timestamp : "",
-    }))
+    if (!data || data.length === 0) return []
+    return data
+      .filter((point) => point.timestamp)
+      .map((point) => ({
+        ...point,
+        _time: point.timestamp ? point.timestamp.split(" ")[1]?.substring(0, 8) || point.timestamp : "",
+      }))
   }, [data])
 
   return (
