@@ -25,7 +25,10 @@ class SocketService {
   }
 
   private get url(): string {
-    return import.meta.env.VITE_WS_URL || "/ws"
+    const configured = import.meta.env.VITE_WS_URL
+    if (configured) return configured
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
+    return `${proto}//${window.location.host}/ws`
   }
 
   connect(key: WsConnectorKey, callbacks: { onTelemetry?: TelemetryCallback; onSerialStatus?: SerialStatusCallback }): void {
